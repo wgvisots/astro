@@ -49,13 +49,22 @@ target_include_directories(astro PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
+# Warning flags shared by the library and the tests (-Wall -Wextra -Wpedantic).
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(astro PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion)
-    if(ASTRO_WARNINGS_AS_ERRORS)
-        target_compile_options(astro PRIVATE -Werror)
-    endif()
+    set(ASTRO_WARNING_FLAGS -Wall -Wextra -Wpedantic)
+    set(ASTRO_WERROR_FLAG -Werror)
 elseif(MSVC)
-    target_compile_options(astro PRIVATE /W4)
+    set(ASTRO_WARNING_FLAGS /W4 /permissive-)
+    set(ASTRO_WERROR_FLAG /WX)
+endif()
+if(ASTRO_WARNINGS_AS_ERRORS)
+    list(APPEND ASTRO_WARNING_FLAGS ${ASTRO_WERROR_FLAG})
+endif()
+
+target_compile_options(astro PRIVATE ${ASTRO_WARNING_FLAGS})
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # Extra checks for the library sources only.
+    target_compile_options(astro PRIVATE -Wshadow -Wconversion -Wno-sign-conversion)
 endif()
 
 # ---------------------------------------------------------------- install
