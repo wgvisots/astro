@@ -68,7 +68,23 @@ def time_section():
     write_csv("dtdb_topo.csv", ["jd_tt", "ut", "elong", "u_km", "v_km", "dtdb"], rows, "ERFA dtdb with topocentric terms")
 
 
-SECTIONS = {"time": time_section}
+def geodesy_section():
+    rng = random.Random(777)
+    rows = []
+    for i in range(400):
+        lat = rng.uniform(-np.pi / 2, np.pi / 2)
+        if i < 10:
+            lat = [np.pi / 2, -np.pi / 2, 0.0, 1e-12, -1e-12, np.pi / 2 - 1e-10, 0.5, -0.5, 1.2, -1.2][i]
+        lon = rng.uniform(-np.pi, np.pi)
+        h = rng.choice([rng.uniform(-1e4, 1e4), rng.uniform(1e4, 4e7), rng.uniform(-6.3e6, -1e5), rng.uniform(0, 1e3)])
+        xyz = erfa.gd2gc(1, lon, lat, h)
+        e, p, hh = erfa.gc2gd(1, xyz)
+        rows.append((lat, lon, h, xyz[0], xyz[1], xyz[2], p, e, hh))
+    write_csv("geodetic.csv", ["lat", "lon", "h", "x", "y", "z", "lat_erfa", "lon_erfa", "h_erfa"], rows,
+              "WGS84 geodetic<->ECEF via ERFA gd2gc/gc2gd")
+
+
+SECTIONS = {"time": time_section, "geodesy": geodesy_section}
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
