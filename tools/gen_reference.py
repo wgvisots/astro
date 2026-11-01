@@ -123,7 +123,51 @@ def frames_section():
     write_csv("frames.csv", header, rows, "ERFA precession-nutation and CIO-based GCRS->ITRS (UT1 jd1 = tt1)")
 
 
-SECTIONS = {"time": time_section, "geodesy": geodesy_section, "frames": frames_section}
+def astrometry_section():
+    rng = random.Random(99)
+    rows = []
+    for (p, t, rh, wl) in [(1013.25, 15.0, 0.5, 0.574), (800.0, -10.0, 0.1, 0.55), (1030.0, 30.0, 0.9, 0.7),
+                           (1000.0, 10.0, 0.5, 2000.0), (600.0, 0.0, 0.0, 1.0)]:
+        a, b = erfa.refco(p, t, rh, wl)
+        rows.append((p, t, rh, wl, a, b))
+    write_csv("refco.csv", ["phpa", "tc", "rh", "wl", "refa", "refb"], rows, "ERFA refco")
+
+    rows = []
+    for _ in range(50):
+        ra, dec = rng.uniform(0, 2 * np.pi), rng.uniform(-1.5, 1.5)
+        l, b = erfa.icrs2g(ra, dec)
+        rows.append((ra, dec, l, b))
+    write_csv("galactic.csv", ["ra", "dec", "l", "b"], rows, "ERFA icrs2g")
+
+    # ICRS -> observed for epochs inside the SPK fixture (2024-01-05 .. 2024-02-25).
+    rows = []
+    sites = [(-105.0 * erfa.DD2R, 40.0 * erfa.DD2R, 1600.0), (151.2 * erfa.DD2R, -33.9 * erfa.DD2R, 50.0),
+             (10.0 * erfa.DD2R, 78.0 * erfa.DD2R, 0.0)]
+    for i in range(120):
+        elong, phi, hm = sites[i % 3]
+        day = rng.uniform(4.0, 55.0)
+        u1, u2 = erfa.dtf2d("UTC", 2024, 1, 1, 0, 0, 0.0)
+        u2 += day
+        rc, dc = rng.uniform(0, 2 * np.pi), rng.uniform(-1.4, 1.4)
+        pr = rng.uniform(-1e-5, 1e-5)        # rad/yr (dRA/dt)
+        pd = rng.uniform(-1e-5, 1e-5)
+        px = rng.choice([0.0, rng.uniform(0.001, 0.8)])  # arcsec
+        rv = rng.uniform(-50, 50)            # km/s
+        dut1 = rng.uniform(-0.5, 0.5)
+        xp = rng.uniform(-0.3, 0.3) * erfa.DAS2R
+        yp = rng.uniform(0, 0.6) * erfa.DAS2R
+        refr = i % 2
+        phpa, tc, rh, wl = (1013.25, 15.0, 0.5, 0.574) if refr else (0.0, 0.0, 0.0, 0.574)
+        aob, zob, hob, dob, rob, eo = erfa.atco13(rc, dc, pr, pd, px, rv, u1, u2, dut1, elong, phi, hm, xp, yp,
+                                                  phpa, tc, rh, wl)
+        rows.append((u1, u2, rc, dc, pr, pd, px, rv, dut1, elong, phi, hm, xp, yp, refr, aob, zob))
+    write_csv("atco13.csv", ["utc1", "utc2", "rc", "dc", "pr", "pd", "px", "rv", "dut1", "elong", "phi", "hm", "xp",
+                             "yp", "refraction", "aob", "zob"], rows,
+              "ERFA atco13 ICRS(J2000)->observed; refraction=1 uses 1013.25 hPa, 15 C, 50%, 0.574 um")
+
+
+SECTIONS = {"time": time_section, "geodesy": geodesy_section, "frames": frames_section,
+            "astrometry": astrometry_section}
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
