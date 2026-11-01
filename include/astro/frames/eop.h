@@ -18,6 +18,10 @@
 
 #pragma once
 
+#include <string>
+#include <string_view>
+#include <vector>
+
 namespace astro {
 
 /// Earth orientation parameters at one epoch. Angles in radians, times in seconds.
@@ -38,7 +42,8 @@ public:
     [[nodiscard]] virtual EopValues at(double mjdUtc) const = 0;
 };
 
-/// Returns the same values for every epoch (e.g. from a bulletin, or all zero).
+/// Returns the same values for every epoch (e.g. from a bulletin, or all zero
+/// for an approximate UT1 = UTC, no polar motion transformation).
 class ConstantEop final : public EopProvider {
 public:
     constexpr ConstantEop() noexcept = default;
@@ -47,6 +52,52 @@ public:
 
 private:
     EopValues v_{};
+};
+
+/// EOP at one tabulated epoch (MJD, UTC, normally 0h).
+struct EopRecord {
+    double mjd{0.0};
+    EopValues values;
+};
+
+enum class EopInterpolation {
+    Linear,
+    Lagrange4,  ///< 4-point Lagrange (cubic), recommended for daily data
+};
+
+/// Tabulated Earth orientation parameters with interpolation.
+///
+/// UT1-UTC is interpolated as UT1-TAI (using the current leap-second table)
+/// so leap-second steps do not corrupt the interpolation. Sub-daily ocean-tide
+/// and libration corrections (IERS 2010 Ch. 5/8) are not applied.
+class EopTable final : public EopProvider {
+public:
+    explicit EopTable(std::vector<EopRecord> records, EopInterpolation interp = EopInterpolation::Lagrange4);
+
+    /// IERS Rapid Service `finals2000A.all` / `finals2000A.data` / `finals2000A.daily`
+    /// (IAU 2000A version, with dX/dY). Uses the Bulletin A columns; rows without
+    /// polar motion are skipped, missing LOD/dX/dY are taken as zero.
+    [[nodiscard]] static EopTable loadFinals2000A(const std::string& path,
+                                                  EopInterpolation interp = EopInterpolation::Lagrange4);
+    [[nodiscard]] static EopTable parseFinals2000A(std::string_view content,
+                                                   EopInterpolation interp = EopInterpolation::Lagrange4);
+    /// IERS EOP C04 series, either the classic "14" format
+    /// (YYYY MM DD MJD x y UT1-UTC LOD dX dY ...) or the newer "20" format
+    /// (YYYY MM DD HH MJD x y UT1-UTC dX dY xrt yrt LOD ...). Angles in arcsec.
+    [[nodiscard]] static EopTable loadC04(const std::string& path, EopInterpolation interp = EopInterpolation::Lagrange4);
+    [[nodiscard]] static EopTable parseC04(std::string_view content, EopInterpolation interp = EopInterpolation::Lagrange4);
+
+    /// Interpolated EOP. Throws astro::Error outside [firstMjd(), lastMjd()].
+    [[nodiscard]] EopValues at(double mjdUtc) const override;
+
+    [[nodiscard]] double firstMjd() const noexcept { return records_.front().mjd; }
+    [[nodiscard]] double lastMjd() const noexcept { return records_.back().mjd; }
+    [[nodiscard]] const std::vector<EopRecord>& records() const noexcept { return records_; }
+
+private:
+    std::vector<EopRecord> records_;
+    std::vector<double> ut1MinusTai_;  // per record
+    EopInterpolation interp_;
 };
 
 } // namespace astro

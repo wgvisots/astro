@@ -84,7 +84,46 @@ def geodesy_section():
               "WGS84 geodetic<->ECEF via ERFA gd2gc/gc2gd")
 
 
-SECTIONS = {"time": time_section, "geodesy": geodesy_section}
+def frames_section():
+    rng = random.Random(2024)
+    rows = []
+    for i in range(60):
+        # TT and UT1 two-part dates spanning 1900-2100.
+        tt1 = 2451545.0 + float(rng.randint(-36500, 36500)) - 0.5
+        tt2 = rng.uniform(0, 1)
+        ut2 = tt2 - rng.uniform(60, 70) / 86400.0
+        xp = rng.uniform(-0.3, 0.3) * erfa.DAS2R
+        yp = rng.uniform(0, 0.6) * erfa.DAS2R
+        dx = rng.uniform(-0.3, 0.3) * erfa.DMAS2R
+        dy = rng.uniform(-0.3, 0.3) * erfa.DMAS2R
+        x, y = erfa.xy06(tt1, tt2)
+        s = erfa.s06(tt1, tt2, x, y)
+        rc2i = erfa.c2ixys(x + dx, y + dy, s)
+        era = erfa.era00(tt1, ut2)
+        sp = erfa.sp00(tt1, tt2)
+        rpom = erfa.pom00(xp, yp, sp)
+        rc2t = erfa.c2tcio(rc2i, era, rpom)
+        dpsi, deps = erfa.nut06a(tt1, tt2)
+        dpsib, depsb = erfa.nut00b(tt1, tt2)
+        rb, rp, rbp = erfa.bp06(tt1, tt2)
+        rnpb = erfa.pnm06a(tt1, tt2)
+        gmst = erfa.gmst06(tt1, ut2, tt1, tt2)
+        gst = erfa.gst06a(tt1, ut2, tt1, tt2)
+        gmst82 = erfa.gmst82(tt1, ut2)
+        eps = erfa.obl06(tt1, tt2)
+        row = [tt1, tt2, ut2, xp, yp, dx, dy, x, y, s, sp, era, gmst, gst, gmst82, eps, dpsi, deps, dpsib, depsb]
+        for m in (rc2t, rb, rp, rbp, rnpb):
+            row += list(np.asarray(m).ravel())
+        rows.append(row)
+    mats = []
+    for name in ("c2t", "rb", "rp", "rbp", "npb"):
+        mats += [f"{name}{i}{j}" for i in range(3) for j in range(3)]
+    header = ["tt1", "tt2", "ut12", "xp", "yp", "dx", "dy", "x", "y", "s", "sp", "era", "gmst06", "gst06a", "gmst82",
+              "obl06", "dpsi06a", "deps06a", "dpsi00b", "deps00b"] + mats
+    write_csv("frames.csv", header, rows, "ERFA precession-nutation and CIO-based GCRS->ITRS (UT1 jd1 = tt1)")
+
+
+SECTIONS = {"time": time_section, "geodesy": geodesy_section, "frames": frames_section}
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
