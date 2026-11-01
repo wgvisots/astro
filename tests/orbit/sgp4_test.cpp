@@ -56,10 +56,10 @@ TEST(Tle, ChecksumAlpha5AndErrors) {
     EXPECT_EQ(encodeAlpha5(100001), "A0001");
     EXPECT_EQ(encodeAlpha5(339999), "Z9999");
     EXPECT_EQ(encodeAlpha5(25544), "25544");
-    EXPECT_THROW(Tle::parse("1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2928",
+    EXPECT_THROW((void)Tle::parse("1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2928",
                             "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537"),
                  Error);
-    EXPECT_NO_THROW(Tle::parse("1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2928",
+    EXPECT_NO_THROW((void)Tle::parse("1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2928",
                                "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537", "", false));
     const auto many = Tle::parseMany(
         "ISS (ZARYA)\n"
