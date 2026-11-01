@@ -78,3 +78,17 @@ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 ```
+
+## SGP4 verification data
+
+`tests/data/SGP4-VER.TLE` and `tests/data/tcppver.out` are the verification
+element sets and reference output published with D. Vallado, P. Crawford,
+R. Hujsak and T.S. Kelso, "Revisiting Spacetrack Report #3", AIAA 2006-6753
+(distributed via CelesTrak and with the MIT-licensed python-sgp4 package).
+They are used only as test data. The SGP4 implementation in `src/orbit/sgp4.cpp`
+is written from the published algorithm.
+
+## JPL planetary ephemeris
+
+`tests/data/de440s_2024q1_*.bsp` are small subsets of the JPL DE440s
+ephemeris (NASA/JPL, public domain), cut with `tools/make_spk_fixture.py`.
