@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../core/enum_io.h"
 #include "astro/core/rootfind.h"
 
 namespace astro {
@@ -144,6 +145,14 @@ std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>
     }
     if (entry >= 0.0) close(span);
     return out;
+}
+
+std::ostream& operator<<(std::ostream& os, ShadowModel value) {
+    return detail::writeEnum(os, "ShadowModel", value);
+}
+
+std::ostream& operator<<(std::ostream& os, ShadowState value) {
+    return detail::writeEnum(os, "ShadowState", value);
 }
 
 } // namespace astro

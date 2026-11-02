@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../core/enum_io.h"
 #include "astro/core/angle.h"
 #include "astro/core/rootfind.h"
 #include "astro/frames/precession_nutation.h"
@@ -110,6 +111,14 @@ MoonPhase moonPhase(const Time& t, const Ephemeris& eph) {
     p.age = wrapTwoPi(lonMoon - lonSun);
     p.waxing = p.age < constants::pi;
     return p;
+}
+
+std::ostream& operator<<(std::ostream& os, SkyEventType value) {
+    return detail::writeEnum(os, "SkyEventType", value);
+}
+
+std::ostream& operator<<(std::ostream& os, Twilight value) {
+    return detail::writeEnum(os, "Twilight", value);
 }
 
 } // namespace astro

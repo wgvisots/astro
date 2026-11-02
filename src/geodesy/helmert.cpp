@@ -18,6 +18,8 @@
 
 #include "astro/geodesy/helmert.h"
 
+#include "../core/enum_io.h"
+
 namespace astro {
 
 namespace {
@@ -48,6 +50,10 @@ StateVector helmertTransform(const StateVector& x, const HelmertTimeDependent& h
     out.v = x.v + h.tRate + h.sRate * x.r + rotationMatrix(h.rRate, p.convention) * x.r + p.s * x.v +
             rotationMatrix(p.r, p.convention) * x.v;
     return out;
+}
+
+std::ostream& operator<<(std::ostream& os, HelmertConvention value) {
+    return detail::writeEnum(os, "HelmertConvention", value);
 }
 
 } // namespace astro

@@ -20,8 +20,11 @@
 
 #include <chrono>
 #include <compare>
+#include <iosfwd>
 #include <string>
 #include <string_view>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/time/julian_date.h"
 
@@ -43,11 +46,21 @@ enum class TimeScale {
     BDT, ///< BeiDou Time = TAI - 33 s
 };
 
+BOOST_DESCRIBE_ENUM(TimeScale, UTC, TAI, TT, TDB, TCG, TCB, UT1, GPS, GST, BDT)
+
+/// Writes "TimeScale::<enumerator>", or "TimeScale::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, TimeScale value);
+
 [[nodiscard]] std::string_view toString(TimeScale scale) noexcept;
 /// Parse "UTC", "TAI", "TT", ... (case-insensitive). Throws astro::Error.
 [[nodiscard]] TimeScale timeScaleFromString(std::string_view name);
 
 enum class GnssSystem { GPS, Galileo, BeiDou };
+
+BOOST_DESCRIBE_ENUM(GnssSystem, GPS, Galileo, BeiDou)
+
+/// Writes "GnssSystem::<enumerator>", or "GnssSystem::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, GnssSystem value);
 
 struct GnssWeekTow {
     int week{0};      ///< full (non-rolled-over) week number

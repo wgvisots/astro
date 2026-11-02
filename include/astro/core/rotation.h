@@ -19,6 +19,9 @@
 #pragma once
 
 #include <array>
+#include <iosfwd>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
 
@@ -99,6 +102,11 @@ enum class EulerSequence {
     XYZ, XZY, YXZ, YZX, ZXY, ZYX,  // Tait-Bryan
     XYX, XZX, YXY, YZY, ZXZ, ZYZ,  // proper Euler
 };
+
+BOOST_DESCRIBE_ENUM(EulerSequence, XYZ, XZY, YXZ, YZX, ZXY, ZYX, XYX, XZX, YXY, YZY, ZXZ, ZYZ)
+
+/// Writes "EulerSequence::<enumerator>", or "EulerSequence::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, EulerSequence value);
 
 /// Axes of the sequence as 1-based axis numbers.
 [[nodiscard]] std::array<int, 3> eulerAxes(EulerSequence seq) noexcept;

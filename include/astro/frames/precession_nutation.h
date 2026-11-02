@@ -19,6 +19,9 @@
 #pragma once
 
 #include <array>
+#include <iosfwd>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
 
@@ -33,6 +36,11 @@ enum class PrecessionNutationModel {
     IAU2006_2000A, ///< full model, ~microarcsecond (default)
     IAU2006_2000B, ///< truncated nutation, ~1 mas, ~20x faster
 };
+
+BOOST_DESCRIBE_ENUM(PrecessionNutationModel, IAU2006_2000A, IAU2006_2000B)
+
+/// Writes "PrecessionNutationModel::<enumerator>", or "PrecessionNutationModel::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, PrecessionNutationModel value);
 
 /// The 14 fundamental arguments of nutation theory (IERS Conventions 2003/2010, eq. 5.43),
 /// radians: l, l', F, D, Om, L_Me, L_Ve, L_E, L_Ma, L_J, L_Sa, L_U, L_Ne, p_A.

@@ -18,7 +18,10 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <string_view>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
 #include "astro/frames/eop.h"
@@ -44,6 +47,11 @@ enum class Frame {
     PEF,   ///< pseudo Earth-fixed (equinox-based counterpart of TIRS)
     ITRS,  ///< International Terrestrial Reference System ("ECEF")
 };
+
+BOOST_DESCRIBE_ENUM(Frame, GCRS, J2000, MOD, TOD, TEME, CIRS, TIRS, PEF, ITRS)
+
+/// Writes "Frame::<enumerator>", or "Frame::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, Frame value);
 
 [[nodiscard]] std::string_view toString(Frame f) noexcept;
 /// True for frames that rotate with the Earth (TIRS, PEF, ITRS).

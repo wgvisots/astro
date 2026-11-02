@@ -9,7 +9,8 @@ This project is based on the "Explanatory Supplement to the Astronomical Almanac
 
 ## What's in it
 
-A dependency-free C++20 library. SI units and radians everywhere.
+A C++20 library whose only dependency is header-only Boost (≥ 1.77, for Boost.Describe). SI units and
+radians everywhere.
 
 | Module | Highlights |
 |---|---|
@@ -31,7 +32,7 @@ ctest --test-dir build --output-on-failure
 cmake --install build --prefix /your/prefix
 ```
 
-Consumers use `find_package(astro)` and link `astro::astro`. Tests use an installed GoogleTest if one
+Consumers use `find_package(astro)` and link `astro::astro` (Boost is found as a transitive dependency). Tests use an installed GoogleTest if one
 is found, otherwise CMake fetches it. Set `-DASTRO_BUILD_TESTS=OFF` to skip them.
 
 ## Examples
@@ -92,6 +93,8 @@ You supply:
   `v_new = R3(θ) v_old`.
 - `Time` carries its scale. UTC uses the SOFA "quasi-JD" convention, so leap seconds such as
   `23:59:60.5` can be represented and arithmetic counts them.
+- Every public enum is reflected with `BOOST_DESCRIBE_ENUM` and has an `operator<<` that writes
+  `TimeScale::UTC` (or `TimeScale::INVALID_VALUE` for a value outside the enumeration).
 - Celestial frames use the IERS 2010 CIO-based chain. The equinox-based frames are also available
   for interoperability.
 

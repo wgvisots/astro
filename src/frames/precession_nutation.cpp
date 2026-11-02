@@ -20,6 +20,7 @@
 
 #include <cmath>
 
+#include "../core/enum_io.h"
 #include "../data/iau2006_series.h"
 #include "astro/core/constants.h"
 #include "astro/core/rotation.h"
@@ -193,6 +194,10 @@ Nutation poleOffsetsToNutation(double t, double dX, double dY) noexcept {
     const double dpsiSinEps = (dX - c * dY) / k;
     const double deps = (dY + c * dX) / k;
     return {dpsiSinEps / std::sin(meanObliquity06(t)), deps};
+}
+
+std::ostream& operator<<(std::ostream& os, PrecessionNutationModel value) {
+    return detail::writeEnum(os, "PrecessionNutationModel", value);
 }
 
 } // namespace astro

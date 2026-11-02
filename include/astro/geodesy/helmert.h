@@ -18,6 +18,10 @@
 
 #pragma once
 
+#include <iosfwd>
+
+#include <boost/describe/enum.hpp>
+
 #include "astro/core/vec.h"
 
 /// Seven- and fourteen-parameter Helmert (similarity) transformations between
@@ -29,6 +33,11 @@
 namespace astro {
 
 enum class HelmertConvention { PositionVector, CoordinateFrame };
+
+BOOST_DESCRIBE_ENUM(HelmertConvention, PositionVector, CoordinateFrame)
+
+/// Writes "HelmertConvention::<enumerator>", or "HelmertConvention::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, HelmertConvention value);
 
 struct HelmertParams {
     Vec3 t;          ///< translation (m)

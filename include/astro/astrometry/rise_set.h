@@ -19,7 +19,10 @@
 #pragma once
 
 #include <functional>
+#include <iosfwd>
 #include <vector>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/astrometry/apparent.h"
 
@@ -27,6 +30,11 @@
 namespace astro {
 
 enum class SkyEventType { Rise, Set, Transit };
+
+BOOST_DESCRIBE_ENUM(SkyEventType, Rise, Set, Transit)
+
+/// Writes "SkyEventType::<enumerator>", or "SkyEventType::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, SkyEventType value);
 
 struct SkyEvent {
     SkyEventType type;
@@ -46,6 +54,12 @@ struct SkyEvent {
 inline constexpr double kSunriseElevation = -0.8333 * constants::degToRad;
 
 enum class Twilight { Civil, Nautical, Astronomical };
+
+BOOST_DESCRIBE_ENUM(Twilight, Civil, Nautical, Astronomical)
+
+/// Writes "Twilight::<enumerator>", or "Twilight::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, Twilight value);
+
 /// Sun elevation defining the twilight (-6, -12 or -18 deg).
 [[nodiscard]] double twilightElevation(Twilight tw) noexcept;
 

@@ -18,6 +18,10 @@
 
 #pragma once
 
+#include <iosfwd>
+
+#include <boost/describe/enum.hpp>
+
 #include "astro/core/constants.h"
 #include "astro/orbit/elements.h"
 
@@ -36,6 +40,11 @@ enum class SecularOrder {
     J2,         ///< first-order J2 only
     J2SquaredJ4 ///< J2 + J2^2 + J4 (Brouwer)
 };
+
+BOOST_DESCRIBE_ENUM(SecularOrder, J2, J2SquaredJ4)
+
+/// Writes "SecularOrder::<enumerator>", or "SecularOrder::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, SecularOrder value);
 
 /// Secular rates (rad/s) of the mean elements.
 struct SecularRates {

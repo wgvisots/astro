@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../core/enum_io.h"
 #include "astro/core/error.h"
 
 namespace astro {
@@ -215,6 +216,10 @@ EulerAngles matrixToEuler(EulerSequence seq, const Mat3& dcm) noexcept {
 
 Mat3 orthonormalize(const Mat3& m) noexcept {
     return Quat::fromMatrix(m).toMatrix();
+}
+
+std::ostream& operator<<(std::ostream& os, EulerSequence value) {
+    return detail::writeEnum(os, "EulerSequence", value);
 }
 
 } // namespace astro

@@ -18,7 +18,10 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <memory>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/core/error.h"
 #include "astro/core/vec.h"
@@ -32,8 +35,18 @@ namespace astro {
 /// Earth constants used by SGP4. TLEs are generated with WGS-72.
 enum class Sgp4Gravity { WGS72Old, WGS72, WGS84 };
 
+BOOST_DESCRIBE_ENUM(Sgp4Gravity, WGS72Old, WGS72, WGS84)
+
+/// Writes "Sgp4Gravity::<enumerator>", or "Sgp4Gravity::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, Sgp4Gravity value);
+
 /// 'Improved' (Vallado) or 'AFSPC' compatibility for the GMST at epoch and node wrapping.
 enum class Sgp4OpsMode { Improved, Afspc };
+
+BOOST_DESCRIBE_ENUM(Sgp4OpsMode, Improved, Afspc)
+
+/// Writes "Sgp4OpsMode::<enumerator>", or "Sgp4OpsMode::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value);
 
 /// SGP4 error codes (Vallado): 1 mean eccentricity out of range, 2 mean motion
 /// negative, 3 perturbed eccentricity out of range, 4 semi-latus rectum negative,

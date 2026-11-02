@@ -19,7 +19,10 @@
 #pragma once
 
 #include <functional>
+#include <iosfwd>
 #include <vector>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/core/constants.h"
 #include "astro/core/vec.h"
@@ -34,7 +37,17 @@ enum class ShadowModel {
     Conical,      ///< umbra and penumbra with the finite solar disk
 };
 
+BOOST_DESCRIBE_ENUM(ShadowModel, Cylindrical, Conical)
+
+/// Writes "ShadowModel::<enumerator>", or "ShadowModel::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, ShadowModel value);
+
 enum class ShadowState { Sunlit, Penumbra, Umbra, Annular };
+
+BOOST_DESCRIBE_ENUM(ShadowState, Sunlit, Penumbra, Umbra, Annular)
+
+/// Writes "ShadowState::<enumerator>", or "ShadowState::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, ShadowState value);
 
 struct ShadowResult {
     ShadowState state{ShadowState::Sunlit};

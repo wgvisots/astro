@@ -21,6 +21,7 @@
 #include <cmath>
 #include <string>
 
+#include "../core/enum_io.h"
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
 #include "astro/core/rotation.h"
@@ -32,25 +33,7 @@ using constants::arcsecToRad;
 using constants::degToRad;
 
 std::string_view toString(Body b) noexcept {
-    switch (b) {
-        case Body::SolarSystemBarycenter: return "SolarSystemBarycenter";
-        case Body::MercuryBarycenter: return "MercuryBarycenter";
-        case Body::VenusBarycenter: return "VenusBarycenter";
-        case Body::EarthMoonBarycenter: return "EarthMoonBarycenter";
-        case Body::MarsBarycenter: return "MarsBarycenter";
-        case Body::JupiterBarycenter: return "JupiterBarycenter";
-        case Body::SaturnBarycenter: return "SaturnBarycenter";
-        case Body::UranusBarycenter: return "UranusBarycenter";
-        case Body::NeptuneBarycenter: return "NeptuneBarycenter";
-        case Body::PlutoBarycenter: return "PlutoBarycenter";
-        case Body::Sun: return "Sun";
-        case Body::Mercury: return "Mercury";
-        case Body::Venus: return "Venus";
-        case Body::Moon: return "Moon";
-        case Body::Earth: return "Earth";
-        case Body::Mars: return "Mars";
-    }
-    return "?";
+    return detail::enumName(b, "?");
 }
 
 Vec3 sunPositionLowPrecision(const Time& time) {
@@ -117,6 +100,10 @@ StateVector LowPrecisionEphemeris::state(Body target, Body center, const Time& t
     s.r = pos(t);
     s.v = (pos(t + h) - pos(t - h)) / (2.0 * h);
     return s;
+}
+
+std::ostream& operator<<(std::ostream& os, Body value) {
+    return detail::writeEnum(os, "Body", value);
 }
 
 } // namespace astro

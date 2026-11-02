@@ -49,6 +49,10 @@ target_include_directories(astro PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
+# Boost.Describe (header-only, Boost >= 1.77) provides enum reflection; it is the only dependency.
+find_package(Boost 1.77 CONFIG REQUIRED)
+target_link_libraries(astro PUBLIC Boost::headers)
+
 # Warning flags shared by the library and the tests (-Wall -Wextra -Wpedantic).
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set(ASTRO_WARNING_FLAGS -Wall -Wextra -Wpedantic)
@@ -79,7 +83,7 @@ install(EXPORT astroTargets
 
 include(CMakePackageConfigHelpers)
 file(WRITE ${PROJECT_BINARY_DIR}/astroConfig.cmake.in
-        "@PACKAGE_INIT@\ninclude(\"\${CMAKE_CURRENT_LIST_DIR}/astroTargets.cmake\")\n")
+        "@PACKAGE_INIT@\ninclude(CMakeFindDependencyMacro)\nfind_dependency(Boost 1.77 CONFIG)\ninclude(\"\${CMAKE_CURRENT_LIST_DIR}/astroTargets.cmake\")\n")
 configure_package_config_file(${PROJECT_BINARY_DIR}/astroConfig.cmake.in
         ${PROJECT_BINARY_DIR}/astroConfig.cmake
         INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/astro)

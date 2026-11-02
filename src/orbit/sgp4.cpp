@@ -25,6 +25,8 @@
 #include <cmath>
 #include <string>
 
+#include "../core/enum_io.h"
+
 namespace astro {
 
 namespace {
@@ -907,5 +909,13 @@ StateVector Sgp4::propagate(const Time& t) const {
 const Tle& Sgp4::tle() const noexcept { return impl_->tle; }
 const Time& Sgp4::epoch() const noexcept { return impl_->epochTime; }
 bool Sgp4::isDeepSpace() const noexcept { return impl_->method == 'd'; }
+
+std::ostream& operator<<(std::ostream& os, Sgp4Gravity value) {
+    return detail::writeEnum(os, "Sgp4Gravity", value);
+}
+
+std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value) {
+    return detail::writeEnum(os, "Sgp4OpsMode", value);
+}
 
 } // namespace astro

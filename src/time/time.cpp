@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "../core/enum_io.h"
 #include "../data/fairhead_tdb.h"
 #include "astro/core/error.h"
 #include "astro/frames/eop.h"
@@ -216,19 +217,7 @@ struct Cursor {
 // ------------------------------------------------------------------ names
 
 std::string_view toString(TimeScale scale) noexcept {
-    switch (scale) {
-        case TimeScale::UTC: return "UTC";
-        case TimeScale::TAI: return "TAI";
-        case TimeScale::TT: return "TT";
-        case TimeScale::TDB: return "TDB";
-        case TimeScale::TCG: return "TCG";
-        case TimeScale::TCB: return "TCB";
-        case TimeScale::UT1: return "UT1";
-        case TimeScale::GPS: return "GPS";
-        case TimeScale::GST: return "GST";
-        case TimeScale::BDT: return "BDT";
-    }
-    return "?";
+    return detail::enumName(scale, "?");
 }
 
 TimeScale timeScaleFromString(std::string_view name) {
@@ -525,6 +514,14 @@ int resolveWeekRollover(int truncatedWeek, int bits, GnssSystem system, const Ti
     const int ref = reference.gnssWeekTow(system).week;
     const double k = std::round(static_cast<double>(ref - truncatedWeek) / mod);
     return truncatedWeek + static_cast<int>(k) * mod;
+}
+
+std::ostream& operator<<(std::ostream& os, TimeScale value) {
+    return detail::writeEnum(os, "TimeScale", value);
+}
+
+std::ostream& operator<<(std::ostream& os, GnssSystem value) {
+    return detail::writeEnum(os, "GnssSystem", value);
 }
 
 } // namespace astro

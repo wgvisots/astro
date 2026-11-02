@@ -18,7 +18,10 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <string_view>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
 #include "astro/time/time.h"
@@ -44,6 +47,13 @@ enum class Body : int {
     Earth = 399,
     Mars = 499,
 };
+
+BOOST_DESCRIBE_ENUM(Body, SolarSystemBarycenter, MercuryBarycenter, VenusBarycenter, EarthMoonBarycenter,
+                    MarsBarycenter, JupiterBarycenter, SaturnBarycenter, UranusBarycenter, NeptuneBarycenter,
+                    PlutoBarycenter, Sun, Mercury, Venus, Moon, Earth, Mars)
+
+/// Writes "Body::<enumerator>", or "Body::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, Body value);
 
 [[nodiscard]] std::string_view toString(Body b) noexcept;
 [[nodiscard]] constexpr int naifId(Body b) noexcept { return static_cast<int>(b); }

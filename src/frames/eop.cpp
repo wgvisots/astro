@@ -23,6 +23,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "../core/enum_io.h"
 #include "astro/core/constants.h"
 #include "astro/core/error.h"
 #include "astro/time/leap_seconds.h"
@@ -177,6 +178,10 @@ EopValues EopTable::at(double mjd) const {
     }
     v.dut1 = ut1Tai + leapSecondTable()->taiMinusUtc(mjd);
     return v;
+}
+
+std::ostream& operator<<(std::ostream& os, EopInterpolation value) {
+    return detail::writeEnum(os, "EopInterpolation", value);
 }
 
 } // namespace astro

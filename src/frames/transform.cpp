@@ -18,6 +18,7 @@
 
 #include "astro/frames/transform.h"
 
+#include "../core/enum_io.h"
 #include "astro/core/angle.h"
 #include "astro/core/rotation.h"
 #include "astro/frames/earth_rotation.h"
@@ -29,18 +30,7 @@ constexpr std::size_t idx(Frame f) noexcept { return static_cast<std::size_t>(f)
 } // namespace
 
 std::string_view toString(Frame f) noexcept {
-    switch (f) {
-        case Frame::GCRS: return "GCRS";
-        case Frame::J2000: return "J2000";
-        case Frame::MOD: return "MOD";
-        case Frame::TOD: return "TOD";
-        case Frame::TEME: return "TEME";
-        case Frame::CIRS: return "CIRS";
-        case Frame::TIRS: return "TIRS";
-        case Frame::PEF: return "PEF";
-        case Frame::ITRS: return "ITRS";
-    }
-    return "?";
+    return detail::enumName(f, "?");
 }
 
 bool isEarthFixed(Frame f) noexcept {
@@ -147,6 +137,10 @@ StateVector temeToGcrs(const StateVector& s, const Time& t, const EopProvider& e
 }
 StateVector gcrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop) {
     return FrameTransformer(t, eop).transform(s, Frame::GCRS, Frame::TEME);
+}
+
+std::ostream& operator<<(std::ostream& os, Frame value) {
+    return detail::writeEnum(os, "Frame", value);
 }
 
 } // namespace astro

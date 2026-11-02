@@ -20,6 +20,7 @@
 
 #include <cmath>
 
+#include "../core/enum_io.h"
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
 #include "astro/orbit/kepler.h"
@@ -94,6 +95,10 @@ double repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, co
         a = aNew;
     }
     return a;
+}
+
+std::ostream& operator<<(std::ostream& os, SecularOrder value) {
+    return detail::writeEnum(os, "SecularOrder", value);
 }
 
 } // namespace astro

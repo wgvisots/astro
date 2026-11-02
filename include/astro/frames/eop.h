@@ -18,9 +18,13 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <boost/describe/enum.hpp>
+
 
 namespace astro {
 
@@ -64,6 +68,11 @@ enum class EopInterpolation {
     Linear,
     Lagrange4,  ///< 4-point Lagrange (cubic), recommended for daily data
 };
+
+BOOST_DESCRIBE_ENUM(EopInterpolation, Linear, Lagrange4)
+
+/// Writes "EopInterpolation::<enumerator>", or "EopInterpolation::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, EopInterpolation value);
 
 /// Tabulated Earth orientation parameters with interpolation.
 ///
