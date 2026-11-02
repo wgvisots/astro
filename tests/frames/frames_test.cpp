@@ -39,9 +39,11 @@ constexpr double kUas = constants::uasToRad;
 
 Mat3 matFrom(const test::Csv& csv, const std::vector<std::string>& r, const std::string& prefix) {
     Mat3 m;
-    for (std::size_t i = 0; i < 3; ++i)
-        for (std::size_t j = 0; j < 3; ++j)
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
             m(i, j) = std::stod(r[csv.col(prefix + std::to_string(i) + std::to_string(j))]);
+        }
+    }
     return m;
 }
 } // namespace
@@ -50,11 +52,11 @@ TEST(PrecessionNutation, MatchesErfa) {
     const auto csv = readCsv(dataPath("frames.csv"));
     ASSERT_GE(csv.rows.size(), 50u);
     for (const auto& r : csv.rows) {
-        auto v = [&](const char* n) { return std::stod(r[csv.col(n)]); };
+        auto             v = [&](const char* n) { return std::stod(r[csv.col(n)]); };
         const JulianDate tt{v("tt1"), v("tt2")};
         const JulianDate ut1{v("tt1"), v("ut12")};
-        const double t = tt.centuriesSinceJ2000();
-        const CipXY xy = cipXY06(t);
+        const double     t  = tt.centuriesSinceJ2000();
+        const CipXY      xy = cipXY06(t);
         EXPECT_NEAR(xy.x, v("x"), 0.5 * kUas) << "X at t=" << t;
         EXPECT_NEAR(xy.y, v("y"), 0.5 * kUas) << "Y at t=" << t;
         EXPECT_NEAR(cioLocatorS06(t, {v("x"), v("y")}), v("s"), 0.05 * kUas) << "s";
@@ -82,16 +84,16 @@ TEST(PrecessionNutation, MatchesErfa) {
 
         // Full CIO-based GCRS -> ITRS with polar motion and pole offsets.
         const CipXY xyc{xy.x + v("dx"), xy.y + v("dy")};
-        const Mat3 c2t = polarMotionMatrix(v("xp"), v("yp"), tioLocatorSp(t)) * R3(earthRotationAngle(ut1)) *
-                         celestialToIntermediateMatrix(xyc, cioLocatorS06(t, xy));
+        const Mat3  c2t = polarMotionMatrix(v("xp"), v("yp"), tioLocatorSp(t)) * R3(earthRotationAngle(ut1))
+                       * celestialToIntermediateMatrix(xyc, cioLocatorS06(t, xy));
         expectMatNear(c2t, matFrom(csv, r, "c2t"), 1.0 * kUas, "c2t");
         expectOrthonormal(c2t);
     }
 }
 
 TEST(PrecessionNutation, PoleOffsetsToNutationRoundTrip) {
-    const double t = 0.2;
-    const double dX = 0.3 * constants::masToRad, dY = -0.2 * constants::masToRad;
+    const double   t  = 0.2;
+    const double   dX = 0.3 * constants::masToRad, dY = -0.2 * constants::masToRad;
     const Nutation n = poleOffsetsToNutation(t, dX, dY);
     // Applying the nutation correction should move the CIP by (dX, dY).
     const CipXY a = cipXYFromMatrix(npbMatrix06(t));
@@ -104,15 +106,19 @@ TEST(PrecessionNutation, PoleOffsetsToNutationRoundTrip) {
 // and Vallado et al. (2006) "Revisiting Spacetrack Report #3", Appendix C.
 class ValladoExample : public ::testing::Test {
 protected:
-    const Time utc = Time::fromCalendar(TimeScale::UTC, 2004, 4, 6, 7, 51, 28.386009);
-    const ConstantEop eop{EopValues{.xp = arcsec2rad(-0.140682),
-                                    .yp = arcsec2rad(0.333309),
-                                    .dut1 = -0.4399619,
-                                    .lod = 0.0015563,
-                                    .dX = arcsec2rad(-0.000205),
-                                    .dY = arcsec2rad(-0.000136)}};
-    const StateVector itrf{{-1033.4793830e3, 7901.2952754e3, 6380.3565958e3},
-                           {-3.225636520e3, -2.872451450e3, 5.531924446e3}};
+    const Time        utc = Time::fromCalendar(TimeScale::UTC, 2004, 4, 6, 7, 51, 28.386009);
+    const ConstantEop eop{
+        EopValues{.xp   = arcsec2rad(-0.140682),
+                  .yp   = arcsec2rad(0.333309),
+                  .dut1 = -0.4399619,
+                  .lod  = 0.0015563,
+                  .dX   = arcsec2rad(-0.000205),
+                  .dY   = arcsec2rad(-0.000136)}
+    };
+    const StateVector itrf{
+        {-1033.4793830e3, 7901.2952754e3, 6380.3565958e3},
+        {-3.225636520e3,  -2.872451450e3, 5.531924446e3 }
+    };
 };
 
 TEST_F(ValladoExample, ItrfToGcrf) {
@@ -127,7 +133,7 @@ TEST_F(ValladoExample, ItrfToGcrf) {
 
 TEST_F(ValladoExample, TemeAndPef) {
     const FrameTransformer ft(utc, eop);
-    const StateVector teme = ft.transform(itrf, Frame::ITRS, Frame::TEME);
+    const StateVector      teme = ft.transform(itrf, Frame::ITRS, Frame::TEME);
     expectVecNear(teme.r, {5094.18016210e3, 6127.64465950e3, 6380.34453270e3}, 0.05, "r TEME");
     expectVecNear(teme.v, {-4.746131487e3, 0.785818041e3, 5.531931288e3}, 5e-5, "v TEME");
     const StateVector pef = ft.transform(itrf, Frame::ITRS, Frame::PEF);
@@ -137,18 +143,28 @@ TEST_F(ValladoExample, TemeAndPef) {
     expectVecNear(ft.transform(itrf.r, Frame::ITRS, Frame::TIRS), pef.r, 0.01, "TIRS vs PEF");
     // J2000 (EME2000) differs from GCRS by the frame bias (~23 mas -> ~0.7 m here).
     const Vec3 j2000 = ft.transform(itrf.r, Frame::ITRS, Frame::J2000);
-    const Vec3 gcrs = ft.transform(itrf.r, Frame::ITRS, Frame::GCRS);
+    const Vec3 gcrs  = ft.transform(itrf.r, Frame::ITRS, Frame::GCRS);
     EXPECT_GT(norm(j2000 - gcrs), 0.3);
     EXPECT_LT(norm(j2000 - gcrs), 1.5);
 }
 
 TEST(FrameTransformer, ConsistencyAndRoundTrips) {
-    const Time t = Time::fromIso8601("2021-07-04T12:34:56Z");
-    const ConstantEop eop(EopValues{.xp = arcsec2rad(0.2), .yp = arcsec2rad(0.4), .dut1 = -0.15, .lod = 0.001});
+    const Time             t = Time::fromIso8601("2021-07-04T12:34:56Z");
+    const ConstantEop      eop(EopValues{.xp = arcsec2rad(0.2), .yp = arcsec2rad(0.4), .dut1 = -0.15, .lod = 0.001});
     const FrameTransformer ft(t, eop);
-    const StateVector s{{7000e3, -1200e3, 300e3}, {1.0e3, 7.2e3, 0.5e3}};
-    const Frame all[] = {Frame::GCRS, Frame::J2000, Frame::MOD, Frame::TOD, Frame::TEME,
-                         Frame::CIRS, Frame::TIRS,  Frame::PEF, Frame::ITRS};
+    const StateVector      s{
+             {7000e3, -1200e3, 300e3},
+             {1.0e3,  7.2e3,   0.5e3}
+    };
+    const Frame all[] = {Frame::GCRS,
+                         Frame::J2000,
+                         Frame::MOD,
+                         Frame::TOD,
+                         Frame::TEME,
+                         Frame::CIRS,
+                         Frame::TIRS,
+                         Frame::PEF,
+                         Frame::ITRS};
     for (Frame a : all) {
         expectOrthonormal(ft.gcrsTo(a), 1e-14);
         for (Frame b : all) {
@@ -159,7 +175,10 @@ TEST(FrameTransformer, ConsistencyAndRoundTrips) {
         }
     }
     // An ITRS-fixed point has inertial velocity omega x r.
-    const StateVector fixed{{6378137.0, 0, 0}, {}};
+    const StateVector fixed{
+        {6378137.0, 0, 0},
+        {}
+    };
     const StateVector inertial = ft.transform(fixed, Frame::ITRS, Frame::GCRS);
     EXPECT_NEAR(norm(inertial.v), kEarthRotationRateEra * 6378137.0, 0.01);
     // The CIO and equinox routes agree (TIRS vs PEF) to well under a milliarcsecond.
@@ -172,22 +191,49 @@ TEST(FrameTransformer, ConsistencyAndRoundTrips) {
 }
 
 TEST(FrameTransformer, Model2000BWithinMilliarcsecond) {
-    const Time t = Time::fromIso8601("2030-01-01T00:00:00Z");
+    const Time        t = Time::fromIso8601("2030-01-01T00:00:00Z");
     const ConstantEop eop;
-    const Mat3 a = gcrsToItrsMatrix(t, eop);
-    const Mat3 b = gcrsToItrsMatrix(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
-    const Mat3 d = a * b.transpose();
-    const double angle = std::sqrt(d(0, 1) * d(0, 1) + d(0, 2) * d(0, 2) + d(1, 2) * d(1, 2));
+    const Mat3        a     = gcrsToItrsMatrix(t, eop);
+    const Mat3        b     = gcrsToItrsMatrix(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
+    const Mat3        d     = a * b.transpose();
+    const double      angle = std::sqrt(d(0, 1) * d(0, 1) + d(0, 2) * d(0, 2) + d(1, 2) * d(1, 2));
     EXPECT_LT(angle, 2.0 * constants::masToRad);
 }
 
 namespace {
-std::string finalsLine(int y, int m, int d, double mjd, double xp, double yp, double dut1, double lodMs, double dXmas,
+std::string finalsLine(int    y,
+                       int    m,
+                       int    d,
+                       double mjd,
+                       double xp,
+                       double yp,
+                       double dut1,
+                       double lodMs,
+                       double dXmas,
                        double dYmas) {
     char buf[200];
-    std::snprintf(buf, sizeof(buf), "%2d%02d%02d %8.2f %c %9.6f%9.6f %9.6f%9.6f  %c%10.7f%10.7f %7.4f%7.4f  %c %9.3f%9.3f %9.3f%9.3f",
-                  y % 100, m, d, mjd, 'I', xp, 0.00003, yp, 0.00003, 'I', dut1, 0.00001, lodMs, 0.007, 'I', dXmas,
-                  0.1, dYmas, 0.1);
+    std::snprintf(buf,
+                  sizeof(buf),
+                  "%2d%02d%02d %8.2f %c %9.6f%9.6f %9.6f%9.6f  %c%10.7f%10.7f %7.4f%7.4f  %c %9.3f%9.3f %9.3f%9.3f",
+                  y % 100,
+                  m,
+                  d,
+                  mjd,
+                  'I',
+                  xp,
+                  0.00003,
+                  yp,
+                  0.00003,
+                  'I',
+                  dut1,
+                  0.00001,
+                  lodMs,
+                  0.007,
+                  'I',
+                  dXmas,
+                  0.1,
+                  dYmas,
+                  0.1);
     return buf;
 }
 } // namespace
@@ -200,7 +246,7 @@ TEST(EopTable, Finals2000AParsingAndLeapSecondInterpolation) {
     content += finalsLine(2016, 12, 31, 57753.0, 0.028, 0.278, -0.4070000, 1.0, 0.12, -0.12) + "\n";
     content += finalsLine(2017, 1, 1, 57754.0, 0.027, 0.277, 0.5920000, 1.0, 0.13, -0.13) + "\n";
     content += finalsLine(2017, 1, 2, 57755.0, 0.026, 0.276, 0.5910000, 1.0, 0.14, -0.14) + "\n";
-    content += "170103 57756.00 P  \n";  // prediction rows without data are skipped
+    content += "170103 57756.00 P  \n"; // prediction rows without data are skipped
     for (auto interp : {EopInterpolation::Linear, EopInterpolation::Lagrange4}) {
         const EopTable table = EopTable::parseFinals2000A(content, interp);
         ASSERT_EQ(table.records().size(), 5u);
@@ -218,11 +264,10 @@ TEST(EopTable, Finals2000AParsingAndLeapSecondInterpolation) {
 }
 
 TEST(EopTable, C04Formats) {
-    const char* c04_14 =
-        "# header\n"
-        "2020   1   1  58849   0.076614   0.282383  -0.1772561   0.0003791   0.000098  -0.000233\n"
-        "2020   1   2  58850   0.074996   0.282597  -0.1775922   0.0002929   0.000099  -0.000227\n";
-    const EopTable a = EopTable::parseC04(c04_14);
+    const char*    c04_14 = "# header\n"
+                            "2020   1   1  58849   0.076614   0.282383  -0.1772561   0.0003791   0.000098  -0.000233\n"
+                            "2020   1   2  58850   0.074996   0.282597  -0.1775922   0.0002929   0.000099  -0.000227\n";
+    const EopTable a      = EopTable::parseC04(c04_14);
     EXPECT_NEAR(rad2arcsec(a.at(58849.0).xp), 0.076614, 1e-12);
     EXPECT_NEAR(a.at(58849.0).dut1, -0.1772561, 1e-12);
     EXPECT_NEAR(a.at(58849.0).lod, 0.0003791, 1e-15);

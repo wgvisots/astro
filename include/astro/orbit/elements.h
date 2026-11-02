@@ -33,12 +33,12 @@ namespace astro {
 /// true longitude. Hyperbolic orbits have a < 0. Exactly parabolic orbits
 /// (a infinite) are not representable here; use states.
 struct KeplerianElements {
-    double a{0.0};     ///< semi-major axis (m)
-    double e{0.0};     ///< eccentricity
-    double i{0.0};     ///< inclination
-    double raan{0.0};  ///< right ascension of the ascending node
-    double argp{0.0};  ///< argument of periapsis
-    double nu{0.0};    ///< true anomaly
+    double a{0.0};    ///< semi-major axis (m)
+    double e{0.0};    ///< eccentricity
+    double i{0.0};    ///< inclination
+    double raan{0.0}; ///< right ascension of the ascending node
+    double argp{0.0}; ///< argument of periapsis
+    double nu{0.0};   ///< true anomaly
 
     [[nodiscard]] double semiLatusRectum() const noexcept { return a * (1.0 - e * e); }
     [[nodiscard]] double meanAnomaly() const noexcept;
@@ -46,10 +46,10 @@ struct KeplerianElements {
 };
 
 [[nodiscard]] KeplerianElements stateToElements(const StateVector& s, double mu = constants::gmEarth);
-[[nodiscard]] StateVector elementsToState(const KeplerianElements& el, double mu = constants::gmEarth);
+[[nodiscard]] StateVector       elementsToState(const KeplerianElements& el, double mu = constants::gmEarth);
 /// Elements from mean anomaly instead of true anomaly.
-[[nodiscard]] KeplerianElements elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp,
-                                                        double M);
+[[nodiscard]] KeplerianElements
+elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp, double M);
 
 /// Modified equinoctial-style (prograde) equinoctial elements:
 ///   h = e sin(raan + argp), k = e cos(raan + argp),
@@ -65,9 +65,9 @@ struct EquinoctialElements {
 };
 
 [[nodiscard]] EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el) noexcept;
-[[nodiscard]] KeplerianElements equinoctialToKeplerian(const EquinoctialElements& eq);
+[[nodiscard]] KeplerianElements   equinoctialToKeplerian(const EquinoctialElements& eq);
 [[nodiscard]] EquinoctialElements stateToEquinoctial(const StateVector& s, double mu = constants::gmEarth);
-[[nodiscard]] StateVector equinoctialToState(const EquinoctialElements& eq, double mu = constants::gmEarth);
+[[nodiscard]] StateVector         equinoctialToState(const EquinoctialElements& eq, double mu = constants::gmEarth);
 
 /// Orbital period (s) for a > 0.
 [[nodiscard]] double orbitalPeriod(double a, double mu = constants::gmEarth) noexcept;
@@ -78,8 +78,12 @@ struct EquinoctialElements {
 /// Specific orbital energy (J/kg).
 [[nodiscard]] double specificEnergy(const StateVector& s, double mu = constants::gmEarth) noexcept;
 /// Flight-path angle (rad): angle of the velocity above the local horizontal.
-[[nodiscard]] double flightPathAngle(const StateVector& s) noexcept;
-[[nodiscard]] inline double periapsisRadius(double a, double e) noexcept { return a * (1.0 - e); }
-[[nodiscard]] inline double apoapsisRadius(double a, double e) noexcept { return a * (1.0 + e); }
+[[nodiscard]] double        flightPathAngle(const StateVector& s) noexcept;
+[[nodiscard]] inline double periapsisRadius(double a, double e) noexcept {
+    return a * (1.0 - e);
+}
+[[nodiscard]] inline double apoapsisRadius(double a, double e) noexcept {
+    return a * (1.0 + e);
+}
 
 } // namespace astro

@@ -82,36 +82,36 @@ public:
     /// Position and velocity, including the Earth-rotation (omega x r) term for Earth-fixed frames.
     [[nodiscard]] StateVector transform(const StateVector& s, Frame from, Frame to) const noexcept;
 
-    [[nodiscard]] const Time& tt() const noexcept { return tt_; }
-    [[nodiscard]] const Time& ut1() const noexcept { return ut1_; }
+    [[nodiscard]] const Time&      tt() const noexcept { return tt_; }
+    [[nodiscard]] const Time&      ut1() const noexcept { return ut1_; }
     [[nodiscard]] const EopValues& eop() const noexcept { return eop_; }
-    [[nodiscard]] const CipXY& cip() const noexcept { return xy_; }
-    [[nodiscard]] double cioLocator() const noexcept { return s_; }
-    [[nodiscard]] double earthRotationAngle() const noexcept { return era_; }
-    [[nodiscard]] double gast() const noexcept { return gast_; }
-    [[nodiscard]] double gmst() const noexcept { return gmst_; }
-    [[nodiscard]] double gmst82() const noexcept { return gmst82_; }
+    [[nodiscard]] const CipXY&     cip() const noexcept { return xy_; }
+    [[nodiscard]] double           cioLocator() const noexcept { return s_; }
+    [[nodiscard]] double           earthRotationAngle() const noexcept { return era_; }
+    [[nodiscard]] double           gast() const noexcept { return gast_; }
+    [[nodiscard]] double           gmst() const noexcept { return gmst_; }
+    [[nodiscard]] double           gmst82() const noexcept { return gmst82_; }
 
 private:
-    Time tt_;
-    Time ut1_;
+    Time      tt_;
+    Time      ut1_;
     EopValues eop_;
-    CipXY xy_;
-    double s_{0.0};
-    double era_{0.0};
-    double gast_{0.0};
-    double gmst_{0.0};
-    double gmst82_{0.0};
-    double omega_{0.0};
-    Mat3 polar_;
-    Mat3 m_[9];
+    CipXY     xy_;
+    double    s_{0.0};
+    double    era_{0.0};
+    double    gast_{0.0};
+    double    gmst_{0.0};
+    double    gmst82_{0.0};
+    double    omega_{0.0};
+    Mat3      polar_;
+    Mat3      m_[9];
 };
 
 /// GCRS -> ITRS rotation matrix ("ECI to ECEF").
 [[nodiscard]] Mat3 gcrsToItrsMatrix(const Time& t, const EopProvider& eop, const FrameOptions& options = {});
 
-[[nodiscard]] Vec3 gcrsToItrs(const Vec3& r, const Time& t, const EopProvider& eop);
-[[nodiscard]] Vec3 itrsToGcrs(const Vec3& r, const Time& t, const EopProvider& eop);
+[[nodiscard]] Vec3        gcrsToItrs(const Vec3& r, const Time& t, const EopProvider& eop);
+[[nodiscard]] Vec3        itrsToGcrs(const Vec3& r, const Time& t, const EopProvider& eop);
 [[nodiscard]] StateVector gcrsToItrs(const StateVector& s, const Time& t, const EopProvider& eop);
 [[nodiscard]] StateVector itrsToGcrs(const StateVector& s, const Time& t, const EopProvider& eop);
 [[nodiscard]] StateVector temeToItrs(const StateVector& s, const Time& t, const EopProvider& eop);
@@ -120,8 +120,12 @@ private:
 [[nodiscard]] StateVector gcrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
 
 /// Aliases using the common names.
-[[nodiscard]] inline Vec3 eciToEcef(const Vec3& r, const Time& t, const EopProvider& eop) { return gcrsToItrs(r, t, eop); }
-[[nodiscard]] inline Vec3 ecefToEci(const Vec3& r, const Time& t, const EopProvider& eop) { return itrsToGcrs(r, t, eop); }
+[[nodiscard]] inline Vec3 eciToEcef(const Vec3& r, const Time& t, const EopProvider& eop) {
+    return gcrsToItrs(r, t, eop);
+}
+[[nodiscard]] inline Vec3 ecefToEci(const Vec3& r, const Time& t, const EopProvider& eop) {
+    return itrsToGcrs(r, t, eop);
+}
 [[nodiscard]] inline StateVector eciToEcef(const StateVector& s, const Time& t, const EopProvider& eop) {
     return gcrsToItrs(s, t, eop);
 }

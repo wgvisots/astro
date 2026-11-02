@@ -24,21 +24,21 @@
 namespace astro::constants {
 
 // ------------------------------------------------------------ math
-inline constexpr double pi = std::numbers::pi;
-inline constexpr double twoPi = 2.0 * std::numbers::pi;
-inline constexpr double halfPi = 0.5 * std::numbers::pi;
-inline constexpr double degToRad = pi / 180.0;
-inline constexpr double radToDeg = 180.0 / pi;
+inline constexpr double pi          = std::numbers::pi;
+inline constexpr double twoPi       = 2.0 * std::numbers::pi;
+inline constexpr double halfPi      = 0.5 * std::numbers::pi;
+inline constexpr double degToRad    = pi / 180.0;
+inline constexpr double radToDeg    = 180.0 / pi;
 inline constexpr double arcsecToRad = pi / 648000.0;
-inline constexpr double masToRad = arcsecToRad / 1000.0;
-inline constexpr double uasToRad = arcsecToRad / 1.0e6;
+inline constexpr double masToRad    = arcsecToRad / 1000.0;
+inline constexpr double uasToRad    = arcsecToRad / 1.0e6;
 /// Turns (revolutions) to radians.
 inline constexpr double turnToRad = twoPi;
 
 // ------------------------------------------------------------ time
-inline constexpr double secondsPerDay = 86400.0;
-inline constexpr double daysPerJulianYear = 365.25;
-inline constexpr double daysPerJulianCentury = 36525.0;
+inline constexpr double secondsPerDay           = 86400.0;
+inline constexpr double daysPerJulianYear       = 365.25;
+inline constexpr double daysPerJulianCentury    = 36525.0;
 inline constexpr double daysPerJulianMillennium = 365250.0;
 /// Julian Date of the J2000.0 epoch (2000-01-01 12:00:00 TT).
 inline constexpr double jdJ2000 = 2451545.0;
@@ -94,15 +94,15 @@ inline constexpr double J5 = -2.2775359073083618e-7;
 inline constexpr double J6 = 5.406665762838132e-7;
 
 // ------------------------------------------------------------ ellipsoids
-inline constexpr double wgs84A = 6378137.0;
-inline constexpr double wgs84InvF = 298.257223563;
-inline constexpr double wgs84F = 1.0 / wgs84InvF;
-inline constexpr double grs80A = 6378137.0;
-inline constexpr double grs80InvF = 298.257222101;
-inline constexpr double grs80F = 1.0 / grs80InvF;
-inline constexpr double iers2010A = 6378136.6;
+inline constexpr double wgs84A       = 6378137.0;
+inline constexpr double wgs84InvF    = 298.257223563;
+inline constexpr double wgs84F       = 1.0 / wgs84InvF;
+inline constexpr double grs80A       = 6378137.0;
+inline constexpr double grs80InvF    = 298.257222101;
+inline constexpr double grs80F       = 1.0 / grs80InvF;
+inline constexpr double iers2010A    = 6378136.6;
 inline constexpr double iers2010InvF = 298.25642;
-inline constexpr double iers2010F = 1.0 / iers2010InvF;
+inline constexpr double iers2010F    = 1.0 / iers2010InvF;
 
 // ------------------------------------------------------------ bodies
 /// IAU 2015 nominal solar radius, m.

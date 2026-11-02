@@ -55,7 +55,11 @@ std::ostream& operator<<(std::ostream& os, TimeScale value);
 /// Parse "UTC", "TAI", "TT", ... (case-insensitive). Throws astro::Error.
 [[nodiscard]] TimeScale timeScaleFromString(std::string_view name);
 
-enum class GnssSystem { GPS, Galileo, BeiDou };
+enum class GnssSystem {
+    GPS,
+    Galileo,
+    BeiDou
+};
 
 BOOST_DESCRIBE_ENUM(GnssSystem, GPS, Galileo, BeiDou)
 
@@ -63,8 +67,8 @@ BOOST_DESCRIBE_ENUM(GnssSystem, GPS, Galileo, BeiDou)
 std::ostream& operator<<(std::ostream& os, GnssSystem value);
 
 struct GnssWeekTow {
-    int week{0};      ///< full (non-rolled-over) week number
-    double tow{0.0};  ///< seconds of week, [0, 604800)
+    int    week{0};  ///< full (non-rolled-over) week number
+    double tow{0.0}; ///< seconds of week, [0, 604800)
 };
 
 /// An instant tagged with its time scale.
@@ -86,8 +90,8 @@ public:
     [[nodiscard]] static Time fromMjd(double mjd, TimeScale scale);
     /// From calendar fields in the given scale. For UTC, second may be in
     /// [60, 61) on a day that ends in a leap second.
-    [[nodiscard]] static Time fromCalendar(TimeScale scale, int year, int month, int day, int hour = 0,
-                                           int minute = 0, double second = 0.0);
+    [[nodiscard]] static Time
+    fromCalendar(TimeScale scale, int year, int month, int day, int hour = 0, int minute = 0, double second = 0.0);
     [[nodiscard]] static Time fromCalendar(TimeScale scale, const CalendarDate& cal);
     /// From POSIX/Unix time (seconds since 1970-01-01T00:00:00 UTC, leap seconds not counted). Result is UTC.
     [[nodiscard]] static Time fromUnix(double unixSeconds);
@@ -108,8 +112,8 @@ public:
     [[nodiscard]] static Time fromIso8601(std::string_view text, TimeScale defaultScale = TimeScale::UTC);
 
     [[nodiscard]] const JulianDate& jd() const noexcept { return jd_; }
-    [[nodiscard]] TimeScale scale() const noexcept { return scale_; }
-    [[nodiscard]] double mjd() const noexcept { return jd_.mjd(); }
+    [[nodiscard]] TimeScale         scale() const noexcept { return scale_; }
+    [[nodiscard]] double            mjd() const noexcept { return jd_.mjd(); }
     /// Julian centuries since J2000.0, in this time's own scale.
     [[nodiscard]] double centuriesSinceJ2000() const noexcept { return jd_.centuriesSinceJ2000(); }
 
@@ -125,7 +129,7 @@ public:
 
     /// Unix seconds (converts to UTC). During a leap second, returns the value
     /// of the following second (POSIX time repeats).
-    [[nodiscard]] double unixSeconds() const;
+    [[nodiscard]] double                                unixSeconds() const;
     [[nodiscard]] std::chrono::system_clock::time_point toSysTime() const;
     /// Seconds since the GPS epoch (converts to GPS time).
     [[nodiscard]] double gpsSeconds() const;
@@ -136,19 +140,19 @@ public:
     /// other scales advance their Julian Date directly.
     [[nodiscard]] Time operator+(double seconds) const;
     [[nodiscard]] Time operator-(double seconds) const { return *this + (-seconds); }
-    Time& operator+=(double seconds) { return *this = *this + seconds; }
-    Time& operator-=(double seconds) { return *this = *this + (-seconds); }
+    Time&              operator+=(double seconds) { return *this = *this + seconds; }
+    Time&              operator-=(double seconds) { return *this = *this + (-seconds); }
 
     /// Elapsed seconds a - b, measured in a's scale (b is converted first; UTC
     /// differences are taken in TAI so leap seconds are counted).
     friend double operator-(const Time& a, const Time& b);
     /// Ordering after converting b to a's scale.
     friend std::partial_ordering operator<=>(const Time& a, const Time& b);
-    friend bool operator==(const Time& a, const Time& b) { return (a <=> b) == 0; }
+    friend bool                  operator==(const Time& a, const Time& b) { return (a <=> b) == 0; }
 
 private:
     JulianDate jd_{constants::jdJ2000, 0.0};
-    TimeScale scale_{TimeScale::TT};
+    TimeScale  scale_{TimeScale::TT};
 };
 
 /// TDB - TT in seconds (Fairhead & Bretagnon 1990, full 787-term series plus
@@ -158,8 +162,11 @@ private:
 /// @param elong        observer east longitude, rad
 /// @param uKm          observer distance from Earth's spin axis, km
 /// @param vKm          observer distance north of the equatorial plane, km
-[[nodiscard]] double tdbMinusTt(const JulianDate& tt, double ut1Fraction = 0.0, double elong = 0.0,
-                                double uKm = 0.0, double vKm = 0.0) noexcept;
+[[nodiscard]] double tdbMinusTt(const JulianDate& tt,
+                                double            ut1Fraction = 0.0,
+                                double            elong       = 0.0,
+                                double            uKm         = 0.0,
+                                double            vKm         = 0.0) noexcept;
 
 /// Resolve a truncated (rolled-over) GNSS week number, e.g. 10-bit GPS LNAV
 /// weeks, to the full week closest to `reference`.

@@ -33,7 +33,9 @@ using constants::twoPi;
 
 double wrapTwoPi(double rad) noexcept {
     double r = std::fmod(rad, twoPi);
-    if (r < 0.0) r += twoPi;
+    if (r < 0.0) {
+        r += twoPi;
+    }
     return r >= twoPi ? 0.0 : r;
 }
 
@@ -44,7 +46,9 @@ double wrapPi(double rad) noexcept {
 
 double wrap360(double deg) noexcept {
     double r = std::fmod(deg, 360.0);
-    if (r < 0.0) r += 360.0;
+    if (r < 0.0) {
+        r += 360.0;
+    }
     return r >= 360.0 ? 0.0 : r;
 }
 
@@ -66,26 +70,28 @@ namespace {
 
 Sexagesimal decompose(double units, int decimals) {
     Sexagesimal out;
-    out.negative = units < 0.0;
+    out.negative       = units < 0.0;
     const double scale = std::pow(10.0, decimals);
     // Total in rounded units of the last printed second digit.
-    const double totalTicks = std::round(std::abs(units) * 3600.0 * scale);
+    const double totalTicks     = std::round(std::abs(units) * 3600.0 * scale);
     const double ticksPerMinute = 60.0 * scale;
-    const double ticksPerWhole = 3600.0 * scale;
-    const double whole = std::floor(totalTicks / ticksPerWhole);
-    const double remWhole = totalTicks - whole * ticksPerWhole;
-    const double minutes = std::floor(remWhole / ticksPerMinute);
-    const double secTicks = remWhole - minutes * ticksPerMinute;
-    out.whole = static_cast<int>(whole);
-    out.minutes = static_cast<int>(minutes);
-    out.seconds = secTicks / scale;
-    if (out.whole == 0 && out.minutes == 0 && secTicks == 0.0) out.negative = false;
+    const double ticksPerWhole  = 3600.0 * scale;
+    const double whole          = std::floor(totalTicks / ticksPerWhole);
+    const double remWhole       = totalTicks - whole * ticksPerWhole;
+    const double minutes        = std::floor(remWhole / ticksPerMinute);
+    const double secTicks       = remWhole - minutes * ticksPerMinute;
+    out.whole                   = static_cast<int>(whole);
+    out.minutes                 = static_cast<int>(minutes);
+    out.seconds                 = secTicks / scale;
+    if (out.whole == 0 && out.minutes == 0 && secTicks == 0.0) {
+        out.negative = false;
+    }
     return out;
 }
 
 bool isSeparator(char c) {
-    return c == ' ' || c == ':' || c == 'h' || c == 'H' || c == 'd' || c == 'D' || c == 'm' || c == 'M' ||
-           c == 's' || c == 'S' || c == '\'' || c == '"' || c == '\t' || c == ',';
+    return c == ' ' || c == ':' || c == 'h' || c == 'H' || c == 'd' || c == 'D' || c == 'm' || c == 'M' || c == 's'
+        || c == 'S' || c == '\'' || c == '"' || c == '\t' || c == ',';
 }
 
 // Parses one-to-three numeric fields with an optional sign. Returns value in "whole" units.
@@ -102,7 +108,9 @@ double parseSexagesimal(std::string_view text) {
             }
         }
     };
-    while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) ++pos;
+    while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) {
+        ++pos;
+    }
     bool negative = false;
     if (pos < text.size() && (text[pos] == '-' || text[pos] == '+')) {
         negative = text[pos] == '-';
@@ -111,11 +119,13 @@ double parseSexagesimal(std::string_view text) {
     std::vector<double> fields;
     while (pos < text.size()) {
         skipSeps();
-        if (pos >= text.size()) break;
-        double v = 0.0;
+        if (pos >= text.size()) {
+            break;
+        }
+        double      v     = 0.0;
         const char* begin = text.data() + pos;
-        const char* end = text.data() + text.size();
-        auto [ptr, ec] = std::from_chars(begin, end, v);
+        const char* end   = text.data() + text.size();
+        auto [ptr, ec]    = std::from_chars(begin, end, v);
         if (ec != std::errc{} || ptr == begin || v < 0.0) {
             throw Error("malformed sexagesimal string: '" + std::string(text) + "'");
         }
@@ -126,19 +136,25 @@ double parseSexagesimal(std::string_view text) {
         throw Error("sexagesimal string must have 1-3 fields: '" + std::string(text) + "'");
     }
     for (std::size_t i = 1; i < fields.size(); ++i) {
-        if (fields[i] >= 60.0) throw Error("sexagesimal minutes/seconds must be < 60: '" + std::string(text) + "'");
+        if (fields[i] >= 60.0) {
+            throw Error("sexagesimal minutes/seconds must be < 60: '" + std::string(text) + "'");
+        }
     }
     double v = fields[0];
-    if (fields.size() > 1) v += fields[1] / 60.0;
-    if (fields.size() > 2) v += fields[2] / 3600.0;
+    if (fields.size() > 1) {
+        v += fields[1] / 60.0;
+    }
+    if (fields.size() > 2) {
+        v += fields[2] / 3600.0;
+    }
     return negative ? -v : v;
 }
 
 std::string format(const Sexagesimal& s, int decimals, char sep, bool forceSign, int wholeWidth) {
-    char secBuf[32];
+    char      secBuf[32];
     const int secWidth = decimals > 0 ? decimals + 3 : 2;
     std::snprintf(secBuf, sizeof(secBuf), "%0*.*f", secWidth, decimals, s.seconds);
-    char buf[96];
+    char        buf[96];
     const char* sign = s.negative ? "-" : (forceSign ? "+" : "");
     std::snprintf(buf, sizeof(buf), "%s%0*d%c%02d%c%s", sign, wholeWidth, s.whole, sep, s.minutes, sep, secBuf);
     return buf;

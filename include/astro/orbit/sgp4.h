@@ -33,7 +33,11 @@
 namespace astro {
 
 /// Earth constants used by SGP4. TLEs are generated with WGS-72.
-enum class Sgp4Gravity { WGS72Old, WGS72, WGS84 };
+enum class Sgp4Gravity {
+    WGS72Old,
+    WGS72,
+    WGS84
+};
 
 BOOST_DESCRIBE_ENUM(Sgp4Gravity, WGS72Old, WGS72, WGS84)
 
@@ -41,7 +45,10 @@ BOOST_DESCRIBE_ENUM(Sgp4Gravity, WGS72Old, WGS72, WGS84)
 std::ostream& operator<<(std::ostream& os, Sgp4Gravity value);
 
 /// 'Improved' (Vallado) or 'AFSPC' compatibility for the GMST at epoch and node wrapping.
-enum class Sgp4OpsMode { Improved, Afspc };
+enum class Sgp4OpsMode {
+    Improved,
+    Afspc
+};
 
 BOOST_DESCRIBE_ENUM(Sgp4OpsMode, Improved, Afspc)
 
@@ -53,7 +60,9 @@ std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value);
 /// 6 satellite has decayed.
 class Sgp4Error : public Error {
 public:
-    Sgp4Error(int code, const std::string& what) : Error(what), code_(code) {}
+    Sgp4Error(int code, const std::string& what)
+        : Error(what)
+        , code_(code) {}
     [[nodiscard]] int code() const noexcept { return code_; }
 
 private:
@@ -62,8 +71,7 @@ private:
 
 class Sgp4 {
 public:
-    explicit Sgp4(const Tle& tle, Sgp4Gravity gravity = Sgp4Gravity::WGS72,
-                  Sgp4OpsMode mode = Sgp4OpsMode::Improved);
+    explicit Sgp4(const Tle& tle, Sgp4Gravity gravity = Sgp4Gravity::WGS72, Sgp4OpsMode mode = Sgp4OpsMode::Improved);
     ~Sgp4();
     Sgp4(const Sgp4&);
     Sgp4& operator=(const Sgp4&);
@@ -79,7 +87,7 @@ public:
     /// code 6 (decayed) the state is still filled in, as in Vallado's code.
     [[nodiscard]] int propagate(double minutesSinceEpoch, StateVector& out) const noexcept;
 
-    [[nodiscard]] const Tle& tle() const noexcept;
+    [[nodiscard]] const Tle&  tle() const noexcept;
     [[nodiscard]] const Time& epoch() const noexcept;
     /// True if the deep-space (SDP4) branch is used (period >= 225 minutes).
     [[nodiscard]] bool isDeepSpace() const noexcept;

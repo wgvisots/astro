@@ -66,7 +66,7 @@ struct FukushimaWilliams {
     double gammaBar{0.0};
     double phiBar{0.0};
     double psiBar{0.0};
-    double epsA{0.0};  ///< mean obliquity of date
+    double epsA{0.0}; ///< mean obliquity of date
 };
 [[nodiscard]] FukushimaWilliams fukushimaWilliams06(double t) noexcept;
 /// Rotation matrix from Fukushima-Williams angles: R1(-eps) R3(-psi) R1(phi) R3(gamma).
@@ -82,8 +82,10 @@ struct FukushimaWilliams {
 [[nodiscard]] Mat3 nutationMatrix(double epsA, const Nutation& n) noexcept;
 /// GCRS -> true equator and equinox of date (bias-precession-nutation), with
 /// optional extra nutation corrections (rad) added to dpsi/deps.
-[[nodiscard]] Mat3 npbMatrix06(double t, PrecessionNutationModel model = PrecessionNutationModel::IAU2006_2000A,
-                               double ddpsi = 0.0, double ddeps = 0.0) noexcept;
+[[nodiscard]] Mat3 npbMatrix06(double                  t,
+                               PrecessionNutationModel model = PrecessionNutationModel::IAU2006_2000A,
+                               double                  ddpsi = 0.0,
+                               double                  ddeps = 0.0) noexcept;
 
 /// Coordinates of the Celestial Intermediate Pole in the GCRS (rad).
 struct CipXY {

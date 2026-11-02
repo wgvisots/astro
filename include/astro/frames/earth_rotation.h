@@ -38,7 +38,8 @@ inline constexpr double kEarthRotationRateEra = 7.292115146706979e-5;
 [[nodiscard]] double equationOfOrigins(const Mat3& npb, double s) noexcept;
 
 /// Greenwich Apparent Sidereal Time, IAU 2006/2000A (or 2000B), CIO based: GAST = ERA - EO.
-[[nodiscard]] double gast06(const JulianDate& ut1, const JulianDate& tt,
+[[nodiscard]] double gast06(const JulianDate&       ut1,
+                            const JulianDate&       tt,
                             PrecessionNutationModel model = PrecessionNutationModel::IAU2006_2000A) noexcept;
 
 /// Greenwich Mean Sidereal Time, IAU 1982 model (used to define TEME for SGP4).

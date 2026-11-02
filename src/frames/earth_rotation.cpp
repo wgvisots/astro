@@ -34,34 +34,35 @@ double earthRotationAngle(const JulianDate& ut1) noexcept {
 
 double gmst06(const JulianDate& ut1, const JulianDate& tt) noexcept {
     const double t = tt.centuriesSinceJ2000();
-    return wrapTwoPi(earthRotationAngle(ut1) +
-                     (0.014506 + t * (4612.156534 + t * (1.3915817 + t * (-0.00000044 + t * (-0.000029956 + t * -0.0000000368))))) *
-                         constants::arcsecToRad);
+    return wrapTwoPi(
+        earthRotationAngle(ut1)
+        + (0.014506 + t * (4612.156534 + t * (1.3915817 + t * (-0.00000044 + t * (-0.000029956 + t * -0.0000000368)))))
+              * constants::arcsecToRad);
 }
 
 double equationOfOrigins(const Mat3& r, double s) noexcept {
-    const double x = r(2, 0);
+    const double x  = r(2, 0);
     const double ax = x / (1.0 + r(2, 2));
     const double xs = 1.0 - ax * x;
     const double ys = -ax * r(2, 1);
     const double zs = -x;
-    const double p = r(0, 0) * xs + r(0, 1) * ys + r(0, 2) * zs;
-    const double q = r(1, 0) * xs + r(1, 1) * ys + r(1, 2) * zs;
+    const double p  = r(0, 0) * xs + r(0, 1) * ys + r(0, 2) * zs;
+    const double q  = r(1, 0) * xs + r(1, 1) * ys + r(1, 2) * zs;
     return (p != 0.0 || q != 0.0) ? s - std::atan2(q, p) : s;
 }
 
 double gast06(const JulianDate& ut1, const JulianDate& tt, PrecessionNutationModel model) noexcept {
-    const double t = tt.centuriesSinceJ2000();
-    const Mat3 npb = npbMatrix06(t, model);
-    const double s = cioLocatorS06(t, cipXYFromMatrix(npb));
+    const double t   = tt.centuriesSinceJ2000();
+    const Mat3   npb = npbMatrix06(t, model);
+    const double s   = cioLocatorS06(t, cipXYFromMatrix(npb));
     return wrapTwoPi(earthRotationAngle(ut1) - equationOfOrigins(npb, s));
 }
 
 double gmst82(const JulianDate& ut1) noexcept {
     constexpr double A = 24110.54841 - constants::secondsPerDay / 2.0;
     constexpr double B = 8640184.812866, C = 0.093104, D = -6.2e-6;
-    const double t = ut1.centuriesSinceJ2000();
-    const double f = constants::secondsPerDay * (std::fmod(ut1.jd1, 1.0) + std::fmod(ut1.jd2, 1.0));
+    const double     t = ut1.centuriesSinceJ2000();
+    const double     f = constants::secondsPerDay * (std::fmod(ut1.jd1, 1.0) + std::fmod(ut1.jd2, 1.0));
     return wrapTwoPi(constants::twoPi / constants::secondsPerDay * ((A + (B + (C + D * t) * t) * t) + f));
 }
 

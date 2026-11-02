@@ -27,7 +27,8 @@ namespace astro {
 /// missing data (e.g. no EOP for the requested epoch) or non-convergence.
 class Error : public std::runtime_error {
 public:
-    explicit Error(const std::string& what) : std::runtime_error(what) {}
+    explicit Error(const std::string& what)
+        : std::runtime_error(what) {}
 };
 
 } // namespace astro

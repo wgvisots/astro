@@ -38,24 +38,28 @@ double eccentricToMeanAnomaly(double E, double e) noexcept {
 }
 
 double meanToEccentricAnomaly(double M, double e) {
-    if (e < 0.0 || e >= 1.0) throw Error("meanToEccentricAnomaly: requires 0 <= e < 1");
+    if (e < 0.0 || e >= 1.0) {
+        throw Error("meanToEccentricAnomaly: requires 0 <= e < 1");
+    }
     // Solve on M in [-pi, pi), then restore the full revolutions.
-    const double Mw = wrapPi(M);
+    const double Mw   = wrapPi(M);
     const double revs = M - Mw;
     // Starter (Danby): E0 = M + 0.85 e sign(sin M).
     double E = Mw + 0.85 * e * (std::sin(Mw) >= 0.0 ? 1.0 : -1.0);
     for (int i = 0; i < 50; ++i) {
         const double s = std::sin(E), c = std::cos(E);
-        const double f = E - e * s - Mw;
-        const double fp = 1.0 - e * c;
-        const double fpp = e * s;
+        const double f    = E - e * s - Mw;
+        const double fp   = 1.0 - e * c;
+        const double fpp  = e * s;
         const double fppp = e * c;
         // Third-order (Householder-like) correction.
-        double d = -f / fp;
-        d = -f / (fp + 0.5 * d * fpp);
-        d = -f / (fp + 0.5 * d * fpp + d * d * fppp / 6.0);
-        E += d;
-        if (std::abs(d) < 1e-15) break;
+        double d  = -f / fp;
+        d         = -f / (fp + 0.5 * d * fpp);
+        d         = -f / (fp + 0.5 * d * fpp + d * d * fppp / 6.0);
+        E        += d;
+        if (std::abs(d) < 1e-15) {
+            break;
+        }
     }
     return E + revs;
 }
@@ -73,22 +77,34 @@ double hyperbolicToMeanAnomaly(double F, double e) noexcept {
 }
 
 double meanToHyperbolicAnomaly(double M, double e) {
-    if (e <= 1.0) throw Error("meanToHyperbolicAnomaly: requires e > 1");
-    double F = std::asinh(M / e);  // good starter for large |M|
-    if (std::abs(M) < 1.0) F = M / (e - 1.0);
+    if (e <= 1.0) {
+        throw Error("meanToHyperbolicAnomaly: requires e > 1");
+    }
+    double F = std::asinh(M / e); // good starter for large |M|
+    if (std::abs(M) < 1.0) {
+        F = M / (e - 1.0);
+    }
     for (int i = 0; i < 100; ++i) {
-        const double f = e * std::sinh(F) - F - M;
-        const double fp = e * std::cosh(F) - 1.0;
-        const double d = f / fp;
-        F -= d;
-        if (std::abs(d) < 1e-15 * (1.0 + std::abs(F))) return F;
+        const double f   = e * std::sinh(F) - F - M;
+        const double fp  = e * std::cosh(F) - 1.0;
+        const double d   = f / fp;
+        F               -= d;
+        if (std::abs(d) < 1e-15 * (1.0 + std::abs(F))) {
+            return F;
+        }
     }
     throw Error("meanToHyperbolicAnomaly: did not converge");
 }
 
-double trueToParabolicAnomaly(double nu) noexcept { return std::tan(0.5 * nu); }
-double parabolicToTrueAnomaly(double D) noexcept { return 2.0 * std::atan(D); }
-double parabolicToMeanAnomaly(double D) noexcept { return D + D * D * D / 3.0; }
+double trueToParabolicAnomaly(double nu) noexcept {
+    return std::tan(0.5 * nu);
+}
+double parabolicToTrueAnomaly(double D) noexcept {
+    return 2.0 * std::atan(D);
+}
+double parabolicToMeanAnomaly(double D) noexcept {
+    return D + D * D * D / 3.0;
+}
 
 double meanToParabolicAnomaly(double M) noexcept {
     // Closed-form solution of Barker's equation.
@@ -97,14 +113,22 @@ double meanToParabolicAnomaly(double M) noexcept {
 }
 
 double meanToTrueAnomaly(double M, double e) {
-    if (e < 1.0) return eccentricToTrueAnomaly(meanToEccentricAnomaly(M, e), e);
-    if (e == 1.0) return parabolicToTrueAnomaly(meanToParabolicAnomaly(M));
+    if (e < 1.0) {
+        return eccentricToTrueAnomaly(meanToEccentricAnomaly(M, e), e);
+    }
+    if (e == 1.0) {
+        return parabolicToTrueAnomaly(meanToParabolicAnomaly(M));
+    }
     return hyperbolicToTrueAnomaly(meanToHyperbolicAnomaly(M, e), e);
 }
 
 double trueToMeanAnomaly(double nu, double e) noexcept {
-    if (e < 1.0) return eccentricToMeanAnomaly(trueToEccentricAnomaly(nu, e), e);
-    if (e == 1.0) return parabolicToMeanAnomaly(trueToParabolicAnomaly(nu));
+    if (e < 1.0) {
+        return eccentricToMeanAnomaly(trueToEccentricAnomaly(nu, e), e);
+    }
+    if (e == 1.0) {
+        return parabolicToMeanAnomaly(trueToParabolicAnomaly(nu));
+    }
     return hyperbolicToMeanAnomaly(trueToHyperbolicAnomaly(nu, e), e);
 }
 

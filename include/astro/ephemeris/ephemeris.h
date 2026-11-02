@@ -31,32 +31,48 @@ namespace astro {
 /// Solar-system bodies, numbered with their NAIF integer IDs.
 enum class Body : int {
     SolarSystemBarycenter = 0,
-    MercuryBarycenter = 1,
-    VenusBarycenter = 2,
-    EarthMoonBarycenter = 3,
-    MarsBarycenter = 4,
-    JupiterBarycenter = 5,
-    SaturnBarycenter = 6,
-    UranusBarycenter = 7,
-    NeptuneBarycenter = 8,
-    PlutoBarycenter = 9,
-    Sun = 10,
-    Mercury = 199,
-    Venus = 299,
-    Moon = 301,
-    Earth = 399,
-    Mars = 499,
+    MercuryBarycenter     = 1,
+    VenusBarycenter       = 2,
+    EarthMoonBarycenter   = 3,
+    MarsBarycenter        = 4,
+    JupiterBarycenter     = 5,
+    SaturnBarycenter      = 6,
+    UranusBarycenter      = 7,
+    NeptuneBarycenter     = 8,
+    PlutoBarycenter       = 9,
+    Sun                   = 10,
+    Mercury               = 199,
+    Venus                 = 299,
+    Moon                  = 301,
+    Earth                 = 399,
+    Mars                  = 499,
 };
 
-BOOST_DESCRIBE_ENUM(Body, SolarSystemBarycenter, MercuryBarycenter, VenusBarycenter, EarthMoonBarycenter,
-                    MarsBarycenter, JupiterBarycenter, SaturnBarycenter, UranusBarycenter, NeptuneBarycenter,
-                    PlutoBarycenter, Sun, Mercury, Venus, Moon, Earth, Mars)
+BOOST_DESCRIBE_ENUM(Body,
+                    SolarSystemBarycenter,
+                    MercuryBarycenter,
+                    VenusBarycenter,
+                    EarthMoonBarycenter,
+                    MarsBarycenter,
+                    JupiterBarycenter,
+                    SaturnBarycenter,
+                    UranusBarycenter,
+                    NeptuneBarycenter,
+                    PlutoBarycenter,
+                    Sun,
+                    Mercury,
+                    Venus,
+                    Moon,
+                    Earth,
+                    Mars)
 
 /// Writes "Body::<enumerator>", or "Body::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, Body value);
 
 [[nodiscard]] std::string_view toString(Body b) noexcept;
-[[nodiscard]] constexpr int naifId(Body b) noexcept { return static_cast<int>(b); }
+[[nodiscard]] constexpr int    naifId(Body b) noexcept {
+    return static_cast<int>(b);
+}
 
 /// Source of solar-system body states.
 ///

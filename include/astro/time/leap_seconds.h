@@ -30,8 +30,8 @@ namespace astro {
 ///   TAI - UTC = offset + (MJD_UTC - mjdRef) * rate   [seconds]
 /// The rate term is non-zero only for 1961-1971 ("rubber second" UTC).
 struct LeapSecondEntry {
-    int year;
-    int month;          ///< steps always occur on the 1st of a month
+    int    year;
+    int    month;       ///< steps always occur on the 1st of a month
     double offset;      ///< seconds
     double mjdRef{0.0}; ///< reference MJD for the drift term
     double rate{0.0};   ///< seconds per day
@@ -71,7 +71,7 @@ public:
 
 private:
     std::vector<LeapSecondEntry> entries_;
-    std::optional<double> expiresMjd_;
+    std::optional<double>        expiresMjd_;
 };
 
 /// The table used by all UTC conversions (thread-safe snapshot).

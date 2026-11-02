@@ -25,12 +25,24 @@
 
 namespace astro {
 
-[[nodiscard]] constexpr double deg2rad(double deg) noexcept { return deg * constants::degToRad; }
-[[nodiscard]] constexpr double rad2deg(double rad) noexcept { return rad * constants::radToDeg; }
-[[nodiscard]] constexpr double arcsec2rad(double as) noexcept { return as * constants::arcsecToRad; }
-[[nodiscard]] constexpr double rad2arcsec(double rad) noexcept { return rad / constants::arcsecToRad; }
-[[nodiscard]] constexpr double mas2rad(double mas) noexcept { return mas * constants::masToRad; }
-[[nodiscard]] constexpr double rad2mas(double rad) noexcept { return rad / constants::masToRad; }
+[[nodiscard]] constexpr double deg2rad(double deg) noexcept {
+    return deg * constants::degToRad;
+}
+[[nodiscard]] constexpr double rad2deg(double rad) noexcept {
+    return rad * constants::radToDeg;
+}
+[[nodiscard]] constexpr double arcsec2rad(double as) noexcept {
+    return as * constants::arcsecToRad;
+}
+[[nodiscard]] constexpr double rad2arcsec(double rad) noexcept {
+    return rad / constants::arcsecToRad;
+}
+[[nodiscard]] constexpr double mas2rad(double mas) noexcept {
+    return mas * constants::masToRad;
+}
+[[nodiscard]] constexpr double rad2mas(double rad) noexcept {
+    return rad / constants::masToRad;
+}
 
 /// Wrap an angle to [0, 2*pi).
 [[nodiscard]] double wrapTwoPi(double rad) noexcept;
@@ -44,9 +56,9 @@ namespace astro {
 /// Sexagesimal components. `negative` carries the sign so that "-00 30 00" is
 /// representable; deg/hours and minutes are non-negative.
 struct Sexagesimal {
-    bool negative{false};
-    int whole{0};   ///< degrees or hours
-    int minutes{0};
+    bool   negative{false};
+    int    whole{0}; ///< degrees or hours
+    int    minutes{0};
     double seconds{0.0};
 };
 

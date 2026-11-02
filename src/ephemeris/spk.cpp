@@ -45,26 +45,26 @@ T swapBytes(T v) {
 
 struct Segment {
     SpkSegmentInfo info;
-    std::int64_t startAddr{0};  // 1-based double-word address
-    std::int64_t endAddr{0};
-    double init{0.0};
-    double intlen{0.0};
-    std::int64_t rsize{0};
-    std::int64_t nrec{0};
+    std::int64_t   startAddr{0}; // 1-based double-word address
+    std::int64_t   endAddr{0};
+    double         init{0.0};
+    double         intlen{0.0};
+    std::int64_t   rsize{0};
+    std::int64_t   nrec{0};
     // Cache of the most recently used record.
-    mutable std::int64_t cachedIndex{-1};
+    mutable std::int64_t        cachedIndex{-1};
     mutable std::vector<double> cache;
 };
 
 } // namespace
 
 struct SpkEphemeris::Impl {
-    std::string path;
-    mutable std::ifstream file;
-    mutable std::mutex mutex;
-    bool swap{false};
-    bool big{false};
-    std::vector<Segment> segs;
+    std::string                 path;
+    mutable std::ifstream       file;
+    mutable std::mutex          mutex;
+    bool                        swap{false};
+    bool                        big{false};
+    std::vector<Segment>        segs;
     std::vector<SpkSegmentInfo> infos;
 
     template <class T>
@@ -76,21 +76,30 @@ struct SpkEphemeris::Impl {
         file.clear();
         file.seekg(offset);
         file.read(static_cast<char*>(dst), static_cast<std::streamsize>(n));
-        if (!file) throw Error("SPK: read failed in " + path);
+        if (!file) {
+            throw Error("SPK: read failed in " + path);
+        }
     }
 
     void readDoubles(std::int64_t addr, std::size_t n, double* out) const {
         readBytes((addr - 1) * 8, out, n * sizeof(double));
-        if (swap)
-            for (std::size_t i = 0; i < n; ++i) out[i] = swapBytes(out[i]);
+        if (swap) {
+            for (std::size_t i = 0; i < n; ++i) {
+                out[i] = swapBytes(out[i]);
+            }
+        }
     }
 
     void open() {
         file.open(path, std::ios::binary);
-        if (!file) throw Error("SPK: cannot open " + path);
+        if (!file) {
+            throw Error("SPK: cannot open " + path);
+        }
         unsigned char rec[kRecordBytes];
         readBytes(0, rec, kRecordBytes);
-        if (std::memcmp(rec, "DAF/SPK ", 8) != 0) throw Error("SPK: not a DAF/SPK file: " + path);
+        if (std::memcmp(rec, "DAF/SPK ", 8) != 0) {
+            throw Error("SPK: not a DAF/SPK file: " + path);
+        }
         const std::string fmt(reinterpret_cast<const char*>(rec) + 88, 8);
         if (fmt == "BIG-IEEE") {
             big = true;
@@ -104,11 +113,13 @@ struct SpkEphemeris::Impl {
         std::memcpy(&nd, rec + 8, 4);
         std::memcpy(&ni, rec + 12, 4);
         std::memcpy(&fward, rec + 76, 4);
-        nd = fix(nd);
-        ni = fix(ni);
+        nd    = fix(nd);
+        ni    = fix(ni);
         fward = fix(fward);
-        if (nd != 2 || ni != 6) throw Error("SPK: unexpected ND/NI in " + path);
-        const int ss = nd + (ni + 1) / 2;  // summary size in doubles
+        if (nd != 2 || ni != 6) {
+            throw Error("SPK: unexpected ND/NI in " + path);
+        }
+        const int ss = nd + (ni + 1) / 2; // summary size in doubles
 
         std::int64_t recno = fward;
         while (recno > 0) {
@@ -117,47 +128,52 @@ struct SpkEphemeris::Impl {
             char names[kRecordBytes];
             readBytes(recno * static_cast<std::int64_t>(kRecordBytes), names, kRecordBytes);
             const double next = fix(summary[0]);
-            const int nsum = static_cast<int>(fix(summary[2]));
+            const int    nsum = static_cast<int>(fix(summary[2]));
             for (int i = 0; i < nsum; ++i) {
                 const double* s = summary + 3 + i * ss;
-                Segment seg;
+                Segment       seg;
                 seg.info.startEt = fix(s[0]);
-                seg.info.endEt = fix(s[1]);
+                seg.info.endEt   = fix(s[1]);
                 std::int32_t ints[6];
                 std::memcpy(ints, s + 2, sizeof(ints));
-                for (auto& v : ints) v = fix(v);
+                for (auto& v : ints) {
+                    v = fix(v);
+                }
                 seg.info.target = ints[0];
                 seg.info.center = ints[1];
-                seg.info.frame = ints[2];
-                seg.info.type = ints[3];
-                seg.startAddr = ints[4];
-                seg.endAddr = ints[5];
+                seg.info.frame  = ints[2];
+                seg.info.type   = ints[3];
+                seg.startAddr   = ints[4];
+                seg.endAddr     = ints[5];
                 std::string name(names + i * ss * 8, static_cast<std::size_t>(ss * 8));
-                const auto last = name.find_last_not_of(std::string(" \0", 2));
+                const auto  last = name.find_last_not_of(std::string(" \0", 2));
                 name.erase(last == std::string::npos ? 0 : last + 1);
                 seg.info.name = name;
                 if (seg.info.type == 2 || seg.info.type == 3) {
                     double dir[4];
                     readDoubles(seg.endAddr - 3, 4, dir);
-                    seg.init = dir[0];
+                    seg.init   = dir[0];
                     seg.intlen = dir[1];
-                    seg.rsize = static_cast<std::int64_t>(dir[2]);
-                    seg.nrec = static_cast<std::int64_t>(dir[3]);
+                    seg.rsize  = static_cast<std::int64_t>(dir[2]);
+                    seg.nrec   = static_cast<std::int64_t>(dir[3]);
                 }
                 infos.push_back(seg.info);
                 segs.push_back(std::move(seg));
             }
             recno = static_cast<std::int64_t>(next);
         }
-        if (segs.empty()) throw Error("SPK: no segments in " + path);
+        if (segs.empty()) {
+            throw Error("SPK: no segments in " + path);
+        }
     }
 
     // Latest segment for `target` covering `et`.
     const Segment& find(int target, double et) const {
         for (auto it = segs.rbegin(); it != segs.rend(); ++it) {
             if (it->info.target == target && et >= it->info.startEt && et <= it->info.endEt) {
-                if (it->info.type != 2 && it->info.type != 3)
+                if (it->info.type != 2 && it->info.type != 3) {
                     throw Error("SPK: unsupported segment type " + std::to_string(it->info.type));
+                }
                 return *it;
             }
         }
@@ -167,33 +183,33 @@ struct SpkEphemeris::Impl {
     // Segment state (km, km/s) of seg.target relative to seg.center.
     StateVector evaluate(const Segment& seg, double et) const {
         auto idx = static_cast<std::int64_t>(std::floor((et - seg.init) / seg.intlen));
-        idx = std::clamp<std::int64_t>(idx, 0, seg.nrec - 1);
+        idx      = std::clamp<std::int64_t>(idx, 0, seg.nrec - 1);
         if (seg.cachedIndex != idx) {
             seg.cache.resize(static_cast<std::size_t>(seg.rsize));
             readDoubles(seg.startAddr + idx * seg.rsize, seg.cache.size(), seg.cache.data());
             seg.cachedIndex = idx;
         }
-        const double* r = seg.cache.data();
-        const double mid = r[0], radius = r[1];
+        const double*     r   = seg.cache.data();
+        const double      mid = r[0], radius = r[1];
         const std::size_t ncomp = seg.info.type == 2 ? 3 : 6;
-        const auto n = static_cast<std::size_t>((seg.rsize - 2) / static_cast<std::int64_t>(ncomp));
-        const double s = (et - mid) / radius;
+        const auto        n     = static_cast<std::size_t>((seg.rsize - 2) / static_cast<std::int64_t>(ncomp));
+        const double      s     = (et - mid) / radius;
         // Chebyshev polynomials and derivatives.
         std::vector<double> T(n), dT(n);
-        T[0] = 1.0;
+        T[0]  = 1.0;
         dT[0] = 0.0;
         if (n > 1) {
-            T[1] = s;
+            T[1]  = s;
             dT[1] = 1.0;
         }
         for (std::size_t k = 2; k < n; ++k) {
-            T[k] = 2.0 * s * T[k - 1] - T[k - 2];
+            T[k]  = 2.0 * s * T[k - 1] - T[k - 2];
             dT[k] = 2.0 * T[k - 1] + 2.0 * s * dT[k - 1] - dT[k - 2];
         }
         StateVector out;
         for (std::size_t c = 0; c < 3; ++c) {
             const double* coef = r + 2 + c * n;
-            double p = 0.0, v = 0.0;
+            double        p = 0.0, v = 0.0;
             for (std::size_t k = n; k-- > 0;) {
                 p += coef[k] * T[k];
                 v += coef[k] * dT[k];
@@ -202,8 +218,10 @@ struct SpkEphemeris::Impl {
             out.v[c] = v / radius;
             if (ncomp == 6) {
                 const double* vc = r + 2 + (3 + c) * n;
-                double vv = 0.0;
-                for (std::size_t k = n; k-- > 0;) vv += vc[k] * T[k];
+                double        vv = 0.0;
+                for (std::size_t k = n; k-- > 0;) {
+                    vv += vc[k] * T[k];
+                }
                 out.v[c] = vv;
             }
         }
@@ -223,35 +241,42 @@ struct SpkEphemeris::Impl {
     StateVector sumTo(int body, int stop, double et) const {
         StateVector acc;
         while (body != stop) {
-            const Segment& seg = find(body, et);
-            const StateVector s = evaluate(seg, et);
-            acc.r += s.r;
-            acc.v += s.v;
-            body = seg.info.center;
+            const Segment&    seg  = find(body, et);
+            const StateVector s    = evaluate(seg, et);
+            acc.r                 += s.r;
+            acc.v                 += s.v;
+            body                   = seg.info.center;
         }
         return acc;
     }
 };
 
-SpkEphemeris::SpkEphemeris(const std::string& path) : impl_(std::make_unique<Impl>()) {
+SpkEphemeris::SpkEphemeris(const std::string& path)
+    : impl_(std::make_unique<Impl>()) {
     impl_->path = path;
     impl_->open();
 }
 
-SpkEphemeris::~SpkEphemeris() = default;
-SpkEphemeris::SpkEphemeris(SpkEphemeris&&) noexcept = default;
+SpkEphemeris::~SpkEphemeris()                                  = default;
+SpkEphemeris::SpkEphemeris(SpkEphemeris&&) noexcept            = default;
 SpkEphemeris& SpkEphemeris::operator=(SpkEphemeris&&) noexcept = default;
 
-const std::vector<SpkSegmentInfo>& SpkEphemeris::segments() const noexcept { return impl_->infos; }
-bool SpkEphemeris::bigEndian() const noexcept { return impl_->big; }
+const std::vector<SpkSegmentInfo>& SpkEphemeris::segments() const noexcept {
+    return impl_->infos;
+}
+bool SpkEphemeris::bigEndian() const noexcept {
+    return impl_->big;
+}
 
 StateVector SpkEphemeris::stateById(int target, int center, double et) const {
     std::lock_guard lock(impl_->mutex);
-    if (target == center) return {};
+    if (target == center) {
+        return {};
+    }
     // Find the first common node of the two paths to the SSB.
-    const std::vector<int> pt = target == 0 ? std::vector<int>{0} : impl_->chain(target, et);
-    const std::vector<int> pc = center == 0 ? std::vector<int>{0} : impl_->chain(center, et);
-    int common = 0;
+    const std::vector<int> pt     = target == 0 ? std::vector<int>{0} : impl_->chain(target, et);
+    const std::vector<int> pc     = center == 0 ? std::vector<int>{0} : impl_->chain(center, et);
+    int                    common = 0;
     for (int b : pt) {
         if (std::find(pc.begin(), pc.end(), b) != pc.end()) {
             common = b;

@@ -28,7 +28,7 @@ namespace astro {
 
 LookAngles lookAngles(const StateVector& sat, const Geodetic& site, const Ellipsoid& ell) noexcept {
     const Vec3 rho = sat.r - geodeticToEcef(site, ell);
-    const Aer a = enuToAer(ecefToEnuMatrix(site.lat, site.lon) * rho);
+    const Aer  a   = enuToAer(ecefToEnuMatrix(site.lat, site.lon) * rho);
     return {a.az, a.el, a.range, dot(rho, sat.v) / a.range};
 }
 
@@ -41,62 +41,67 @@ double dopplerShiftRelativistic(double f, double rangeRate) noexcept {
     return f * (std::sqrt((1.0 - b) / (1.0 + b)) - 1.0);
 }
 
-std::vector<Pass> findPasses(const ItrsStateFunction& sat, const Geodetic& site, const Time& start, const Time& end,
-                             double minElevation, double step, const Ellipsoid& ell) {
-    auto elevation = [&](const Time& t) { return lookAngles(sat(t), site, ell).el; };
-    const auto events = findElevationEvents(elevation, start, end, minElevation, step);
+std::vector<Pass> findPasses(const ItrsStateFunction& sat,
+                             const Geodetic&          site,
+                             const Time&              start,
+                             const Time&              end,
+                             double                   minElevation,
+                             double                   step,
+                             const Ellipsoid&         ell) {
+    auto              elevation = [&](const Time& t) { return lookAngles(sat(t), site, ell).el; };
+    const auto        events    = findElevationEvents(elevation, start, end, minElevation, step);
     std::vector<Pass> passes;
-    bool open = elevation(start) > minElevation;
-    Pass cur;
+    bool              open = elevation(start) > minElevation;
+    Pass              cur;
     if (open) {
-        cur.aos = start;
+        cur.aos                = start;
         cur.startsBeforeWindow = true;
-        cur.aosAzimuth = lookAngles(sat(start), site, ell).az;
-        cur.maxElevation = -1e9;
+        cur.aosAzimuth         = lookAngles(sat(start), site, ell).az;
+        cur.maxElevation       = -1e9;
     }
     for (const SkyEvent& e : events) {
         switch (e.type) {
-            case SkyEventType::Rise:
-                cur = Pass{};
-                cur.aos = e.time;
-                cur.aosAzimuth = lookAngles(sat(e.time), site, ell).az;
-                cur.maxElevation = -1e9;
-                open = true;
-                break;
-            case SkyEventType::Transit:
-                if (open && e.elevation > cur.maxElevation) {
-                    cur.maxElevation = e.elevation;
-                    cur.tca = e.time;
+        case SkyEventType::Rise:
+            cur              = Pass{};
+            cur.aos          = e.time;
+            cur.aosAzimuth   = lookAngles(sat(e.time), site, ell).az;
+            cur.maxElevation = -1e9;
+            open             = true;
+            break;
+        case SkyEventType::Transit:
+            if (open && e.elevation > cur.maxElevation) {
+                cur.maxElevation = e.elevation;
+                cur.tca          = e.time;
+            }
+            break;
+        case SkyEventType::Set:
+            if (open) {
+                cur.los        = e.time;
+                cur.losAzimuth = lookAngles(sat(e.time), site, ell).az;
+                if (cur.maxElevation < minElevation) { // no interior maximum sampled: use the endpoints
+                    cur.maxElevation = minElevation;
+                    cur.tca          = cur.aos + 0.5 * (cur.los - cur.aos);
                 }
-                break;
-            case SkyEventType::Set:
-                if (open) {
-                    cur.los = e.time;
-                    cur.losAzimuth = lookAngles(sat(e.time), site, ell).az;
-                    if (cur.maxElevation < minElevation) {  // no interior maximum sampled: use the endpoints
-                        cur.maxElevation = minElevation;
-                        cur.tca = cur.aos + 0.5 * (cur.los - cur.aos);
-                    }
-                    passes.push_back(cur);
-                    open = false;
-                }
-                break;
+                passes.push_back(cur);
+                open = false;
+            }
+            break;
         }
     }
     if (open) {
-        cur.los = end;
+        cur.los             = end;
         cur.endsAfterWindow = true;
-        cur.losAzimuth = lookAngles(sat(end), site, ell).az;
-        const double elEnd = elevation(end);
+        cur.losAzimuth      = lookAngles(sat(end), site, ell).az;
+        const double elEnd  = elevation(end);
         if (elEnd > cur.maxElevation) {
             cur.maxElevation = elEnd;
-            cur.tca = end;
+            cur.tca          = end;
         }
         if (cur.startsBeforeWindow) {
             const double elStart = elevation(start);
             if (elStart > cur.maxElevation) {
                 cur.maxElevation = elStart;
-                cur.tca = start;
+                cur.tca          = start;
             }
         }
         passes.push_back(cur);

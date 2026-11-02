@@ -33,8 +33,8 @@
 namespace astro {
 
 enum class ShadowModel {
-    Cylindrical,  ///< umbra only, Earth's shadow as a cylinder
-    Conical,      ///< umbra and penumbra with the finite solar disk
+    Cylindrical, ///< umbra only, Earth's shadow as a cylinder
+    Conical,     ///< umbra and penumbra with the finite solar disk
 };
 
 BOOST_DESCRIBE_ENUM(ShadowModel, Cylindrical, Conical)
@@ -42,7 +42,12 @@ BOOST_DESCRIBE_ENUM(ShadowModel, Cylindrical, Conical)
 /// Writes "ShadowModel::<enumerator>", or "ShadowModel::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, ShadowModel value);
 
-enum class ShadowState { Sunlit, Penumbra, Umbra, Annular };
+enum class ShadowState {
+    Sunlit,
+    Penumbra,
+    Umbra,
+    Annular
+};
 
 BOOST_DESCRIBE_ENUM(ShadowState, Sunlit, Penumbra, Umbra, Annular)
 
@@ -51,25 +56,27 @@ std::ostream& operator<<(std::ostream& os, ShadowState value);
 
 struct ShadowResult {
     ShadowState state{ShadowState::Sunlit};
-    double illumination{1.0};  ///< fraction of the solar disk visible, 0..1
+    double      illumination{1.0}; ///< fraction of the solar disk visible, 0..1
 };
 
 /// Shadow condition of a satellite at `sat` with the Sun at `sun` (geocentric).
 /// The conical model follows Montenbruck & Gill (2000), sec. 3.4.2, with a
 /// spherical Earth of radius `earthRadius`.
-[[nodiscard]] ShadowResult shadow(const Vec3& sat, const Vec3& sun, ShadowModel model = ShadowModel::Conical,
-                                  double earthRadius = constants::wgs84A,
-                                  double sunRadius = constants::sunRadius) noexcept;
+[[nodiscard]] ShadowResult shadow(const Vec3& sat,
+                                  const Vec3& sun,
+                                  ShadowModel model       = ShadowModel::Conical,
+                                  double      earthRadius = constants::wgs84A,
+                                  double      sunRadius   = constants::sunRadius) noexcept;
 
 /// Solar beta angle (rad): elevation of the Sun above the orbit plane.
 [[nodiscard]] double betaAngle(const StateVector& sat, const Vec3& sun) noexcept;
 
 struct EclipseInterval {
     Time penumbraEntry;
-    Time umbraEntry;   ///< equals penumbraEntry for the cylindrical model or a penumbral-only eclipse
+    Time umbraEntry; ///< equals penumbraEntry for the cylindrical model or a penumbral-only eclipse
     Time umbraExit;
     Time penumbraExit;
-    bool umbral{true};  ///< false for a penumbral-only (grazing) eclipse
+    bool umbral{true}; ///< false for a penumbral-only (grazing) eclipse
 };
 
 /// Find eclipse intervals in [start, end] given geocentric satellite and Sun
@@ -77,8 +84,10 @@ struct EclipseInterval {
 /// Eclipses already in progress at `start` or `end` are clipped to the window.
 [[nodiscard]] std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>& satPosition,
                                                         const std::function<Vec3(const Time&)>& sunPosition,
-                                                        const Time& start, const Time& end, double step = 30.0,
-                                                        ShadowModel model = ShadowModel::Conical,
-                                                        double earthRadius = constants::wgs84A);
+                                                        const Time&                             start,
+                                                        const Time&                             end,
+                                                        double                                  step = 30.0,
+                                                        ShadowModel model       = ShadowModel::Conical,
+                                                        double      earthRadius = constants::wgs84A);
 
 } // namespace astro

@@ -49,35 +49,44 @@ Mat3 ntwMatrix(const StateVector& s) noexcept {
 }
 
 StateVector relativeStateRic(const StateVector& chief, const StateVector& deputy) noexcept {
-    const Mat3 M = ricMatrix(chief);
+    const Mat3 M     = ricMatrix(chief);
     const Vec3 omega = cross(chief.r, chief.v) / norm2(chief.r);
-    const Vec3 dr = deputy.r - chief.r;
-    const Vec3 dv = deputy.v - chief.v;
+    const Vec3 dr    = deputy.r - chief.r;
+    const Vec3 dv    = deputy.v - chief.v;
     return {M * dr, M * (dv - cross(omega, dr))};
 }
 
 StateVector deputyFromRelativeRic(const StateVector& chief, const StateVector& rel) noexcept {
-    const Mat3 Mt = ricMatrix(chief).transpose();
+    const Mat3 Mt    = ricMatrix(chief).transpose();
     const Vec3 omega = cross(chief.r, chief.v) / norm2(chief.r);
-    const Vec3 dr = Mt * rel.r;
+    const Vec3 dr    = Mt * rel.r;
     return {chief.r + dr, chief.v + Mt * rel.v + cross(omega, dr)};
 }
 
 Mat6 rotateCovariance(const Mat6& P, const Mat3& R) noexcept {
     // T = diag(R, R); P' = T P T^T.
     Mat6 T{};
-    for (std::size_t i = 0; i < 3; ++i)
+    for (std::size_t i = 0; i < 3; ++i) {
         for (std::size_t j = 0; j < 3; ++j) {
-            T[i][j] = R(i, j);
+            T[i][j]         = R(i, j);
             T[i + 3][j + 3] = R(i, j);
         }
+    }
     Mat6 tmp{}, out{};
-    for (std::size_t i = 0; i < 6; ++i)
-        for (std::size_t j = 0; j < 6; ++j)
-            for (std::size_t k = 0; k < 6; ++k) tmp[i][j] += T[i][k] * P[k][j];
-    for (std::size_t i = 0; i < 6; ++i)
-        for (std::size_t j = 0; j < 6; ++j)
-            for (std::size_t k = 0; k < 6; ++k) out[i][j] += tmp[i][k] * T[j][k];
+    for (std::size_t i = 0; i < 6; ++i) {
+        for (std::size_t j = 0; j < 6; ++j) {
+            for (std::size_t k = 0; k < 6; ++k) {
+                tmp[i][j] += T[i][k] * P[k][j];
+            }
+        }
+    }
+    for (std::size_t i = 0; i < 6; ++i) {
+        for (std::size_t j = 0; j < 6; ++j) {
+            for (std::size_t k = 0; k < 6; ++k) {
+                out[i][j] += tmp[i][k] * T[j][k];
+            }
+        }
+    }
     return out;
 }
 

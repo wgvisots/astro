@@ -37,12 +37,16 @@ namespace astro {
 /// Acceleration from the zonal harmonics J2..Jn (point mass excluded).
 /// `J` holds unnormalized zonal coefficients indexed by degree: J[2] = J2, J[3] = J3, ...
 /// (entries 0 and 1 are ignored).
-[[nodiscard]] Vec3 zonalAcceleration(const Vec3& r, const std::vector<double>& J, double mu = constants::gmEarth,
-                                     double re = constants::earthRadiusEgm2008) noexcept;
+[[nodiscard]] Vec3 zonalAcceleration(const Vec3&                r,
+                                     const std::vector<double>& J,
+                                     double                     mu = constants::gmEarth,
+                                     double                     re = constants::earthRadiusEgm2008) noexcept;
 
 /// Closed-form J2 acceleration (for reference/testing).
-[[nodiscard]] Vec3 j2Acceleration(const Vec3& r, double J2 = constants::J2, double mu = constants::gmEarth,
-                                  double re = constants::earthRadiusEgm2008) noexcept;
+[[nodiscard]] Vec3 j2Acceleration(const Vec3& r,
+                                  double      J2 = constants::J2,
+                                  double      mu = constants::gmEarth,
+                                  double      re = constants::earthRadiusEgm2008) noexcept;
 
 /// Point-mass third-body perturbation on a satellite at r (geocentric) from a body at s (geocentric).
 [[nodiscard]] Vec3 thirdBodyAcceleration(const Vec3& r, const Vec3& s, double muBody) noexcept;

@@ -40,8 +40,11 @@ inline void expectVecNear(const Vec3& a, const Vec3& b, double tol, const char* 
 }
 
 inline void expectMatNear(const Mat3& a, const Mat3& b, double tol, const char* what = "") {
-    for (std::size_t i = 0; i < 3; ++i)
-        for (std::size_t j = 0; j < 3; ++j) EXPECT_NEAR(a(i, j), b(i, j), tol) << what << " (" << i << "," << j << ")";
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            EXPECT_NEAR(a(i, j), b(i, j), tol) << what << " (" << i << "," << j << ")";
+        }
+    }
 }
 
 inline void expectOrthonormal(const Mat3& a, double tol = 1e-14) {
@@ -52,28 +55,37 @@ inline void expectOrthonormal(const Mat3& a, double tol = 1e-14) {
 /// Reads a CSV file, skipping blank lines and lines starting with '#'.
 /// The first non-comment line is a header and is returned separately.
 struct Csv {
-    std::vector<std::string> header;
+    std::vector<std::string>              header;
     std::vector<std::vector<std::string>> rows;
 
     [[nodiscard]] std::size_t col(const std::string& name) const {
-        for (std::size_t i = 0; i < header.size(); ++i)
-            if (header[i] == name) return i;
+        for (std::size_t i = 0; i < header.size(); ++i) {
+            if (header[i] == name) {
+                return i;
+            }
+        }
         throw std::runtime_error("no CSV column " + name);
     }
 };
 
 inline Csv readCsv(const std::string& path) {
     std::ifstream in(path);
-    if (!in) throw std::runtime_error("cannot open " + path);
-    Csv csv;
+    if (!in) {
+        throw std::runtime_error("cannot open " + path);
+    }
+    Csv         csv;
     std::string line;
-    bool haveHeader = false;
+    bool        haveHeader = false;
     while (std::getline(in, line)) {
-        if (line.empty() || line[0] == '#') continue;
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
         std::vector<std::string> fields;
-        std::stringstream ss(line);
-        std::string f;
-        while (std::getline(ss, f, ',')) fields.push_back(f);
+        std::stringstream        ss(line);
+        std::string              f;
+        while (std::getline(ss, f, ',')) {
+            fields.push_back(f);
+        }
         if (!haveHeader) {
             csv.header = std::move(fields);
             haveHeader = true;

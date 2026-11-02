@@ -61,7 +61,11 @@ struct Quat {
     double z{0.0};
 
     constexpr Quat() noexcept = default;
-    constexpr Quat(double w_, double x_, double y_, double z_) noexcept : w(w_), x(x_), y(y_), z(z_) {}
+    constexpr Quat(double w_, double x_, double y_, double z_) noexcept
+        : w(w_)
+        , x(x_)
+        , y(y_)
+        , z(z_) {}
 
     [[nodiscard]] static Quat fromAxisAngle(const Vec3& axis, double theta) noexcept;
     /// Quaternion from a passive rotation (direction cosine) matrix. Uses Shepperd's
@@ -73,8 +77,8 @@ struct Quat {
 
     [[nodiscard]] constexpr Vec3 vec() const noexcept { return {x, y, z}; }
     [[nodiscard]] constexpr Quat conjugate() const noexcept { return {w, -x, -y, -z}; }
-    [[nodiscard]] double norm() const noexcept;
-    [[nodiscard]] Quat normalized() const noexcept;
+    [[nodiscard]] double         norm() const noexcept;
+    [[nodiscard]] Quat           normalized() const noexcept;
 
     /// Coordinates of a fixed vector in the rotated frame: toMatrix() * v.
     [[nodiscard]] Vec3 transform(const Vec3& v) const noexcept;
@@ -99,8 +103,18 @@ struct Quat {
 /// frame rotations. E.g. ZYX = 3-2-1 (yaw, pitch, roll); ZXZ = 3-1-3 (classic
 /// orbital Omega, i, omega).
 enum class EulerSequence {
-    XYZ, XZY, YXZ, YZX, ZXY, ZYX,  // Tait-Bryan
-    XYX, XZX, YXY, YZY, ZXZ, ZYZ,  // proper Euler
+    XYZ,
+    XZY,
+    YXZ,
+    YZX,
+    ZXY,
+    ZYX, // Tait-Bryan
+    XYX,
+    XZX,
+    YXY,
+    YZY,
+    ZXZ,
+    ZYZ, // proper Euler
 };
 
 BOOST_DESCRIBE_ENUM(EulerSequence, XYZ, XZY, YXZ, YZX, ZXY, ZYX, XYX, XZX, YXY, YZY, ZXZ, ZYZ)

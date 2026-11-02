@@ -34,18 +34,19 @@ struct DiskGeometry {
 };
 
 DiskGeometry disks(const Vec3& sat, const Vec3& sun, double re, double rs) {
-    const Vec3 toSun = sun - sat;
+    const Vec3   toSun = sun - sat;
     const double ds = norm(toSun), dr = norm(sat);
-    return {std::asin(std::min(1.0, rs / ds)), std::asin(std::min(1.0, re / dr)),
+    return {std::asin(std::min(1.0, rs / ds)),
+            std::asin(std::min(1.0, re / dr)),
             std::acos(std::clamp(dot(-sat, toSun) / (dr * ds), -1.0, 1.0))};
 }
 
 // Signed functions whose zeros are the shadow boundaries (negative = inside).
 double penumbraFunction(const Vec3& sat, const Vec3& sun, ShadowModel model, double re, double rs) {
     if (model == ShadowModel::Cylindrical) {
-        const Vec3 s = normalized(sun);
+        const Vec3   s     = normalized(sun);
         const double along = dot(sat, s);
-        const double perp = norm(sat - along * s);
+        const double perp  = norm(sat - along * s);
         // Outside if on the sunward side; otherwise compare the distance from the shadow axis.
         return along > 0.0 ? perp + along : perp - re;
     }
@@ -54,7 +55,9 @@ double penumbraFunction(const Vec3& sat, const Vec3& sun, ShadowModel model, dou
 }
 
 double umbraFunction(const Vec3& sat, const Vec3& sun, ShadowModel model, double re, double rs) {
-    if (model == ShadowModel::Cylindrical) return penumbraFunction(sat, sun, model, re, rs);
+    if (model == ShadowModel::Cylindrical) {
+        return penumbraFunction(sat, sun, model, re, rs);
+    }
     const DiskGeometry g = disks(sat, sun, re, rs);
     return g.c - (g.b - g.a);
 }
@@ -67,15 +70,21 @@ ShadowResult shadow(const Vec3& sat, const Vec3& sun, ShadowModel model, double 
                                                                : ShadowResult{ShadowState::Sunlit, 1.0};
     }
     const DiskGeometry g = disks(sat, sun, re, rs);
-    const double a = g.a, b = g.b, c = g.c;
-    if (c >= a + b) return {ShadowState::Sunlit, 1.0};
-    if (c < b - a) return {ShadowState::Umbra, 0.0};
-    if (c < a - b) return {ShadowState::Annular, 1.0 - (b * b) / (a * a)};
+    const double       a = g.a, b = g.b, c = g.c;
+    if (c >= a + b) {
+        return {ShadowState::Sunlit, 1.0};
+    }
+    if (c < b - a) {
+        return {ShadowState::Umbra, 0.0};
+    }
+    if (c < a - b) {
+        return {ShadowState::Annular, 1.0 - (b * b) / (a * a)};
+    }
     // Partial overlap of the two disks.
     const double x = (c * c + a * a - b * b) / (2.0 * c);
     const double y = std::sqrt(std::max(0.0, a * a - x * x));
-    const double area = a * a * std::acos(std::clamp(x / a, -1.0, 1.0)) +
-                        b * b * std::acos(std::clamp((c - x) / b, -1.0, 1.0)) - c * y;
+    const double area =
+        a * a * std::acos(std::clamp(x / a, -1.0, 1.0)) + b * b * std::acos(std::clamp((c - x) / b, -1.0, 1.0)) - c * y;
     return {ShadowState::Penumbra, std::clamp(1.0 - area / (constants::pi * a * a), 0.0, 1.0)};
 }
 
@@ -84,12 +93,18 @@ double betaAngle(const StateVector& sat, const Vec3& sun) noexcept {
 }
 
 std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>& satPos,
-                                          const std::function<Vec3(const Time&)>& sunPos, const Time& start,
-                                          const Time& end, double step, ShadowModel model, double re) {
-    const double rs = constants::sunRadius;
-    const double span = end - start;
+                                          const std::function<Vec3(const Time&)>& sunPos,
+                                          const Time&                             start,
+                                          const Time&                             end,
+                                          double                                  step,
+                                          ShadowModel                             model,
+                                          double                                  re) {
+    const double                 rs   = constants::sunRadius;
+    const double                 span = end - start;
     std::vector<EclipseInterval> out;
-    if (span <= 0.0) return out;
+    if (span <= 0.0) {
+        return out;
+    }
     auto fp = [&](double s) {
         const Time t = start + s;
         return penumbraFunction(satPos(t), sunPos(t), model, re, rs);
@@ -98,16 +113,18 @@ std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>
         const Time t = start + s;
         return umbraFunction(satPos(t), sunPos(t), model, re, rs);
     };
-    const int n = std::max(2, static_cast<int>(std::ceil(span / step)));
+    const int    n = std::max(2, static_cast<int>(std::ceil(span / step)));
     const double h = span / n;
 
     // Crossing times of a boundary function.
     auto crossings = [&](auto&& f) {
-        std::vector<std::pair<double, bool>> c;  // time, entering
-        double prev = f(0.0);
+        std::vector<std::pair<double, bool>> c; // time, entering
+        double                               prev = f(0.0);
         for (int i = 1; i <= n; ++i) {
             const double cur = f(i * h);
-            if ((prev < 0.0) != (cur < 0.0)) c.push_back({brentRoot(f, (i - 1) * h, i * h, 1e-3), cur < 0.0});
+            if ((prev < 0.0) != (cur < 0.0)) {
+                c.push_back({brentRoot(f, (i - 1) * h, i * h, 1e-3), cur < 0.0});
+            }
             prev = cur;
         }
         return c;
@@ -117,22 +134,32 @@ std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>
 
     // Assemble intervals from penumbra entries/exits; attach the umbra crossings inside each.
     double entry = fp(0.0) < 0.0 ? 0.0 : -1.0;
-    auto close = [&](double exitS) {
+    auto   close = [&](double exitS) {
         EclipseInterval e;
         e.penumbraEntry = start + entry;
-        e.penumbraExit = start + exitS;
-        double ue = -1.0, ux = -1.0;
+        e.penumbraExit  = start + exitS;
+        double     ue = -1.0, ux = -1.0;
         const bool inUmbraAtEntry = fu(entry) < 0.0;
-        if (inUmbraAtEntry) ue = entry;
-        for (const auto& [t, entering] : umb) {
-            if (t < entry || t > exitS) continue;
-            if (entering && ue < 0.0) ue = t;
-            if (!entering) ux = t;
+        if (inUmbraAtEntry) {
+            ue = entry;
         }
-        if (ue >= 0.0 && ux < 0.0) ux = exitS;
-        e.umbral = ue >= 0.0;
+        for (const auto& [t, entering] : umb) {
+            if (t < entry || t > exitS) {
+                continue;
+            }
+            if (entering && ue < 0.0) {
+                ue = t;
+            }
+            if (!entering) {
+                ux = t;
+            }
+        }
+        if (ue >= 0.0 && ux < 0.0) {
+            ux = exitS;
+        }
+        e.umbral     = ue >= 0.0;
         e.umbraEntry = start + (e.umbral ? ue : entry);
-        e.umbraExit = start + (e.umbral ? ux : exitS);
+        e.umbraExit  = start + (e.umbral ? ux : exitS);
         out.push_back(e);
     };
     for (const auto& [t, entering] : pen) {
@@ -143,7 +170,9 @@ std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>
             entry = -1.0;
         }
     }
-    if (entry >= 0.0) close(span);
+    if (entry >= 0.0) {
+        close(span);
+    }
     return out;
 }
 

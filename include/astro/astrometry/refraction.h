@@ -26,7 +26,7 @@ namespace astro {
 struct Atmosphere {
     double pressureHpa{1013.25};
     double temperatureC{15.0};
-    double relativeHumidity{0.5};  ///< 0..1
+    double relativeHumidity{0.5};   ///< 0..1
     double wavelengthMicron{0.574}; ///< > 100 means radio
 };
 
@@ -46,10 +46,10 @@ struct RefractionConstants {
 
 /// Bennett (1982): refraction (rad) for an *observed* elevation; scaled for
 /// pressure and temperature. Good to ~0.1 arcmin down to the horizon.
-[[nodiscard]] double refractionBennett(double observedElevation, double pressureHpa = 1010.0,
-                                       double temperatureC = 10.0) noexcept;
+[[nodiscard]] double
+refractionBennett(double observedElevation, double pressureHpa = 1010.0, double temperatureC = 10.0) noexcept;
 /// Saemundsson (1986): refraction (rad) for a *true* elevation.
-[[nodiscard]] double refractionSaemundsson(double trueElevation, double pressureHpa = 1010.0,
-                                           double temperatureC = 10.0) noexcept;
+[[nodiscard]] double
+refractionSaemundsson(double trueElevation, double pressureHpa = 1010.0, double temperatureC = 10.0) noexcept;
 
 } // namespace astro

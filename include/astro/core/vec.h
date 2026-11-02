@@ -32,29 +32,60 @@ struct Vec3 {
     double z{0.0};
 
     constexpr Vec3() noexcept = default;
-    constexpr Vec3(double x_, double y_, double z_) noexcept : x(x_), y(y_), z(z_) {}
+    constexpr Vec3(double x_, double y_, double z_) noexcept
+        : x(x_)
+        , y(y_)
+        , z(z_) {}
 
-    [[nodiscard]] constexpr double operator[](std::size_t i) const noexcept {
-        return i == 0 ? x : (i == 1 ? y : z);
-    }
-    [[nodiscard]] constexpr double& operator[](std::size_t i) noexcept {
-        return i == 0 ? x : (i == 1 ? y : z);
-    }
+    [[nodiscard]] constexpr double  operator[](std::size_t i) const noexcept { return i == 0 ? x : (i == 1 ? y : z); }
+    [[nodiscard]] constexpr double& operator[](std::size_t i) noexcept { return i == 0 ? x : (i == 1 ? y : z); }
 
-    constexpr Vec3& operator+=(const Vec3& o) noexcept { x += o.x; y += o.y; z += o.z; return *this; }
-    constexpr Vec3& operator-=(const Vec3& o) noexcept { x -= o.x; y -= o.y; z -= o.z; return *this; }
-    constexpr Vec3& operator*=(double s) noexcept { x *= s; y *= s; z *= s; return *this; }
-    constexpr Vec3& operator/=(double s) noexcept { x /= s; y /= s; z /= s; return *this; }
+    constexpr Vec3& operator+=(const Vec3& o) noexcept {
+        x += o.x;
+        y += o.y;
+        z += o.z;
+        return *this;
+    }
+    constexpr Vec3& operator-=(const Vec3& o) noexcept {
+        x -= o.x;
+        y -= o.y;
+        z -= o.z;
+        return *this;
+    }
+    constexpr Vec3& operator*=(double s) noexcept {
+        x *= s;
+        y *= s;
+        z *= s;
+        return *this;
+    }
+    constexpr Vec3& operator/=(double s) noexcept {
+        x /= s;
+        y /= s;
+        z /= s;
+        return *this;
+    }
 
     friend constexpr bool operator==(const Vec3&, const Vec3&) noexcept = default;
 };
 
-[[nodiscard]] constexpr Vec3 operator+(Vec3 a, const Vec3& b) noexcept { return a += b; }
-[[nodiscard]] constexpr Vec3 operator-(Vec3 a, const Vec3& b) noexcept { return a -= b; }
-[[nodiscard]] constexpr Vec3 operator-(const Vec3& a) noexcept { return {-a.x, -a.y, -a.z}; }
-[[nodiscard]] constexpr Vec3 operator*(Vec3 a, double s) noexcept { return a *= s; }
-[[nodiscard]] constexpr Vec3 operator*(double s, Vec3 a) noexcept { return a *= s; }
-[[nodiscard]] constexpr Vec3 operator/(Vec3 a, double s) noexcept { return a /= s; }
+[[nodiscard]] constexpr Vec3 operator+(Vec3 a, const Vec3& b) noexcept {
+    return a += b;
+}
+[[nodiscard]] constexpr Vec3 operator-(Vec3 a, const Vec3& b) noexcept {
+    return a -= b;
+}
+[[nodiscard]] constexpr Vec3 operator-(const Vec3& a) noexcept {
+    return {-a.x, -a.y, -a.z};
+}
+[[nodiscard]] constexpr Vec3 operator*(Vec3 a, double s) noexcept {
+    return a *= s;
+}
+[[nodiscard]] constexpr Vec3 operator*(double s, Vec3 a) noexcept {
+    return a *= s;
+}
+[[nodiscard]] constexpr Vec3 operator/(Vec3 a, double s) noexcept {
+    return a /= s;
+}
 
 [[nodiscard]] constexpr double dot(const Vec3& a, const Vec3& b) noexcept {
     return a.x * b.x + a.y * b.y + a.z * b.z;
@@ -62,8 +93,12 @@ struct Vec3 {
 [[nodiscard]] constexpr Vec3 cross(const Vec3& a, const Vec3& b) noexcept {
     return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
-[[nodiscard]] constexpr double norm2(const Vec3& a) noexcept { return dot(a, a); }
-[[nodiscard]] inline double norm(const Vec3& a) noexcept { return std::hypot(a.x, a.y, a.z); }
+[[nodiscard]] constexpr double norm2(const Vec3& a) noexcept {
+    return dot(a, a);
+}
+[[nodiscard]] inline double norm(const Vec3& a) noexcept {
+    return std::hypot(a.x, a.y, a.z);
+}
 /// Unit vector along a. Returns the zero vector if a is zero.
 [[nodiscard]] inline Vec3 normalized(const Vec3& a) noexcept {
     const double n = norm(a);
@@ -80,8 +115,8 @@ inline std::ostream& operator<<(std::ostream& os, const Vec3& v) {
 
 /// Six-component state vector: position and velocity.
 struct StateVector {
-    Vec3 r; ///< position
-    Vec3 v; ///< velocity
+    Vec3                  r; ///< position
+    Vec3                  v; ///< velocity
     friend constexpr bool operator==(const StateVector&, const StateVector&) noexcept = default;
 };
 
@@ -95,38 +130,55 @@ struct StateVector12 {
 
     constexpr StateVector12() noexcept = default;
     constexpr StateVector12(const Vec3& r_, const Vec3& v_, const Vec3& a_, const Vec3& j_) noexcept
-        : r(r_), v(v_), a(a_), j(j_) {}
+        : r(r_)
+        , v(v_)
+        , a(a_)
+        , j(j_) {}
 
     /// Position and velocity only.
     [[nodiscard]] constexpr StateVector rv() const noexcept { return {r, v}; }
-    friend constexpr bool operator==(const StateVector12&, const StateVector12&) noexcept = default;
+    friend constexpr bool               operator==(const StateVector12&, const StateVector12&) noexcept = default;
 };
 
 /// 3x3 matrix, row-major.
 struct Mat3 {
-    std::array<std::array<double, 3>, 3> m{{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}}};
+    // clang-format off
+    std::array<std::array<double, 3>, 3> m{{{0.0, 0.0, 0.0},
+                                            {0.0, 0.0, 0.0},
+                                            {0.0, 0.0, 0.0}}};
 
     constexpr Mat3() noexcept = default;
     constexpr Mat3(double a00, double a01, double a02,
                    double a10, double a11, double a12,
                    double a20, double a21, double a22) noexcept
-        : m{{{a00, a01, a02}, {a10, a11, a12}, {a20, a21, a22}}} {}
+        : m{{{a00, a01, a02},
+             {a10, a11, a12},
+             {a20, a21, a22}}} {}
 
     [[nodiscard]] static constexpr Mat3 identity() noexcept {
-        return {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+        return {1.0, 0.0, 0.0,
+                0.0, 1.0, 0.0,
+                0.0, 0.0, 1.0};
     }
     [[nodiscard]] static constexpr Mat3 fromRows(const Vec3& r0, const Vec3& r1, const Vec3& r2) noexcept {
-        return {r0.x, r0.y, r0.z, r1.x, r1.y, r1.z, r2.x, r2.y, r2.z};
+        return {r0.x, r0.y, r0.z,
+                r1.x, r1.y, r1.z,
+                r2.x, r2.y, r2.z};
     }
     [[nodiscard]] static constexpr Mat3 fromCols(const Vec3& c0, const Vec3& c1, const Vec3& c2) noexcept {
-        return {c0.x, c1.x, c2.x, c0.y, c1.y, c2.y, c0.z, c1.z, c2.z};
+        return {c0.x, c1.x, c2.x,
+                c0.y, c1.y, c2.y,
+                c0.z, c1.z, c2.z};
     }
     /// Skew-symmetric cross-product matrix: skew(a) * b == cross(a, b).
     [[nodiscard]] static constexpr Mat3 skew(const Vec3& a) noexcept {
-        return {0.0, -a.z, a.y, a.z, 0.0, -a.x, -a.y, a.x, 0.0};
+        return { 0.0, -a.z,  a.y,
+                 a.z,  0.0, -a.x,
+                -a.y,  a.x,  0.0};
     }
+    // clang-format on
 
-    [[nodiscard]] constexpr double operator()(std::size_t r, std::size_t c) const noexcept { return m[r][c]; }
+    [[nodiscard]] constexpr double  operator()(std::size_t r, std::size_t c) const noexcept { return m[r][c]; }
     [[nodiscard]] constexpr double& operator()(std::size_t r, std::size_t c) noexcept { return m[r][c]; }
 
     [[nodiscard]] constexpr Vec3 row(std::size_t r) const noexcept { return {m[r][0], m[r][1], m[r][2]}; }
@@ -137,40 +189,58 @@ struct Mat3 {
     }
     [[nodiscard]] constexpr double trace() const noexcept { return m[0][0] + m[1][1] + m[2][2]; }
     [[nodiscard]] constexpr double determinant() const noexcept {
-        return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-             - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
              + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
     }
 
     constexpr Mat3& operator+=(const Mat3& o) noexcept {
-        for (std::size_t i = 0; i < 3; ++i)
-            for (std::size_t j = 0; j < 3; ++j) m[i][j] += o.m[i][j];
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                m[i][j] += o.m[i][j];
+            }
+        }
         return *this;
     }
     constexpr Mat3& operator-=(const Mat3& o) noexcept {
-        for (std::size_t i = 0; i < 3; ++i)
-            for (std::size_t j = 0; j < 3; ++j) m[i][j] -= o.m[i][j];
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                m[i][j] -= o.m[i][j];
+            }
+        }
         return *this;
     }
     constexpr Mat3& operator*=(double s) noexcept {
-        for (auto& r : m)
-            for (auto& e : r) e *= s;
+        for (auto& r : m) {
+            for (auto& e : r) {
+                e *= s;
+            }
+        }
         return *this;
     }
 
     friend constexpr bool operator==(const Mat3&, const Mat3&) noexcept = default;
 };
 
-[[nodiscard]] constexpr Mat3 operator+(Mat3 a, const Mat3& b) noexcept { return a += b; }
-[[nodiscard]] constexpr Mat3 operator-(Mat3 a, const Mat3& b) noexcept { return a -= b; }
-[[nodiscard]] constexpr Mat3 operator*(Mat3 a, double s) noexcept { return a *= s; }
-[[nodiscard]] constexpr Mat3 operator*(double s, Mat3 a) noexcept { return a *= s; }
+[[nodiscard]] constexpr Mat3 operator+(Mat3 a, const Mat3& b) noexcept {
+    return a += b;
+}
+[[nodiscard]] constexpr Mat3 operator-(Mat3 a, const Mat3& b) noexcept {
+    return a -= b;
+}
+[[nodiscard]] constexpr Mat3 operator*(Mat3 a, double s) noexcept {
+    return a *= s;
+}
+[[nodiscard]] constexpr Mat3 operator*(double s, Mat3 a) noexcept {
+    return a *= s;
+}
 
 [[nodiscard]] constexpr Mat3 operator*(const Mat3& a, const Mat3& b) noexcept {
     Mat3 c;
-    for (std::size_t i = 0; i < 3; ++i)
-        for (std::size_t j = 0; j < 3; ++j)
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
             c.m[i][j] = a.m[i][0] * b.m[0][j] + a.m[i][1] * b.m[1][j] + a.m[i][2] * b.m[2][j];
+        }
+    }
     return c;
 }
 
@@ -182,9 +252,11 @@ struct Mat3 {
 
 /// Outer product a * b^T.
 [[nodiscard]] constexpr Mat3 outer(const Vec3& a, const Vec3& b) noexcept {
+    // clang-format off
     return {a.x * b.x, a.x * b.y, a.x * b.z,
             a.y * b.x, a.y * b.y, a.y * b.z,
             a.z * b.x, a.z * b.y, a.z * b.z};
+    // clang-format on
 }
 
 inline std::ostream& operator<<(std::ostream& os, const Mat3& a) {

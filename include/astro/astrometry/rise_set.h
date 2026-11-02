@@ -29,7 +29,11 @@
 /// Rise, set, transit and twilight times, and lunar phase.
 namespace astro {
 
-enum class SkyEventType { Rise, Set, Transit };
+enum class SkyEventType {
+    Rise,
+    Set,
+    Transit
+};
 
 BOOST_DESCRIBE_ENUM(SkyEventType, Rise, Set, Transit)
 
@@ -38,8 +42,8 @@ std::ostream& operator<<(std::ostream& os, SkyEventType value);
 
 struct SkyEvent {
     SkyEventType type;
-    Time time;
-    double elevation;  ///< elevation function value at the event (rad)
+    Time         time;
+    double       elevation; ///< elevation function value at the event (rad)
 };
 
 /// Find upward/downward crossings of `threshold` by `elevation(t)` and its local
@@ -47,13 +51,19 @@ struct SkyEvent {
 /// seconds and events are refined with Brent's method to ~1 ms; features
 /// shorter than `step` can be missed.
 [[nodiscard]] std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&)>& elevation,
-                                                        const Time& start, const Time& end, double threshold,
-                                                        double step = 600.0);
+                                                        const Time&                               start,
+                                                        const Time&                               end,
+                                                        double                                    threshold,
+                                                        double                                    step = 600.0);
 
 /// Standard horizon for sunrise/sunset: upper limb with 34' refraction (-0.8333 deg).
 inline constexpr double kSunriseElevation = -0.8333 * constants::degToRad;
 
-enum class Twilight { Civil, Nautical, Astronomical };
+enum class Twilight {
+    Civil,
+    Nautical,
+    Astronomical
+};
 
 BOOST_DESCRIBE_ENUM(Twilight, Civil, Nautical, Astronomical)
 
@@ -64,26 +74,33 @@ std::ostream& operator<<(std::ostream& os, Twilight value);
 [[nodiscard]] double twilightElevation(Twilight tw) noexcept;
 
 /// Geometric topocentric elevation of a body's center (no refraction).
-[[nodiscard]] double bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider& eop,
-                                   const Ephemeris& eph);
+[[nodiscard]] double
+bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider& eop, const Ephemeris& eph);
 
 /// Sunrise/sunset (and solar transits) in [start, end] for a horizon elevation.
-[[nodiscard]] std::vector<SkyEvent> sunRiseSet(const Geodetic& site, const Time& start, const Time& end,
-                                               const EopProvider& eop, const Ephemeris& eph,
-                                               double horizon = kSunriseElevation);
+[[nodiscard]] std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
+                                               const Time&        start,
+                                               const Time&        end,
+                                               const EopProvider& eop,
+                                               const Ephemeris&   eph,
+                                               double             horizon = kSunriseElevation);
 /// Twilight begin (Rise) / end (Set) events.
-[[nodiscard]] std::vector<SkyEvent> twilight(Twilight tw, const Geodetic& site, const Time& start, const Time& end,
-                                             const EopProvider& eop, const Ephemeris& eph);
+[[nodiscard]] std::vector<SkyEvent> twilight(Twilight           tw,
+                                             const Geodetic&    site,
+                                             const Time&        start,
+                                             const Time&        end,
+                                             const EopProvider& eop,
+                                             const Ephemeris&   eph);
 /// Moonrise/moonset of the upper limb with 34' refraction (topocentric, so parallax is included).
-[[nodiscard]] std::vector<SkyEvent> moonRiseSet(const Geodetic& site, const Time& start, const Time& end,
-                                                const EopProvider& eop, const Ephemeris& eph);
+[[nodiscard]] std::vector<SkyEvent>
+moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop, const Ephemeris& eph);
 
 struct MoonPhase {
     double phaseAngle{0.0};          ///< Sun-Moon-Earth angle (rad), 0 = full
     double illuminatedFraction{0.0}; ///< 0..1
     double elongation{0.0};          ///< Moon-Earth-Sun angle (rad)
     double age{0.0};                 ///< ecliptic longitude Moon - Sun, [0, 2pi): 0 new, pi/2 first quarter
-    bool waxing{false};
+    bool   waxing{false};
 };
 [[nodiscard]] MoonPhase moonPhase(const Time& t, const Ephemeris& eph);
 

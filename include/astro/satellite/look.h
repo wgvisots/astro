@@ -31,15 +31,15 @@
 namespace astro {
 
 struct LookAngles {
-    double az{0.0};         ///< azimuth, rad [0, 2pi), clockwise from north
-    double el{0.0};         ///< elevation, rad
-    double range{0.0};      ///< m
-    double rangeRate{0.0};  ///< m/s, positive receding
+    double az{0.0};        ///< azimuth, rad [0, 2pi), clockwise from north
+    double el{0.0};        ///< elevation, rad
+    double range{0.0};     ///< m
+    double rangeRate{0.0}; ///< m/s, positive receding
 };
 
 /// Look angles from a site to a satellite whose state is given in the ITRS (ECEF).
-[[nodiscard]] LookAngles lookAngles(const StateVector& satItrs, const Geodetic& site,
-                                    const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] LookAngles
+lookAngles(const StateVector& satItrs, const Geodetic& site, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Received-frequency shift (Hz) for transmit frequency `f` and range rate:
 /// first order, -f * rangeRate / c.
@@ -49,14 +49,14 @@ struct LookAngles {
 
 /// A visibility pass of a satellite over a site.
 struct Pass {
-    Time aos;               ///< acquisition of signal (rise above the mask)
-    Time tca;               ///< time of maximum elevation
-    Time los;               ///< loss of signal
+    Time   aos; ///< acquisition of signal (rise above the mask)
+    Time   tca; ///< time of maximum elevation
+    Time   los; ///< loss of signal
     double maxElevation{0.0};
     double aosAzimuth{0.0};
     double losAzimuth{0.0};
-    bool startsBeforeWindow{false};  ///< already above the mask at the search start
-    bool endsAfterWindow{false};     ///< still above the mask at the search end
+    bool   startsBeforeWindow{false}; ///< already above the mask at the search start
+    bool   endsAfterWindow{false};    ///< still above the mask at the search end
 };
 
 /// Satellite ITRS state as a function of time.
@@ -65,9 +65,13 @@ using ItrsStateFunction = std::function<StateVector(const Time&)>;
 /// Find passes above `minElevation` in [start, end]. The elevation is sampled every
 /// `step` seconds (passes shorter than ~step can be missed) and events are refined
 /// with Brent's method.
-[[nodiscard]] std::vector<Pass> findPasses(const ItrsStateFunction& sat, const Geodetic& site, const Time& start,
-                                           const Time& end, double minElevation = 0.0, double step = 60.0,
-                                           const Ellipsoid& ell = Ellipsoid::wgs84());
+[[nodiscard]] std::vector<Pass> findPasses(const ItrsStateFunction& sat,
+                                           const Geodetic&          site,
+                                           const Time&              start,
+                                           const Time&              end,
+                                           double                   minElevation = 0.0,
+                                           double                   step         = 60.0,
+                                           const Ellipsoid&         ell          = Ellipsoid::wgs84());
 
 /// ITRS state function for an SGP4 satellite (TEME -> ITRS with the given EOP;
 /// the IAU 2000B nutation model is used for speed).

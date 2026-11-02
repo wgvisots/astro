@@ -41,7 +41,7 @@ TEST(Rotation, PassiveConvention) {
 TEST(Rotation, R2MatchesExplanatorySupplement) {
     // R2(theta) = [cos 0 -sin; 0 1 0; sin 0 cos]  (the original lib/Astro.cpp had this transposed)
     const double t = 0.3;
-    const Mat3 m = R2(t);
+    const Mat3   m = R2(t);
     EXPECT_DOUBLE_EQ(m(0, 2), -std::sin(t));
     EXPECT_DOUBLE_EQ(m(2, 0), std::sin(t));
 }
@@ -74,13 +74,13 @@ TEST(Quat, CompositionOrder) {
 }
 
 TEST(Quat, MatrixRoundTripAndTransform) {
-    std::mt19937 rng(42);
+    std::mt19937                     rng(42);
     std::normal_distribution<double> n(0.0, 1.0);
     for (int i = 0; i < 500; ++i) {
         const Quat q = Quat(n(rng), n(rng), n(rng), n(rng)).normalized();
         const Mat3 A = q.toMatrix();
         expectOrthonormal(A, 1e-14);
-        Quat r = Quat::fromMatrix(A);
+        Quat       r  = Quat::fromMatrix(A);
         const Quat qq = q.w < 0 ? Quat{-q.w, -q.x, -q.y, -q.z} : q;
         EXPECT_NEAR(r.w, qq.w, 1e-13);
         EXPECT_NEAR(r.x, qq.x, 1e-13);
@@ -102,16 +102,17 @@ TEST(Quat, Slerp) {
 class EulerTest : public ::testing::TestWithParam<EulerSequence> {};
 
 TEST_P(EulerTest, DefinitionAndRoundTrip) {
-    const EulerSequence seq = GetParam();
-    const auto ax = eulerAxes(seq);
-    const bool proper = ax[0] == ax[2];
-    std::mt19937 rng(7);
+    const EulerSequence                    seq    = GetParam();
+    const auto                             ax     = eulerAxes(seq);
+    const bool                             proper = ax[0] == ax[2];
+    std::mt19937                           rng(7);
     std::uniform_real_distribution<double> u(-3.1, 3.1);
     std::uniform_real_distribution<double> mid(proper ? 0.01 : -1.55, proper ? 3.13 : 1.55);
     for (int i = 0; i < 300; ++i) {
         const EulerAngles e{u(rng), mid(rng), u(rng)};
-        const Mat3 A = eulerToMatrix(seq, e);
-        expectMatNear(A, rotationAboutAxis(ax[2], e.c) * rotationAboutAxis(ax[1], e.b) * rotationAboutAxis(ax[0], e.a),
+        const Mat3        A = eulerToMatrix(seq, e);
+        expectMatNear(A,
+                      rotationAboutAxis(ax[2], e.c) * rotationAboutAxis(ax[1], e.b) * rotationAboutAxis(ax[0], e.a),
                       1e-15);
         const EulerAngles r = matrixToEuler(seq, A);
         EXPECT_NEAR(r.a, e.a, 1e-9);
@@ -119,15 +120,25 @@ TEST_P(EulerTest, DefinitionAndRoundTrip) {
         EXPECT_NEAR(r.c, e.c, 1e-9);
     }
     // Gimbal lock still reproduces the matrix.
-    for (double b : proper ? std::vector<double>{0.0, constants::pi} : std::vector<double>{constants::halfPi, -constants::halfPi}) {
+    for (double b : proper ? std::vector<double>{0.0, constants::pi}
+                           : std::vector<double>{constants::halfPi, -constants::halfPi}) {
         const EulerAngles e{0.4, b, -0.3};
-        const Mat3 A = eulerToMatrix(seq, e);
+        const Mat3        A = eulerToMatrix(seq, e);
         expectMatNear(eulerToMatrix(seq, matrixToEuler(seq, A)), A, 1e-12, "gimbal");
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(AllSequences, EulerTest,
-                         ::testing::Values(EulerSequence::XYZ, EulerSequence::XZY, EulerSequence::YXZ,
-                                           EulerSequence::YZX, EulerSequence::ZXY, EulerSequence::ZYX,
-                                           EulerSequence::XYX, EulerSequence::XZX, EulerSequence::YXY,
-                                           EulerSequence::YZY, EulerSequence::ZXZ, EulerSequence::ZYZ));
+INSTANTIATE_TEST_SUITE_P(AllSequences,
+                         EulerTest,
+                         ::testing::Values(EulerSequence::XYZ,
+                                           EulerSequence::XZY,
+                                           EulerSequence::YXZ,
+                                           EulerSequence::YZX,
+                                           EulerSequence::ZXY,
+                                           EulerSequence::ZYX,
+                                           EulerSequence::XYX,
+                                           EulerSequence::XZX,
+                                           EulerSequence::YXY,
+                                           EulerSequence::YZY,
+                                           EulerSequence::ZXZ,
+                                           EulerSequence::ZYZ));

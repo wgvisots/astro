@@ -31,10 +31,14 @@ namespace astro {
 [[nodiscard]] Mat3 ecefToNedMatrix(double lat, double lon) noexcept;
 
 /// ECEF position to ENU relative to a geodetic origin.
-[[nodiscard]] Vec3 ecefToEnu(const Vec3& ecef, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
-[[nodiscard]] Vec3 enuToEcef(const Vec3& enu, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
-[[nodiscard]] Vec3 ecefToNed(const Vec3& ecef, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
-[[nodiscard]] Vec3 nedToEcef(const Vec3& ned, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] Vec3
+ecefToEnu(const Vec3& ecef, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] Vec3
+enuToEcef(const Vec3& enu, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] Vec3
+ecefToNed(const Vec3& ecef, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] Vec3
+nedToEcef(const Vec3& ned, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Azimuth (rad, [0, 2pi), clockwise from north), elevation (rad), range (m).
 struct Aer {
@@ -43,10 +47,12 @@ struct Aer {
     double range{0.0};
 };
 
-[[nodiscard]] Aer enuToAer(const Vec3& enu) noexcept;
+[[nodiscard]] Aer  enuToAer(const Vec3& enu) noexcept;
 [[nodiscard]] Vec3 aerToEnu(const Aer& aer) noexcept;
 /// Look angles from an observer to an ECEF target.
-[[nodiscard]] Aer ecefToAer(const Vec3& target, const Geodetic& observer, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
-[[nodiscard]] Vec3 aerToEcef(const Aer& aer, const Geodetic& observer, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] Aer
+ecefToAer(const Vec3& target, const Geodetic& observer, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] Vec3
+aerToEcef(const Aer& aer, const Geodetic& observer, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 } // namespace astro

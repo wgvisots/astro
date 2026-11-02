@@ -28,14 +28,19 @@
 
 namespace astro {
 
-std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&)>& elevation, const Time& start,
-                                          const Time& end, double threshold, double step) {
+std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&)>& elevation,
+                                          const Time&                               start,
+                                          const Time&                               end,
+                                          double                                    threshold,
+                                          double                                    step) {
     std::vector<SkyEvent> events;
-    const double span = end - start;
-    if (span <= 0.0 || step <= 0.0) return events;
-    const int n = std::max(2, static_cast<int>(std::ceil(span / step)));
+    const double          span = end - start;
+    if (span <= 0.0 || step <= 0.0) {
+        return events;
+    }
+    const int    n = std::max(2, static_cast<int>(std::ceil(span / step)));
     const double h = span / n;
-    auto f = [&](double s) { return elevation(start + s); };
+    auto         f = [&](double s) { return elevation(start + s); };
 
     std::vector<double> x(static_cast<std::size_t>(n) + 1), y(x.size());
     for (int i = 0; i <= n; ++i) {
@@ -60,9 +65,9 @@ std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&
 
 double twilightElevation(Twilight tw) noexcept {
     switch (tw) {
-        case Twilight::Civil: return -6.0 * constants::degToRad;
-        case Twilight::Nautical: return -12.0 * constants::degToRad;
-        case Twilight::Astronomical: return -18.0 * constants::degToRad;
+    case Twilight::Civil:        return -6.0 * constants::degToRad;
+    case Twilight::Nautical:     return -12.0 * constants::degToRad;
+    case Twilight::Astronomical: return -18.0 * constants::degToRad;
     }
     return 0.0;
 }
@@ -73,43 +78,53 @@ double bodyElevation(Body body, const Time& t, const Geodetic& site, const EopPr
     return topocentricFromGcrs(eph.position(body, Body::Earth, t), ft, site).el;
 }
 
-std::vector<SkyEvent> sunRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop,
-                                 const Ephemeris& eph, double horizon) {
-    return findElevationEvents([&](const Time& t) { return bodyElevation(Body::Sun, t, site, eop, eph); }, start, end,
+std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
+                                 const Time&        start,
+                                 const Time&        end,
+                                 const EopProvider& eop,
+                                 const Ephemeris&   eph,
+                                 double             horizon) {
+    return findElevationEvents([&](const Time& t) { return bodyElevation(Body::Sun, t, site, eop, eph); },
+                               start,
+                               end,
                                horizon);
 }
 
-std::vector<SkyEvent> twilight(Twilight tw, const Geodetic& site, const Time& start, const Time& end,
-                               const EopProvider& eop, const Ephemeris& eph) {
+std::vector<SkyEvent> twilight(Twilight           tw,
+                               const Geodetic&    site,
+                               const Time&        start,
+                               const Time&        end,
+                               const EopProvider& eop,
+                               const Ephemeris&   eph) {
     auto ev = sunRiseSet(site, start, end, eop, eph, twilightElevation(tw));
     std::erase_if(ev, [](const SkyEvent& e) { return e.type == SkyEventType::Transit; });
     return ev;
 }
 
-std::vector<SkyEvent> moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop,
-                                  const Ephemeris& eph) {
+std::vector<SkyEvent>
+moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop, const Ephemeris& eph) {
     constexpr double refr = 34.0 / 60.0 * constants::degToRad;
-    auto f = [&](const Time& t) {
+    auto             f    = [&](const Time& t) {
         const FrameTransformer ft(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
-        const Aer a = topocentricFromGcrs(eph.position(Body::Moon, Body::Earth, t), ft, site);
-        const double semidiameter = std::asin(constants::moonRadius / a.range);
-        return a.el + semidiameter + refr;  // upper limb, refracted
+        const Aer              a = topocentricFromGcrs(eph.position(Body::Moon, Body::Earth, t), ft, site);
+        const double           semidiameter = std::asin(constants::moonRadius / a.range);
+        return a.el + semidiameter + refr; // upper limb, refracted
     };
     return findElevationEvents(f, start, end, 0.0, 600.0);
 }
 
 MoonPhase moonPhase(const Time& t, const Ephemeris& eph) {
     const Vec3 moon = eph.position(Body::Moon, Body::Earth, t);
-    const Vec3 sun = eph.position(Body::Sun, Body::Earth, t);
-    MoonPhase p;
-    p.elongation = angleBetween(moon, sun);
-    p.phaseAngle = angleBetween(-moon, sun - moon);
+    const Vec3 sun  = eph.position(Body::Sun, Body::Earth, t);
+    MoonPhase  p;
+    p.elongation          = angleBetween(moon, sun);
+    p.phaseAngle          = angleBetween(-moon, sun - moon);
     p.illuminatedFraction = 0.5 * (1.0 + std::cos(p.phaseAngle));
-    const double eps = meanObliquity06(0.0);
-    const double lonMoon = equatorialToEcliptic(moon, eps).ra;
-    const double lonSun = equatorialToEcliptic(sun, eps).ra;
-    p.age = wrapTwoPi(lonMoon - lonSun);
-    p.waxing = p.age < constants::pi;
+    const double eps      = meanObliquity06(0.0);
+    const double lonMoon  = equatorialToEcliptic(moon, eps).ra;
+    const double lonSun   = equatorialToEcliptic(sun, eps).ra;
+    p.age                 = wrapTwoPi(lonMoon - lonSun);
+    p.waxing              = p.age < constants::pi;
     return p;
 }
 

@@ -26,16 +26,20 @@ namespace astro {
 
 Mat3 ecefToEnuMatrix(double lat, double lon) noexcept {
     const double sp = std::sin(lat), cp = std::cos(lat), sl = std::sin(lon), cl = std::cos(lon);
-    return {-sl, cl, 0.0,
-            -sp * cl, -sp * sl, cp,
-            cp * cl, cp * sl, sp};
+    // clang-format off
+    return {     -sl,       cl, 0.0,
+            -sp * cl, -sp * sl,  cp,
+             cp * cl,  cp * sl,  sp};
+    // clang-format on
 }
 
 Mat3 ecefToNedMatrix(double lat, double lon) noexcept {
     const double sp = std::sin(lat), cp = std::cos(lat), sl = std::sin(lon), cl = std::cos(lon);
-    return {-sp * cl, -sp * sl, cp,
-            -sl, cl, 0.0,
+    // clang-format off
+    return {-sp * cl, -sp * sl,  cp,
+                 -sl,       cl, 0.0,
             -cp * cl, -cp * sl, -sp};
+    // clang-format on
 }
 
 Vec3 ecefToEnu(const Vec3& ecef, const Geodetic& o, const Ellipsoid& ell) noexcept {

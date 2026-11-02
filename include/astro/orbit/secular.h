@@ -51,23 +51,30 @@ std::ostream& operator<<(std::ostream& os, SecularOrder value);
 struct SecularRates {
     double raanDot{0.0};
     double argpDot{0.0};
-    double meanAnomalyDot{0.0};  ///< total rate including the mean motion
+    double meanAnomalyDot{0.0}; ///< total rate including the mean motion
 };
 
 /// Rates for mean semi-major axis a, eccentricity e and inclination i.
-[[nodiscard]] SecularRates secularRates(double a, double e, double i, const ZonalParameters& zp = {},
-                                        SecularOrder order = SecularOrder::J2SquaredJ4) noexcept;
+[[nodiscard]] SecularRates secularRates(double                 a,
+                                        double                 e,
+                                        double                 i,
+                                        const ZonalParameters& zp    = {},
+                                        SecularOrder           order = SecularOrder::J2SquaredJ4) noexcept;
 
 /// Propagate mean elements by dt seconds with the secular rates (a, e, i constant).
 /// The true anomaly is advanced through the mean anomaly.
-[[nodiscard]] KeplerianElements propagateSecular(const KeplerianElements& mean, double dt, const ZonalParameters& zp = {},
-                                                 SecularOrder order = SecularOrder::J2SquaredJ4);
+[[nodiscard]] KeplerianElements propagateSecular(const KeplerianElements& mean,
+                                                 double                   dt,
+                                                 const ZonalParameters&   zp    = {},
+                                                 SecularOrder             order = SecularOrder::J2SquaredJ4);
 
 /// propagateSecular for an inertial state whose z axis is the Earth's pole. The osculating
 /// elements of s0 are treated as mean elements (no short-period correction), so expect errors at the
 /// short-period level (kilometres in LEO); use NumericalPropagator::j2j4 when that matters.
-[[nodiscard]] StateVector propagateSecular(const StateVector& s0, double dt, const ZonalParameters& zp = {},
-                                           SecularOrder order = SecularOrder::J2SquaredJ4);
+[[nodiscard]] StateVector propagateSecular(const StateVector&     s0,
+                                           double                 dt,
+                                           const ZonalParameters& zp    = {},
+                                           SecularOrder           order = SecularOrder::J2SquaredJ4);
 
 /// propagateSecular for a 12-component state (position, velocity, acceleration, jerk), with the
 /// same mean-element caveat. The force model for acceleration, jerk and residuals is the point mass
@@ -77,9 +84,11 @@ struct SecularRates {
 ///    dr = da0 dt^2/2 + dj0 dt^3/6, dv = da0 dt + dj0 dt^2/2, ignoring how the displacement feeds
 ///    back into gravity. That is fine while dr stays small compared with the orbit; otherwise use
 ///    NumericalPropagator::j2j4 with HigherOrderMode::UnmodeledForce.
-[[nodiscard]] Propagation12 propagateSecular(const StateVector12& s0, double dt, const ZonalParameters& zp = {},
-                                             SecularOrder order = SecularOrder::J2SquaredJ4,
-                                             HigherOrderMode mode = HigherOrderMode::ModelOnly);
+[[nodiscard]] Propagation12 propagateSecular(const StateVector12&   s0,
+                                             double                 dt,
+                                             const ZonalParameters& zp    = {},
+                                             SecularOrder           order = SecularOrder::J2SquaredJ4,
+                                             HigherOrderMode        mode  = HigherOrderMode::ModelOnly);
 
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;
 /// nodal rate 360 deg per tropical year). Throws astro::Error if no solution exists.
@@ -87,8 +96,8 @@ struct SecularRates {
 
 /// Mean semi-major axis of a repeat-ground-track orbit that completes `revs`
 /// revolutions in `days` nodal days, for given e and i (J2, iterative).
-[[nodiscard]] double repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i,
-                                                    const ZonalParameters& zp = {});
+[[nodiscard]] double
+repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, const ZonalParameters& zp = {});
 
 /// Critical inclination (rad) where the J2 apsidal rotation vanishes: acos(1/sqrt(5)).
 inline constexpr double kCriticalInclination = 1.1071487177940904;

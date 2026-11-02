@@ -30,17 +30,25 @@ namespace astro {
 /// Find a root of f in [a, b] by bisection. f(a) and f(b) must differ in sign.
 template <class F>
 [[nodiscard]] double bisect(F&& f, double a, double b, double tol = 1e-12, int maxIter = 200) {
-    double fa = f(a);
+    double       fa = f(a);
     const double fb = f(b);
-    if (fa == 0.0) return a;
-    if (fb == 0.0) return b;
-    if ((fa > 0.0) == (fb > 0.0)) throw Error("bisect: root not bracketed");
+    if (fa == 0.0) {
+        return a;
+    }
+    if (fb == 0.0) {
+        return b;
+    }
+    if ((fa > 0.0) == (fb > 0.0)) {
+        throw Error("bisect: root not bracketed");
+    }
     for (int it = 0; it < maxIter; ++it) {
-        const double m = 0.5 * (a + b);
+        const double m  = 0.5 * (a + b);
         const double fm = f(m);
-        if (fm == 0.0 || 0.5 * std::abs(b - a) < tol) return m;
+        if (fm == 0.0 || 0.5 * std::abs(b - a) < tol) {
+            return m;
+        }
         if ((fm > 0.0) == (fa > 0.0)) {
-            a = m;
+            a  = m;
             fa = fm;
         } else {
             b = m;
@@ -54,26 +62,38 @@ template <class F>
 template <class F>
 [[nodiscard]] double brentRoot(F&& f, double a, double b, double tol = 1e-12, int maxIter = 200) {
     double fa = f(a), fb = f(b);
-    if (fa == 0.0) return a;
-    if (fb == 0.0) return b;
-    if ((fa > 0.0) == (fb > 0.0)) throw Error("brentRoot: root not bracketed");
-    double c = a, fc = fa, d = b - a, e = d;
+    if (fa == 0.0) {
+        return a;
+    }
+    if (fb == 0.0) {
+        return b;
+    }
+    if ((fa > 0.0) == (fb > 0.0)) {
+        throw Error("brentRoot: root not bracketed");
+    }
+    double           c = a, fc = fa, d = b - a, e = d;
     constexpr double eps = std::numeric_limits<double>::epsilon();
     for (int it = 0; it < maxIter; ++it) {
         if ((fb > 0.0) == (fc > 0.0)) {
-            c = a;
+            c  = a;
             fc = fa;
             d = e = b - a;
         }
         if (std::abs(fc) < std::abs(fb)) {
-            a = b; b = c; c = a;
-            fa = fb; fb = fc; fc = fa;
+            a  = b;
+            b  = c;
+            c  = a;
+            fa = fb;
+            fb = fc;
+            fc = fa;
         }
         const double tol1 = 2.0 * eps * std::abs(b) + 0.5 * tol;
-        const double xm = 0.5 * (c - b);
-        if (std::abs(xm) <= tol1 || fb == 0.0) return b;
+        const double xm   = 0.5 * (c - b);
+        if (std::abs(xm) <= tol1 || fb == 0.0) {
+            return b;
+        }
         if (std::abs(e) >= tol1 && std::abs(fa) > std::abs(fb)) {
-            double p, q, r;
+            double       p, q, r;
             const double s = fb / fa;
             if (a == c) {
                 p = 2.0 * xm * s;
@@ -84,8 +104,10 @@ template <class F>
                 p = s * (2.0 * xm * q * (q - r) - (b - a) * (r - 1.0));
                 q = (q - 1.0) * (r - 1.0) * (s - 1.0);
             }
-            if (p > 0.0) q = -q;
-            p = std::abs(p);
+            if (p > 0.0) {
+                q = -q;
+            }
+            p                 = std::abs(p);
             const double min1 = 3.0 * xm * q - std::abs(tol1 * q);
             const double min2 = std::abs(e * q);
             if (2.0 * p < (min1 < min2 ? min1 : min2)) {
@@ -99,10 +121,10 @@ template <class F>
             d = xm;
             e = d;
         }
-        a = b;
-        fa = fb;
-        b += (std::abs(d) > tol1) ? d : (xm > 0.0 ? tol1 : -tol1);
-        fb = f(b);
+        a   = b;
+        fa  = fb;
+        b  += (std::abs(d) > tol1) ? d : (xm > 0.0 ? tol1 : -tol1);
+        fb  = f(b);
     }
     throw Error("brentRoot: did not converge");
 }
@@ -117,30 +139,36 @@ struct MinimizeResult {
 /// Note: x accuracy is limited to about sqrt(machine epsilon) * |x| regardless of tol.
 template <class F>
 [[nodiscard]] MinimizeResult brentMinimize(F&& f, double a, double b, double tol = 1e-10, int maxIter = 200) {
-    constexpr double golden = 0.3819660112501051;  // (3 - sqrt(5)) / 2
-    constexpr double zeps = 1e-14;
-    double x = a + golden * (b - a), w = x, v = x;
-    double fx = f(x), fw = fx, fv = fx;
-    double d = 0.0, e = 0.0;
+    constexpr double golden = 0.3819660112501051; // (3 - sqrt(5)) / 2
+    constexpr double zeps   = 1e-14;
+    double           x = a + golden * (b - a), w = x, v = x;
+    double           fx = f(x), fw = fx, fv = fx;
+    double           d = 0.0, e = 0.0;
     for (int it = 0; it < maxIter; ++it) {
-        const double xm = 0.5 * (a + b);
+        const double xm   = 0.5 * (a + b);
         const double tol1 = tol * std::abs(x) + zeps;
         const double tol2 = 2.0 * tol1;
-        if (std::abs(x - xm) <= tol2 - 0.5 * (b - a)) return {x, fx};
+        if (std::abs(x - xm) <= tol2 - 0.5 * (b - a)) {
+            return {x, fx};
+        }
         bool golden_step = true;
         if (std::abs(e) > tol1) {
             const double r = (x - w) * (fx - fv);
-            double q = (x - v) * (fx - fw);
-            double p = (x - v) * q - (x - w) * r;
-            q = 2.0 * (q - r);
-            if (q > 0.0) p = -p;
-            q = std::abs(q);
+            double       q = (x - v) * (fx - fw);
+            double       p = (x - v) * q - (x - w) * r;
+            q              = 2.0 * (q - r);
+            if (q > 0.0) {
+                p = -p;
+            }
+            q                  = std::abs(q);
             const double etemp = e;
-            e = d;
+            e                  = d;
             if (!(std::abs(p) >= std::abs(0.5 * q * etemp) || p <= q * (a - x) || p >= q * (b - x))) {
-                d = p / q;
+                d              = p / q;
                 const double u = x + d;
-                if (u - a < tol2 || b - u < tol2) d = (xm - x >= 0.0) ? tol1 : -tol1;
+                if (u - a < tol2 || b - u < tol2) {
+                    d = (xm - x >= 0.0) ? tol1 : -tol1;
+                }
                 golden_step = false;
             }
         }
@@ -148,20 +176,34 @@ template <class F>
             e = (x >= xm) ? a - x : b - x;
             d = golden * e;
         }
-        const double u = (std::abs(d) >= tol1) ? x + d : x + (d >= 0.0 ? tol1 : -tol1);
+        const double u  = (std::abs(d) >= tol1) ? x + d : x + (d >= 0.0 ? tol1 : -tol1);
         const double fu = f(u);
         if (fu <= fx) {
-            if (u >= x) a = x; else b = x;
-            v = w; fv = fw;
-            w = x; fw = fx;
-            x = u; fx = fu;
+            if (u >= x) {
+                a = x;
+            } else {
+                b = x;
+            }
+            v  = w;
+            fv = fw;
+            w  = x;
+            fw = fx;
+            x  = u;
+            fx = fu;
         } else {
-            if (u < x) a = u; else b = u;
+            if (u < x) {
+                a = u;
+            } else {
+                b = u;
+            }
             if (fu <= fw || w == x) {
-                v = w; fv = fw;
-                w = u; fw = fu;
+                v  = w;
+                fv = fw;
+                w  = u;
+                fw = fu;
             } else if (fu <= fv || v == x || v == w) {
-                v = u; fv = fu;
+                v  = u;
+                fv = fu;
             }
         }
     }
@@ -174,10 +216,14 @@ template <class FdF>
     double x = x0;
     for (int it = 0; it < maxIter; ++it) {
         const auto [fx, dfx] = fdf(x);
-        if (dfx == 0.0) throw Error("newtonRoot: zero derivative");
-        const double dx = fx / dfx;
-        x -= dx;
-        if (std::abs(dx) <= tol * (1.0 + std::abs(x))) return x;
+        if (dfx == 0.0) {
+            throw Error("newtonRoot: zero derivative");
+        }
+        const double dx  = fx / dfx;
+        x               -= dx;
+        if (std::abs(dx) <= tol * (1.0 + std::abs(x))) {
+            return x;
+        }
     }
     throw Error("newtonRoot: did not converge");
 }

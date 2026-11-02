@@ -24,7 +24,7 @@ namespace astro {
 
 namespace {
 Mat3 rotationMatrix(const Vec3& r, HelmertConvention c) {
-    const Mat3 R = Mat3::skew(r);  // [0 -r3 r2; r3 0 -r1; -r2 r1 0]
+    const Mat3 R = Mat3::skew(r); // [0 -r3 r2; r3 0 -r1; -r2 r1 0]
     return c == HelmertConvention::PositionVector ? R : R.transpose();
 }
 } // namespace
@@ -44,11 +44,11 @@ HelmertParams inverse(const HelmertParams& p) noexcept {
 
 StateVector helmertTransform(const StateVector& x, const HelmertTimeDependent& h, double decimalYear) noexcept {
     const HelmertParams p = h.at(decimalYear);
-    StateVector out;
+    StateVector         out;
     out.r = helmertTransform(x.r, p);
     // V2 = V1 + Tdot + sdot X1 + Rdot X1 (+ s V1 + R V1, retained for consistency)
-    out.v = x.v + h.tRate + h.sRate * x.r + rotationMatrix(h.rRate, p.convention) * x.r + p.s * x.v +
-            rotationMatrix(p.r, p.convention) * x.v;
+    out.v = x.v + h.tRate + h.sRate * x.r + rotationMatrix(h.rRate, p.convention) * x.r + p.s * x.v
+          + rotationMatrix(p.r, p.convention) * x.v;
     return out;
 }
 

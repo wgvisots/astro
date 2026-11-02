@@ -56,7 +56,7 @@ TEST(Angle, Sexagesimal) {
 }
 
 TEST(RootFind, BrentAndBisect) {
-    auto f = [](double x) { return std::cos(x) - x; };
+    auto         f    = [](double x) { return std::cos(x) - x; };
     const double root = 0.7390851332151607;
     EXPECT_NEAR(brentRoot(f, 0.0, 1.0, 1e-14), root, 1e-13);
     EXPECT_NEAR(bisect(f, 0.0, 1.0, 1e-14), root, 1e-13);
@@ -67,6 +67,6 @@ TEST(RootFind, BrentAndBisect) {
 
 TEST(RootFind, BrentMinimize) {
     auto r = brentMinimize([](double x) { return (x - 1.234) * (x - 1.234) + 3.0; }, -10.0, 10.0, 1e-12);
-    EXPECT_NEAR(r.x, 1.234, 5e-8);  // minimizers are limited to ~sqrt(eps) in x
+    EXPECT_NEAR(r.x, 1.234, 5e-8); // minimizers are limited to ~sqrt(eps) in x
     EXPECT_NEAR(r.fx, 3.0, 1e-14);
 }

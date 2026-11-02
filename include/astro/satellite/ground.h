@@ -33,18 +33,21 @@ namespace astro {
 [[nodiscard]] Geodetic subSatellitePoint(const Vec3& satItrs, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Sub-satellite points at times start, start+step, ..., end.
-[[nodiscard]] std::vector<Geodetic> groundTrack(const std::function<Vec3(const Time&)>& satItrs, const Time& start,
-                                                const Time& end, double step,
-                                                const Ellipsoid& ell = Ellipsoid::wgs84());
+[[nodiscard]] std::vector<Geodetic> groundTrack(const std::function<Vec3(const Time&)>& satItrs,
+                                                const Time&                             start,
+                                                const Time&                             end,
+                                                double                                  step,
+                                                const Ellipsoid&                        ell = Ellipsoid::wgs84());
 
 /// Earth central angle (rad) from the sub-satellite point to the edge of
 /// coverage for a satellite at `altitude` and a minimum elevation, spherical
 /// Earth of radius `radius`.
-[[nodiscard]] double coverageHalfAngle(double altitude, double minElevation = 0.0,
-                                       double radius = constants::wgs84A) noexcept;
+[[nodiscard]] double
+coverageHalfAngle(double altitude, double minElevation = 0.0, double radius = constants::wgs84A) noexcept;
 
 /// Slant range (m) to the edge of coverage.
-[[nodiscard]] double maxSlantRange(double altitude, double minElevation = 0.0, double radius = constants::wgs84A) noexcept;
+[[nodiscard]] double
+maxSlantRange(double altitude, double minElevation = 0.0, double radius = constants::wgs84A) noexcept;
 
 /// Coverage footprint boundary: `n` points at central angle `halfAngle` around
 /// a sub-satellite point (spherical geometry; lat/lon in rad, h = 0).
@@ -52,7 +55,7 @@ namespace astro {
 
 /// True if the straight segment between two positions does not intersect the
 /// ellipsoid (optionally inflated by `margin` meters, e.g. for the atmosphere).
-[[nodiscard]] bool lineOfSight(const Vec3& a, const Vec3& b, const Ellipsoid& ell = Ellipsoid::wgs84(),
-                               double margin = 0.0) noexcept;
+[[nodiscard]] bool
+lineOfSight(const Vec3& a, const Vec3& b, const Ellipsoid& ell = Ellipsoid::wgs84(), double margin = 0.0) noexcept;
 
 } // namespace astro

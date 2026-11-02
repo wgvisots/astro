@@ -41,13 +41,15 @@ void stumpff(double psi, double& c2, double& c3) noexcept;
 ///  - UnmodeledForce: the residuals against the point mass are applied as a force linear in time,
 ///    integrated numerically with RKF7(8). If both residuals are exactly zero it uses universal
 ///    variables.
-[[nodiscard]] Propagation12 propagateKepler(const StateVector12& s0, double dt, double mu = constants::gmEarth,
-                                            HigherOrderMode mode = HigherOrderMode::ModelOnly);
+[[nodiscard]] Propagation12 propagateKepler(const StateVector12& s0,
+                                            double               dt,
+                                            double               mu   = constants::gmEarth,
+                                            HigherOrderMode      mode = HigherOrderMode::ModelOnly);
 
 struct LambertSolution {
-    Vec3 v1;               ///< departure velocity
-    Vec3 v2;               ///< arrival velocity
-    int revolutions{0};    ///< complete revolutions
+    Vec3 v1;                 ///< departure velocity
+    Vec3 v2;                 ///< arrival velocity
+    int  revolutions{0};     ///< complete revolutions
     bool rightBranch{false}; ///< for multi-revolution solutions: right (long-period) branch
 };
 
@@ -55,12 +57,15 @@ struct LambertSolution {
 /// complete revolutions transferring from r1 to r2 in time `tof`.
 /// The transfer direction is prograde (counter-clockwise about +z) unless
 /// `prograde` is false. Multi-revolution solutions come in pairs.
-[[nodiscard]] std::vector<LambertSolution> lambertIzzo(const Vec3& r1, const Vec3& r2, double tof,
-                                                       double mu = constants::gmEarth, bool prograde = true,
-                                                       int maxRevolutions = 0);
+[[nodiscard]] std::vector<LambertSolution> lambertIzzo(const Vec3& r1,
+                                                       const Vec3& r2,
+                                                       double      tof,
+                                                       double      mu             = constants::gmEarth,
+                                                       bool        prograde       = true,
+                                                       int         maxRevolutions = 0);
 
 /// The zero-revolution Lambert solution.
-[[nodiscard]] LambertSolution lambert(const Vec3& r1, const Vec3& r2, double tof, double mu = constants::gmEarth,
-                                      bool prograde = true);
+[[nodiscard]] LambertSolution
+lambert(const Vec3& r1, const Vec3& r2, double tof, double mu = constants::gmEarth, bool prograde = true);
 
 } // namespace astro

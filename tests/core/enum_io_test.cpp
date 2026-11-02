@@ -98,7 +98,7 @@ TEST(EnumIo, WritesInvalidValue) {
     EXPECT_EQ(str(invalid<EulerSequence>(12)), "EulerSequence::INVALID_VALUE");
     EXPECT_EQ(str(invalid<EopInterpolation>(7)), "EopInterpolation::INVALID_VALUE");
     EXPECT_EQ(str(invalid<HelmertConvention>(2)), "HelmertConvention::INVALID_VALUE");
-    EXPECT_EQ(str(invalid<Body>(11)), "Body::INVALID_VALUE");  // gap in the NAIF ids
+    EXPECT_EQ(str(invalid<Body>(11)), "Body::INVALID_VALUE"); // gap in the NAIF ids
     EXPECT_EQ(str(invalid<SkyEventType>(3)), "SkyEventType::INVALID_VALUE");
     EXPECT_EQ(str(invalid<Twilight>(3)), "Twilight::INVALID_VALUE");
     EXPECT_EQ(str(invalid<ShadowModel>(2)), "ShadowModel::INVALID_VALUE");
@@ -131,9 +131,8 @@ template <class E>
 void checkAgainstDescribe(const char* enumName, std::size_t expectedCount) {
     using Enumerators = boost::describe::describe_enumerators<E>;
     EXPECT_EQ(boost::mp11::mp_size<Enumerators>::value, expectedCount) << enumName;
-    boost::mp11::mp_for_each<Enumerators>([&](auto d) {
-        EXPECT_EQ(str(d.value), std::string(enumName) + "::" + d.name);
-    });
+    boost::mp11::mp_for_each<Enumerators>(
+        [&](auto d) { EXPECT_EQ(str(d.value), std::string(enumName) + "::" + d.name); });
 }
 
 } // namespace

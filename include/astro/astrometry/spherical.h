@@ -30,9 +30,11 @@ struct RaDec {
     double distance{1.0};
 };
 
-[[nodiscard]] RaDec raDecFromVector(const Vec3& v) noexcept;
-[[nodiscard]] Vec3 vectorFromRaDec(const RaDec& rd) noexcept;
-[[nodiscard]] inline Vec3 unitVectorFromRaDec(double ra, double dec) noexcept { return vectorFromRaDec({ra, dec, 1.0}); }
+[[nodiscard]] RaDec       raDecFromVector(const Vec3& v) noexcept;
+[[nodiscard]] Vec3        vectorFromRaDec(const RaDec& rd) noexcept;
+[[nodiscard]] inline Vec3 unitVectorFromRaDec(double ra, double dec) noexcept {
+    return vectorFromRaDec({ra, dec, 1.0});
+}
 
 /// Angular separation between two directions (rad), robust for all angles.
 [[nodiscard]] double angularSeparation(double ra1, double dec1, double ra2, double dec2) noexcept;
@@ -43,7 +45,7 @@ struct RaDec {
 [[nodiscard]] Mat3 equatorialToEclipticMatrix(double eps) noexcept;
 /// Ecliptic coordinates of an equatorial vector (lon, lat as RaDec fields ra/dec).
 [[nodiscard]] RaDec equatorialToEcliptic(const Vec3& eq, double eps) noexcept;
-[[nodiscard]] Vec3 eclipticToEquatorial(const RaDec& ecl, double eps) noexcept;
+[[nodiscard]] Vec3  eclipticToEquatorial(const RaDec& ecl, double eps) noexcept;
 
 /// ICRS -> Galactic rotation matrix (Hipparcos definition, ESA 1997).
 [[nodiscard]] const Mat3& icrsToGalacticMatrix() noexcept;

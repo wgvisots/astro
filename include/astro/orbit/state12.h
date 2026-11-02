@@ -51,9 +51,9 @@ std::ostream& operator<<(std::ostream& os, HigherOrderMode value);
 
 /// Result of propagating a StateVector12.
 struct Propagation12 {
-    StateVector12 state;       ///< state at epoch + dt; a and j include any unmodeled force
-    Vec3 accelerationResidual; ///< input acceleration minus the force model's, at the epoch
-    Vec3 jerkResidual;         ///< input jerk minus the force model's, at the epoch
+    StateVector12 state;                ///< state at epoch + dt; a and j include any unmodeled force
+    Vec3          accelerationResidual; ///< input acceleration minus the force model's, at the epoch
+    Vec3          jerkResidual;         ///< input jerk minus the force model's, at the epoch
 };
 
 } // namespace astro

@@ -28,12 +28,12 @@ namespace astro {
 
 /// Description of one SPK segment.
 struct SpkSegmentInfo {
-    int target{0};
-    int center{0};
-    int frame{0};     ///< NAIF frame id (1 = J2000/ICRF)
-    int type{0};      ///< SPK data type
-    double startEt{0.0};  ///< TDB seconds past J2000
-    double endEt{0.0};
+    int         target{0};
+    int         center{0};
+    int         frame{0};     ///< NAIF frame id (1 = J2000/ICRF)
+    int         type{0};      ///< SPK data type
+    double      startEt{0.0}; ///< TDB seconds past J2000
+    double      endEt{0.0};
     std::string name;
 };
 
@@ -56,7 +56,7 @@ public:
     [[nodiscard]] StateVector stateById(int target, int center, double et) const;
 
     [[nodiscard]] const std::vector<SpkSegmentInfo>& segments() const noexcept;
-    [[nodiscard]] bool bigEndian() const noexcept;
+    [[nodiscard]] bool                               bigEndian() const noexcept;
 
 private:
     struct Impl;

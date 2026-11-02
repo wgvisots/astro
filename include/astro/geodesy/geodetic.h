@@ -40,9 +40,11 @@ struct Geodetic {
 [[nodiscard]] Geodetic ecefToGeodetic(const Vec3& r, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Geocentric latitude of a point on the ellipsoid surface with the given geodetic latitude.
-[[nodiscard]] double geodeticToGeocentricLatitude(double geodeticLat, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] double geodeticToGeocentricLatitude(double           geodeticLat,
+                                                  const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// Geodetic latitude of a surface point with the given geocentric latitude.
-[[nodiscard]] double geocentricToGeodeticLatitude(double geocentricLat, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] double geocentricToGeodeticLatitude(double           geocentricLat,
+                                                  const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// Reduced (parametric) latitude beta: tan(beta) = (1 - f) tan(phi).
 [[nodiscard]] double geodeticToReducedLatitude(double geodeticLat, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 [[nodiscard]] double reducedToGeodeticLatitude(double reducedLat, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
@@ -54,6 +56,6 @@ struct Spherical {
     double r{0.0};
 };
 [[nodiscard]] Spherical cartesianToSpherical(const Vec3& v) noexcept;
-[[nodiscard]] Vec3 sphericalToCartesian(const Spherical& s) noexcept;
+[[nodiscard]] Vec3      sphericalToCartesian(const Spherical& s) noexcept;
 
 } // namespace astro

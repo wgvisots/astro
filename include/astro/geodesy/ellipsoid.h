@@ -53,7 +53,7 @@ struct Ellipsoid {
     }
     /// Meridional radius of curvature M(lat).
     [[nodiscard]] double meridionalRadius(double lat) const noexcept {
-        const double s = std::sin(lat);
+        const double s  = std::sin(lat);
         const double w2 = 1.0 - e2() * s * s;
         return a * (1.0 - e2()) / (w2 * std::sqrt(w2));
     }
@@ -64,7 +64,7 @@ struct Ellipsoid {
     /// Geocentric radius of the ellipsoid surface at geodetic latitude.
     [[nodiscard]] double geocentricRadius(double lat) const noexcept {
         const double c = std::cos(lat), s = std::sin(lat);
-        const double bb = b();
+        const double bb  = b();
         const double num = (a * a * c) * (a * a * c) + (bb * bb * s) * (bb * bb * s);
         const double den = (a * c) * (a * c) + (bb * s) * (bb * s);
         return std::sqrt(num / den);

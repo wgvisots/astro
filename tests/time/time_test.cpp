@@ -37,7 +37,7 @@ double diffSec(const JulianDate& a, double b1, double b2) {
 TEST(JulianDate, CalendarRoundTrip) {
     EXPECT_DOUBLE_EQ(JulianDate::fromCalendar(2000, 1, 1, 12).jd(), 2451545.0);
     EXPECT_DOUBLE_EQ(JulianDate::fromCalendar(1858, 11, 17).mjd(), 0.0);
-    EXPECT_DOUBLE_EQ(JulianDate::fromCalendar(-4713, 11, 24, 12).jd(), 0.0);  // proleptic Gregorian JD 0
+    EXPECT_DOUBLE_EQ(JulianDate::fromCalendar(-4713, 11, 24, 12).jd(), 0.0); // proleptic Gregorian JD 0
     const CalendarDate c = JulianDate::fromCalendar(2024, 2, 29, 23, 59, 59.123456).toCalendar(6);
     EXPECT_EQ(c.year, 2024);
     EXPECT_EQ(c.month, 2);
@@ -60,8 +60,8 @@ TEST(JulianDate, Helpers) {
     monthDayFromDayOfYear(2024, 60, m, d);
     EXPECT_EQ(m, 2);
     EXPECT_EQ(d, 29);
-    EXPECT_EQ(dayOfWeek(1980, 1, 6), 0);  // GPS epoch was a Sunday
-    EXPECT_EQ(dayOfWeek(2000, 1, 1), 6);  // Saturday
+    EXPECT_EQ(dayOfWeek(1980, 1, 6), 0); // GPS epoch was a Sunday
+    EXPECT_EQ(dayOfWeek(2000, 1, 1), 6); // Saturday
     EXPECT_TRUE(isLeapYear(2000));
     EXPECT_FALSE(isLeapYear(1900));
     // Precision of large second offsets.
@@ -74,41 +74,38 @@ TEST(LeapSeconds, BuiltinValues) {
     EXPECT_DOUBLE_EQ(t->taiMinusUtc(2017, 1, 1), 37.0);
     EXPECT_DOUBLE_EQ(t->taiMinusUtc(2016, 12, 31, 0.999), 36.0);
     EXPECT_DOUBLE_EQ(t->taiMinusUtc(1972, 1, 1), 10.0);
-    EXPECT_NEAR(t->taiMinusUtc(1965, 3, 1, 0.5), 3.717242, 1e-6);  // drift era (matches ERFA)
+    EXPECT_NEAR(t->taiMinusUtc(1965, 3, 1, 0.5), 3.717242, 1e-6); // drift era (matches ERFA)
     EXPECT_THROW((void)t->taiMinusUtc(1959, 12, 31), Error);
 }
 
 TEST(LeapSeconds, ParseFileFormats) {
-    const char* leapSecondDat =
-        "#  File expires on 28 June 2026\n"
-        "#    MJD        Date        TAI-UTC (s)\n"
-        "    41317.0    1  1 1972       10\n"
-        "    41499.0    1  7 1972       11\n"
-        "    57754.0    1  1 2017       37\n"
-        "    61000.0    1  1 2026       38\n";
-    const LeapSecondTable a = LeapSecondTable::parse(leapSecondDat);
+    const char*           leapSecondDat = "#  File expires on 28 June 2026\n"
+                                          "#    MJD        Date        TAI-UTC (s)\n"
+                                          "    41317.0    1  1 1972       10\n"
+                                          "    41499.0    1  7 1972       11\n"
+                                          "    57754.0    1  1 2017       37\n"
+                                          "    61000.0    1  1 2026       38\n";
+    const LeapSecondTable a             = LeapSecondTable::parse(leapSecondDat);
     EXPECT_DOUBLE_EQ(a.taiMinusUtc(2026, 1, 1), 38.0);
     EXPECT_DOUBLE_EQ(a.taiMinusUtc(2025, 12, 31), 37.0);
-    EXPECT_NEAR(a.taiMinusUtc(1965, 3, 1, 0.5), 3.717242, 1e-6);  // pre-1972 retained
+    EXPECT_NEAR(a.taiMinusUtc(1965, 3, 1, 0.5), 3.717242, 1e-6); // pre-1972 retained
     ASSERT_TRUE(a.expiresMjd().has_value());
     EXPECT_DOUBLE_EQ(*a.expiresMjd(), JulianDate::fromCalendar(2026, 6, 28).mjd());
 
-    const char* list =
-        "#@\t3960057600\n"
-        "2272060800\t10\t# 1 Jan 1972\n"
-        "2287785600\t11\t# 1 Jul 1972\n"
-        "3692217600\t37\t# 1 Jan 2017\n";
-    const LeapSecondTable b = LeapSecondTable::parse(list);
+    const char*           list = "#@\t3960057600\n"
+                                 "2272060800\t10\t# 1 Jan 1972\n"
+                                 "2287785600\t11\t# 1 Jul 1972\n"
+                                 "3692217600\t37\t# 1 Jan 2017\n";
+    const LeapSecondTable b    = LeapSecondTable::parse(list);
     EXPECT_DOUBLE_EQ(b.taiMinusUtc(1972, 6, 30), 10.0);
     EXPECT_DOUBLE_EQ(b.taiMinusUtc(1972, 7, 1), 11.0);
     EXPECT_DOUBLE_EQ(b.taiMinusUtc(2017, 1, 1), 37.0);
     ASSERT_TRUE(b.expiresMjd().has_value());
     EXPECT_NEAR(*b.expiresMjd(), JulianDate::fromCalendar(2025, 6, 28).mjd(), 1e-9);
 
-    const char* taiUtc =
-        " 1961 JAN  1 =JD 2437300.5  TAI-UTC=   1.4228180 S + (MJD - 37300.) X 0.001296 S\n"
-        " 1972 JAN  1 =JD 2441317.5  TAI-UTC=  10.0       S + (MJD - 41317.) X 0.0      S\n";
-    const LeapSecondTable c = LeapSecondTable::parse(taiUtc);
+    const char*           taiUtc = " 1961 JAN  1 =JD 2437300.5  TAI-UTC=   1.4228180 S + (MJD - 37300.) X 0.001296 S\n"
+                                   " 1972 JAN  1 =JD 2441317.5  TAI-UTC=  10.0       S + (MJD - 41317.) X 0.0      S\n";
+    const LeapSecondTable c      = LeapSecondTable::parse(taiUtc);
     EXPECT_NEAR(c.taiMinusUtc(1961, 1, 1), 1.4228180, 1e-12);
     EXPECT_DOUBLE_EQ(c.taiMinusUtc(1980, 1, 1), 10.0);
 }
@@ -119,8 +116,13 @@ TEST(TimeScales, MatchesErfa) {
     const ConstantEop eop(EopValues{.dut1 = 0.1234567});
     auto num = [&](const std::vector<std::string>& r, const char* name) { return std::stod(r[csv.col(name)]); };
     for (const auto& r : csv.rows) {
-        const Time utc = Time::fromCalendar(TimeScale::UTC, std::stoi(r[0]), std::stoi(r[1]), std::stoi(r[2]),
-                                            std::stoi(r[3]), std::stoi(r[4]), num(r, "second"));
+        const Time        utc   = Time::fromCalendar(TimeScale::UTC,
+                                            std::stoi(r[0]),
+                                            std::stoi(r[1]),
+                                            std::stoi(r[2]),
+                                            std::stoi(r[3]),
+                                            std::stoi(r[4]),
+                                            num(r, "second"));
         const std::string label = utc.iso8601(6);
         EXPECT_NEAR(diffSec(utc.jd(), num(r, "utc1"), num(r, "utc2")), 0.0, 1e-9) << label;
         EXPECT_NEAR(diffSec(utc.to(TimeScale::TAI).jd(), num(r, "tai1"), num(r, "tai2")), 0.0, 1e-9) << label;
@@ -128,7 +130,7 @@ TEST(TimeScales, MatchesErfa) {
         EXPECT_NEAR(diffSec(utc.to(TimeScale::TDB).jd(), num(r, "tdb1"), num(r, "tdb2")), 0.0, 1e-9) << label;
         EXPECT_NEAR(diffSec(utc.to(TimeScale::TCG).jd(), num(r, "tcg1"), num(r, "tcg2")), 0.0, 1e-9) << label;
         EXPECT_NEAR(diffSec(utc.to(TimeScale::TCB).jd(), num(r, "tcb1"), num(r, "tcb2")), 0.0, 1e-9) << label;
-        const int year = std::stoi(r[0]);
+        const int  year         = std::stoi(r[0]);
         const bool inLeapSecond = num(r, "second") >= 60.0;
         if (year >= 1972) {
             EXPECT_NEAR(diffSec(utc.to(TimeScale::UT1, eop).jd(), num(r, "ut11"), num(r, "ut12")), 0.0, 1e-9) << label;
@@ -136,17 +138,29 @@ TEST(TimeScales, MatchesErfa) {
             // ERFA's utcut1 evaluates TAI-UTC at 0h of the day, which is off by up to ~1 ms/day during the
             // 1961-1971 drift era. We evaluate it at the instant, so UT1 - UTC == dut1 exactly.
             // (Compare against the plain time of day, since the quasi-JD fraction is scaled on step days.)
-            const JulianDate plain = JulianDate::fromCalendar(year, std::stoi(r[1]), std::stoi(r[2]), std::stoi(r[3]),
-                                                              std::stoi(r[4]), num(r, "second"));
+            const JulianDate plain = JulianDate::fromCalendar(year,
+                                                              std::stoi(r[1]),
+                                                              std::stoi(r[2]),
+                                                              std::stoi(r[3]),
+                                                              std::stoi(r[4]),
+                                                              num(r, "second"));
             EXPECT_NEAR(utc.to(TimeScale::UT1, eop).jd().secondsSince(plain), 0.1234567, 1e-8) << label;
         }
         EXPECT_NEAR(tdbMinusTt(utc.to(TimeScale::TT).jd()), num(r, "tdb_minus_tt"), 1e-12) << label;
 
         // Round trips back to UTC from every scale. (UT1 is skipped inside a leap second: with a constant
         // dut1, which real EOP never has across a leap second, UT1 is discontinuous there.)
-        for (TimeScale s : {TimeScale::TAI, TimeScale::TT, TimeScale::TDB, TimeScale::TCG, TimeScale::TCB,
-                            TimeScale::GPS, TimeScale::BDT, TimeScale::UT1}) {
-            if (s == TimeScale::UT1 && inLeapSecond) continue;
+        for (TimeScale s : {TimeScale::TAI,
+                            TimeScale::TT,
+                            TimeScale::TDB,
+                            TimeScale::TCG,
+                            TimeScale::TCB,
+                            TimeScale::GPS,
+                            TimeScale::BDT,
+                            TimeScale::UT1}) {
+            if (s == TimeScale::UT1 && inLeapSecond) {
+                continue;
+            }
             const Time back = utc.to(s, eop).to(TimeScale::UTC, eop);
             EXPECT_NEAR(back - utc, 0.0, 1e-9) << label << " via " << toString(s);
             EXPECT_EQ(back.iso8601(6), label) << " via " << toString(s);
@@ -157,9 +171,13 @@ TEST(TimeScales, MatchesErfa) {
 TEST(TimeScales, TopocentricTdb) {
     const auto csv = readCsv(dataPath("dtdb_topo.csv"));
     for (const auto& r : csv.rows) {
-        EXPECT_NEAR(tdbMinusTt(JulianDate{std::stod(r[0]), 0.0}, std::stod(r[1]), std::stod(r[2]), std::stod(r[3]),
+        EXPECT_NEAR(tdbMinusTt(JulianDate{std::stod(r[0]), 0.0},
+                               std::stod(r[1]),
+                               std::stod(r[2]),
+                               std::stod(r[3]),
                                std::stod(r[4])),
-                    std::stod(r[5]), 1e-13);
+                    std::stod(r[5]),
+                    1e-13);
     }
 }
 
@@ -181,7 +199,7 @@ TEST(Time, LeapSecondHandling) {
 
 TEST(Time, Unix) {
     EXPECT_EQ(Time::fromUnix(0.0).iso8601(3), "1970-01-01T00:00:00.000Z");
-    const Time t = Time::fromUnix(1483228800.25);  // 2017-01-01T00:00:00.25Z
+    const Time t = Time::fromUnix(1483228800.25); // 2017-01-01T00:00:00.25Z
     EXPECT_EQ(t.iso8601(3), "2017-01-01T00:00:00.250Z");
     EXPECT_NEAR(t.unixSeconds(), 1483228800.25, 1e-6);
     EXPECT_NEAR(Time::fromUnix(1483228799.5).unixSeconds(), 1483228799.5, 1e-6);
@@ -200,7 +218,7 @@ TEST(Time, Gnss) {
     const Time e = Time::fromCalendar(TimeScale::UTC, 1980, 1, 6);
     EXPECT_NEAR(e.gpsSeconds(), 0.0, 1e-9);
     // 2017-01-01T00:00:00Z: GPS = UTC + 18 s; GPS week 1930, TOW = 0 + 18 (Sunday).
-    const Time t = Time::fromCalendar(TimeScale::UTC, 2017, 1, 1);
+    const Time        t = Time::fromCalendar(TimeScale::UTC, 2017, 1, 1);
     const GnssWeekTow g = t.gnssWeekTow(GnssSystem::GPS);
     EXPECT_EQ(g.week, 1930);
     EXPECT_NEAR(g.tow, 18.0, 1e-9);

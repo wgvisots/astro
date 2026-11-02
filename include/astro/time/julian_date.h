@@ -27,11 +27,11 @@ namespace astro {
 /// Gregorian calendar date and time of day. `second` may reach 60.x on a UTC
 /// leap-second day.
 struct CalendarDate {
-    int year{2000};
-    int month{1};
-    int day{1};
-    int hour{0};
-    int minute{0};
+    int    year{2000};
+    int    month{1};
+    int    day{1};
+    int    hour{0};
+    int    minute{0};
     double second{0.0};
 
     friend constexpr bool operator==(const CalendarDate&, const CalendarDate&) noexcept = default;
@@ -48,12 +48,14 @@ struct JulianDate {
     double jd2{0.0};
 
     constexpr JulianDate() noexcept = default;
-    constexpr JulianDate(double jd1_, double jd2_ = 0.0) noexcept : jd1(jd1_), jd2(jd2_) {}
+    constexpr JulianDate(double jd1_, double jd2_ = 0.0) noexcept
+        : jd1(jd1_)
+        , jd2(jd2_) {}
 
     /// From Gregorian calendar date + time of day, assuming 86400-second days
     /// (i.e. not leap-second aware; use astro::Time for UTC).
-    [[nodiscard]] static JulianDate fromCalendar(int year, int month, int day, int hour = 0, int minute = 0,
-                                                 double second = 0.0);
+    [[nodiscard]] static JulianDate
+    fromCalendar(int year, int month, int day, int hour = 0, int minute = 0, double second = 0.0);
     [[nodiscard]] static JulianDate fromMjd(double mjd) noexcept;
 
     /// Single-double JD (loses precision; ~20 microseconds today).

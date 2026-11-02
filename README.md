@@ -35,6 +35,9 @@ cmake --install build --prefix /your/prefix
 Consumers use `find_package(astro)` and link `astro::astro` (Boost is found as a transitive dependency). Tests use an installed GoogleTest if one
 is found, otherwise CMake fetches it. Set `-DASTRO_BUILD_TESTS=OFF` to skip them.
 
+Code is formatted with clang-format 18 or newer using `.clang-format`: `clang-format -i $(git ls-files '*.h' '*.cpp')`.
+Generated tables listed in `.clang-format-ignore` are skipped.
+
 ## Examples
 
 ```cpp

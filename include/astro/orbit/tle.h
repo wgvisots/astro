@@ -30,27 +30,27 @@ namespace astro {
 /// as in the TLE; derivatives as printed (n-dot/2 in rev/day^2, n-ddot/6 in rev/day^3).
 struct Tle {
     std::string name;
-    int satnum{0};               ///< catalog number (Alpha-5 decoded, e.g. "A0001" -> 100001)
-    char classification{'U'};
-    std::string intlDesignator;  ///< e.g. "98067A"
-    Time epoch;                  ///< UTC
-    double meanMotionDot{0.0};   ///< first derivative / 2 (rev/day^2)
-    double meanMotionDdot{0.0};  ///< second derivative / 6 (rev/day^3)
-    double bstar{0.0};           ///< drag term (1 / Earth radii)
-    int ephemerisType{0};
-    int elementSetNumber{0};
-    double inclination{0.0};
-    double raan{0.0};
-    double eccentricity{0.0};
-    double argPerigee{0.0};
-    double meanAnomaly{0.0};
-    double meanMotion{0.0};      ///< rev/day (Kozai mean motion)
-    int revolutionNumber{0};
+    int         satnum{0}; ///< catalog number (Alpha-5 decoded, e.g. "A0001" -> 100001)
+    char        classification{'U'};
+    std::string intlDesignator;      ///< e.g. "98067A"
+    Time        epoch;               ///< UTC
+    double      meanMotionDot{0.0};  ///< first derivative / 2 (rev/day^2)
+    double      meanMotionDdot{0.0}; ///< second derivative / 6 (rev/day^3)
+    double      bstar{0.0};          ///< drag term (1 / Earth radii)
+    int         ephemerisType{0};
+    int         elementSetNumber{0};
+    double      inclination{0.0};
+    double      raan{0.0};
+    double      eccentricity{0.0};
+    double      argPerigee{0.0};
+    double      meanAnomaly{0.0};
+    double      meanMotion{0.0}; ///< rev/day (Kozai mean motion)
+    int         revolutionNumber{0};
 
     /// Parse the two data lines. Throws astro::Error on malformed lines or (when
     /// `verifyChecksum`) checksum mismatch.
-    [[nodiscard]] static Tle parse(std::string_view line1, std::string_view line2, std::string_view name = "",
-                                   bool verifyChecksum = true);
+    [[nodiscard]] static Tle
+    parse(std::string_view line1, std::string_view line2, std::string_view name = "", bool verifyChecksum = true);
     /// Parse a text block of 2-line or 3-line (name + 2 lines) element sets.
     [[nodiscard]] static std::vector<Tle> parseMany(std::string_view text, bool verifyChecksum = true);
 
@@ -62,7 +62,7 @@ struct Tle {
 /// TLE line checksum (sum of digits, '-' counts as 1, modulo 10) over columns 1-68.
 [[nodiscard]] int tleChecksum(std::string_view line) noexcept;
 /// Decode an Alpha-5 / numeric 5-character catalog number.
-[[nodiscard]] int decodeAlpha5(std::string_view s);
+[[nodiscard]] int         decodeAlpha5(std::string_view s);
 [[nodiscard]] std::string encodeAlpha5(int satnum);
 
 } // namespace astro

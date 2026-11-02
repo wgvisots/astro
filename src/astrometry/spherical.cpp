@@ -41,8 +41,8 @@ double angularSeparation(double ra1, double dec1, double ra2, double dec2) noexc
 
 double positionAngle(double ra1, double dec1, double ra2, double dec2) noexcept {
     const double dra = ra2 - ra1;
-    const double y = std::sin(dra) * std::cos(dec2);
-    const double x = std::cos(dec1) * std::sin(dec2) - std::sin(dec1) * std::cos(dec2) * std::cos(dra);
+    const double y   = std::sin(dra) * std::cos(dec2);
+    const double x   = std::cos(dec1) * std::sin(dec2) - std::sin(dec1) * std::cos(dec2) * std::cos(dra);
     return wrapTwoPi(std::atan2(y, x));
 }
 
@@ -59,11 +59,12 @@ Vec3 eclipticToEquatorial(const RaDec& ecl, double eps) noexcept {
 }
 
 const Mat3& icrsToGalacticMatrix() noexcept {
-    static const Mat3 m{-0.054875560416215368492398900454, -0.873437090234885048760383168409,
-                        -0.483835015548713226831774175116, +0.494109427875583673525222371358,
-                        -0.444829629960011178146614061616, +0.746982244497218890527388004556,
-                        -0.867666149019004701181616534570, -0.198076373431201528180486091412,
-                        +0.455983776175066922272100478348};
+    // clang-format off
+    static const Mat3 m{
+        -0.054875560416215368492398900454, -0.873437090234885048760383168409, -0.483835015548713226831774175116,
+        +0.494109427875583673525222371358, -0.444829629960011178146614061616, +0.746982244497218890527388004556,
+        -0.867666149019004701181616534570, -0.198076373431201528180486091412, +0.455983776175066922272100478348};
+    // clang-format on
     return m;
 }
 
