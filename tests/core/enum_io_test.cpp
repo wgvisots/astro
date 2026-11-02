@@ -33,6 +33,7 @@
 #include "astro/orbit/sgp4.h"
 #include "astro/orbit/state12.h"
 #include "astro/satellite/eclipse.h"
+#include "astro/satellite/estimate_tracker.h"
 #include "astro/time/time.h"
 
 #include <boost/describe/enumerators.hpp>
@@ -90,6 +91,8 @@ TEST(EnumIo, WritesQualifiedEnumerator) {
     EXPECT_EQ(str(Sgp4OpsMode::Afspc), "Sgp4OpsMode::Afspc");
     EXPECT_EQ(str(HigherOrderMode::ModelOnly), "HigherOrderMode::ModelOnly");
     EXPECT_EQ(str(HigherOrderMode::UnmodeledForce), "HigherOrderMode::UnmodeledForce");
+    EXPECT_EQ(str(ConsistencyTest::Position), "ConsistencyTest::Position");
+    EXPECT_EQ(str(ConsistencyTest::PositionVelocity), "ConsistencyTest::PositionVelocity");
 }
 
 TEST(EnumIo, WritesInvalidValue) {
@@ -109,6 +112,7 @@ TEST(EnumIo, WritesInvalidValue) {
     EXPECT_EQ(str(invalid<Sgp4Gravity>(3)), "Sgp4Gravity::INVALID_VALUE");
     EXPECT_EQ(str(invalid<Sgp4OpsMode>(2)), "Sgp4OpsMode::INVALID_VALUE");
     EXPECT_EQ(str(invalid<HigherOrderMode>(2)), "HigherOrderMode::INVALID_VALUE");
+    EXPECT_EQ(str(invalid<ConsistencyTest>(2)), "ConsistencyTest::INVALID_VALUE");
 }
 
 TEST(EnumIo, FieldWidthAppliesToWholeToken) {
@@ -155,4 +159,5 @@ TEST(EnumIo, AgreesWithBoostDescribe) {
     checkAgainstDescribe<Sgp4Gravity>("Sgp4Gravity", 3);
     checkAgainstDescribe<Sgp4OpsMode>("Sgp4OpsMode", 2);
     checkAgainstDescribe<HigherOrderMode>("HigherOrderMode", 2);
+    checkAgainstDescribe<ConsistencyTest>("ConsistencyTest", 2);
 }

@@ -19,7 +19,9 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <optional>
 
 #include "astro/core/vec.h"
 
@@ -101,6 +103,53 @@ using Mat6 = std::array<std::array<double, 6>, 6>;
         }
     }
     return m;
+}
+
+/// Squared Mahalanobis distance d^T S^-1 d of the first n components (n = 3 or 6) of d, for
+/// symmetric positive-definite S (its leading n x n block). Uses a Cholesky factorization of S
+/// scaled to unit diagonal, so mixed units (m^2 and m^2/s^2) do not hurt the conditioning.
+/// nullopt if S is not positive definite.
+[[nodiscard]] inline std::optional<double>
+mahalanobis2(const std::array<double, 6>& d, const Mat6& S, std::size_t n = 6) noexcept {
+    if (n == 0 || n > 6) {
+        return std::nullopt;
+    }
+    double scale[6];
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!(S[i][i] > 0.0) || !std::isfinite(S[i][i])) {
+            return std::nullopt;
+        }
+        scale[i] = 1.0 / std::sqrt(S[i][i]);
+    }
+    // L L^T = D S D with D = diag(scale); then solve L y = D d and return |y|^2.
+    double Lm[6][6] = {};
+    double y[6]     = {};
+    for (std::size_t i = 0; i < n; ++i) {
+        for (std::size_t j = 0; j <= i; ++j) {
+            double sum = S[i][j] * scale[i] * scale[j];
+            for (std::size_t k = 0; k < j; ++k) {
+                sum -= Lm[i][k] * Lm[j][k];
+            }
+            if (i == j) {
+                if (!(sum > 1e-14)) {
+                    return std::nullopt;
+                }
+                Lm[i][i] = std::sqrt(sum);
+            } else {
+                Lm[i][j] = sum / Lm[j][j];
+            }
+        }
+    }
+    double d2 = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        double sum = d[i] * scale[i];
+        for (std::size_t k = 0; k < i; ++k) {
+            sum -= Lm[i][k] * y[k];
+        }
+        y[i]  = sum / Lm[i][i];
+        d2   += y[i] * y[i];
+    }
+    return d2;
 }
 
 } // namespace astro

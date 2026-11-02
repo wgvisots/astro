@@ -21,7 +21,7 @@ radians everywhere.
 | `ephemeris` | Low-precision Sun/Moon (no data files); JPL SPK (`.bsp`, e.g. DE440) reader |
 | `astrometry` | RA/Dec, ecliptic, galactic; apparent/observed places (space motion, parallax, light deflection, aberration, refraction); sidereal time; rise/set/transit, twilight, Moon phase |
 | `orbit` | Keplerian and equinoctial elements; Kepler's equation; universal-variable propagation; Lambert (Izzo, multi-rev); J2/J2²/J4 secular rates, sun-synchronous and repeat-track design; zonal gravity, RK4/RKF7(8), numerical propagator; 12-component (position, velocity, acceleration, jerk) propagation with optional unmodeled force; TLE parse/format and SGP4/SDP4 |
-| `satellite` | Look angles, range rate, Doppler; pass prediction; eclipses (cylindrical/conical) and beta angle; sub-satellite point, ground track, footprint, line of sight; RIC/LVLH/VNC/NTW frames, relative motion, covariance rotation |
+| `satellite` | Look angles, range rate, Doppler; pass prediction; estimate tracking with consistency checks; eclipses (cylindrical/conical) and beta angle; sub-satellite point, ground track, footprint, line of sight; RIC/LVLH/VNC/NTW frames, relative motion, covariance rotation |
 
 ## Building
 
@@ -119,6 +119,26 @@ opt.absTol = 1e-6;
 NumericalPropagator prop(epoch, state, {std::make_shared<GravityField>(std::vector<double>{0, 0, constants::J2, 0, constants::J4})}, opt);
 std::vector<StateCovariance> out = prop.propagateGridWithCovariance(0.0, 10.0, 1441, P0, 1e-9);
 ```
+
+### Following an upstream filter
+
+`EstimateTracker` (in `satellite/estimate_tracker.h`) keeps the latest delivered state and
+covariance, and checks each new delivery against the previous one propagated to its epoch. Successive
+outputs of one filter are correlated, so they are not fused; the newest replaces the previous.
+
+```cpp
+EstimateTracker tracker;                              // J2 + J4, relTol 1e-9
+if (auto check = tracker.update({epoch, state, P}); check && !check->consistent) {
+    // check->positionResidualRic vs check->positionSigmaRic says where and by how many sigma
+}
+auto ahead = tracker.predictGrid(0.0, 10.0, 1441);    // states + covariances, 4 h at 10 s
+```
+
+The check reports residuals and predicted 1-sigma along radial / in-track / cross-track, and
+Mahalanobis distances with chi-square p-values for position (3-D) and position + velocity (6-D).
+`TrackerOptions::test` picks which one sets `consistent`: position by default, which keeps its
+false-alarm rate over long gaps; position + velocity also catches a burn just before the delivery
+but over-alarms once the propagated uncertainty is large.
 
 ## External data
 
