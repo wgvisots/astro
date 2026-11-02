@@ -22,6 +22,7 @@
 
 #include "astro/core/constants.h"
 #include "astro/core/vec.h"
+#include "astro/orbit/state12.h"
 
 /// Two-body (Keplerian) propagation and Lambert's problem.
 namespace astro {
@@ -32,6 +33,16 @@ void stumpff(double psi, double& c2, double& c3) noexcept;
 /// Propagate a two-body state by dt seconds using universal variables
 /// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits.
 [[nodiscard]] StateVector propagateKepler(const StateVector& s0, double dt, double mu = constants::gmEarth);
+
+/// Two-body propagation of a 12-component state (position, velocity, acceleration, jerk) by dt
+/// seconds. The output acceleration and jerk are those of the point mass (plus the unmodeled
+/// force, if any) at the new time.
+///  - ModelOnly: universal variables from position and velocity.
+///  - UnmodeledForce: the residuals against the point mass are applied as a force linear in time,
+///    integrated numerically with RKF7(8). If both residuals are exactly zero it uses universal
+///    variables.
+[[nodiscard]] Propagation12 propagateKepler(const StateVector12& s0, double dt, double mu = constants::gmEarth,
+                                            HigherOrderMode mode = HigherOrderMode::ModelOnly);
 
 struct LambertSolution {
     Vec3 v1;               ///< departure velocity

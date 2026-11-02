@@ -20,10 +20,29 @@
 
 #include <algorithm>
 #include <numeric>
+#include <utility>
 
 #include "astro/orbit/gravity.h"
 
 namespace astro {
+
+namespace {
+
+/// Central difference of accel(t, r, v) along (1, v, a): the time derivative along the motion.
+template <class F>
+Vec3 derivativeAlongMotion(const F& accel, double t, const Vec3& r, const Vec3& v, const Vec3& a) {
+    const double vm = norm(v);
+    const double h = vm > 0.0 ? 1e-5 * norm(r) / vm : 1.0;
+    return (accel(t + h, r + v * h, v + a * h) - accel(t - h, r - v * h, v - a * h)) / (2.0 * h);
+}
+
+} // namespace
+
+Vec3 ForceModel::jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const {
+    return derivativeAlongMotion(
+        [this](double tt, const Vec3& rr, const Vec3& vv) { return acceleration(tt, rr, vv); }, t, r, v,
+        totalAcceleration);
+}
 
 GravityField::GravityField(std::vector<double> J, double mu, double re, const Mat3& toBodyFrame)
     : J_(std::move(J)), mu_(mu), re_(re), R_(toBodyFrame), identity_(toBodyFrame == Mat3::identity()) {}
@@ -40,6 +59,25 @@ Vec3 GravityField::acceleration(double /*t*/, const Vec3& r, const Vec3& /*v*/) 
     return a;
 }
 
+Vec3 GravityField::jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const {
+    Vec3 j = pointMassJerk(r, v, mu_);
+    if (J_.size() > 2) {
+        auto zonal = [this](double, const Vec3& rr, const Vec3&) {
+            return identity_ ? zonalAcceleration(rr, J_, mu_, re_) : R_.transpose() * zonalAcceleration(R_ * rr, J_, mu_, re_);
+        };
+        j += derivativeAlongMotion(zonal, t, r, v, totalAcceleration);
+    }
+    return j;
+}
+
+Vec3 UnmodeledAcceleration::acceleration(double t, const Vec3& /*r*/, const Vec3& /*v*/) const {
+    return a0_ + j0_ * t;
+}
+
+Vec3 UnmodeledAcceleration::jerk(double /*t*/, const Vec3& /*r*/, const Vec3& /*v*/, const Vec3& /*a*/) const {
+    return j0_;
+}
+
 ThirdBodyForce::ThirdBodyForce(Body body, double muBody, std::shared_ptr<const Ephemeris> ephemeris, const Time& epoch)
     : body_(body), mu_(muBody), eph_(std::move(ephemeris)), epoch_(epoch) {}
 
@@ -54,6 +92,29 @@ NumericalPropagator::NumericalPropagator(const Time& epoch, const StateVector& i
     if (forces_.empty()) throw Error("NumericalPropagator: at least one force model is required");
 }
 
+NumericalPropagator::NumericalPropagator(const Time& epoch, const StateVector12& initial,
+                                         std::vector<std::shared_ptr<const ForceModel>> forces, HigherOrderMode mode,
+                                         const AdaptiveOptions& options)
+    : NumericalPropagator(epoch, initial.rv(), std::move(forces), options) {
+    Vec3 a;
+    for (const auto& f : forces_) a += f->acceleration(0.0, initial.r, initial.v);
+    da0_ = initial.a - a;
+    // In UnmodeledForce mode the total acceleration at the epoch is the input one; velocity-dependent
+    // forces (drag) see it through the jerk's dependence on the acceleration.
+    const Vec3& aTotal = mode == HigherOrderMode::UnmodeledForce ? initial.a : a;
+    Vec3 j;
+    for (const auto& f : forces_) j += f->jerk(0.0, initial.r, initial.v, aTotal);
+    dj0_ = initial.j - j;
+    if (mode == HigherOrderMode::UnmodeledForce) forces_.push_back(std::make_shared<UnmodeledAcceleration>(da0_, dj0_));
+}
+
+NumericalPropagator NumericalPropagator::j2j4(const Time& epoch, const StateVector12& initial, HigherOrderMode mode,
+                                              double mu, double re, double J2, double J4) {
+    return NumericalPropagator(epoch, initial,
+                               {std::make_shared<GravityField>(std::vector<double>{0.0, 0.0, J2, 0.0, J4}, mu, re)},
+                               mode);
+}
+
 NumericalPropagator NumericalPropagator::j2j4(const Time& epoch, const StateVector& initial, double mu, double re,
                                               double J2, double J4) {
     return NumericalPropagator(epoch, initial,
@@ -65,6 +126,26 @@ OdeState<6> NumericalPropagator::derivative(double t, const OdeState<6>& y) cons
     Vec3 a;
     for (const auto& f : forces_) a += f->acceleration(t, r, v);
     return {v.x, v.y, v.z, a.x, a.y, a.z};
+}
+
+StateVector12 NumericalPropagator::withDerivatives(double t, const StateVector& s) const {
+    Vec3 a;
+    for (const auto& f : forces_) a += f->acceleration(t, s.r, s.v);
+    Vec3 j;
+    for (const auto& f : forces_) j += f->jerk(t, s.r, s.v, a);
+    return {s.r, s.v, a, j};
+}
+
+StateVector12 NumericalPropagator::propagate12(double dt) const {
+    return withDerivatives(dt, propagate(dt));
+}
+
+std::vector<StateVector12> NumericalPropagator::propagate12(const std::vector<double>& dts) const {
+    const std::vector<StateVector> states = propagate(dts);
+    std::vector<StateVector12> out;
+    out.reserve(states.size());
+    for (std::size_t i = 0; i < states.size(); ++i) out.push_back(withDerivatives(dts[i], states[i]));
+    return out;
 }
 
 StateVector NumericalPropagator::propagate(double dt) const {

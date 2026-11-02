@@ -20,7 +20,7 @@ radians everywhere.
 | `frames` | IAU 2006/2000A (and 2000B) precession-nutation, ERA/GMST/GAST, polar motion; GCRS, J2000, MOD, TOD, TEME, CIRS, TIRS, PEF, ITRS with position+velocity; IERS EOP from `finals2000A` or C04 |
 | `ephemeris` | Low-precision Sun/Moon (no data files); JPL SPK (`.bsp`, e.g. DE440) reader |
 | `astrometry` | RA/Dec, ecliptic, galactic; apparent/observed places (space motion, parallax, light deflection, aberration, refraction); sidereal time; rise/set/transit, twilight, Moon phase |
-| `orbit` | Keplerian and equinoctial elements; Kepler's equation; universal-variable propagation; Lambert (Izzo, multi-rev); J2/J2²/J4 secular rates, sun-synchronous and repeat-track design; zonal gravity, RK4/RKF7(8), numerical propagator; TLE parse/format and SGP4/SDP4 |
+| `orbit` | Keplerian and equinoctial elements; Kepler's equation; universal-variable propagation; Lambert (Izzo, multi-rev); J2/J2²/J4 secular rates, sun-synchronous and repeat-track design; zonal gravity, RK4/RKF7(8), numerical propagator; 12-component (position, velocity, acceleration, jerk) propagation with optional unmodeled force; TLE parse/format and SGP4/SDP4 |
 | `satellite` | Look angles, range rate, Doppler; pass prediction; eclipses (cylindrical/conical) and beta angle; sub-satellite point, ground track, footprint, line of sight; RIC/LVLH/VNC/NTW frames, relative motion, covariance rotation |
 
 ## Building
@@ -65,6 +65,15 @@ Vec3 teme = ft.transform(eci.r, Frame::GCRS, Frame::TEME);
 Tle tle = Tle::parse(line1, line2);
 Sgp4 sgp4(tle);
 auto passes = findPasses(sgp4ItrsFunction(sgp4, eop), g, utc, utc + 86400.0, deg2rad(10.0));
+
+// 12-component state (m, m/s, m/s^2, m/s^3, inertial). ModelOnly propagates from r and v and
+// reports how far the input a and j are from the model; UnmodeledForce keeps that difference as
+// an extra force da0 + dj0 t (e.g. thrust). Output a and j are at the new time.
+StateVector12 s12{r, v, a, j};
+Propagation12 p = propagateKepler(s12, 600.0, constants::gmEarth, HigherOrderMode::UnmodeledForce);
+Propagation12 q = propagateSecular(s12, 86400.0);                       // J2 + J2² + J4 mean drift
+auto num = NumericalPropagator::j2j4(utc, s12, HigherOrderMode::UnmodeledForce);
+StateVector12 later = num.propagate12(3600.0);
 ```
 
 ## External data

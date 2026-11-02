@@ -24,6 +24,7 @@
 
 #include "astro/core/constants.h"
 #include "astro/orbit/elements.h"
+#include "astro/orbit/state12.h"
 
 /// Analytic secular (mean-element) drift due to the Earth's zonal harmonics,
 /// after Brouwer (1959): first order in J2, plus J2^2 and J4.
@@ -61,6 +62,24 @@ struct SecularRates {
 /// The true anomaly is advanced through the mean anomaly.
 [[nodiscard]] KeplerianElements propagateSecular(const KeplerianElements& mean, double dt, const ZonalParameters& zp = {},
                                                  SecularOrder order = SecularOrder::J2SquaredJ4);
+
+/// propagateSecular for an inertial state whose z axis is the Earth's pole. The osculating
+/// elements of s0 are treated as mean elements (no short-period correction), so expect errors at the
+/// short-period level (kilometres in LEO); use NumericalPropagator::j2j4 when that matters.
+[[nodiscard]] StateVector propagateSecular(const StateVector& s0, double dt, const ZonalParameters& zp = {},
+                                           SecularOrder order = SecularOrder::J2SquaredJ4);
+
+/// propagateSecular for a 12-component state (position, velocity, acceleration, jerk), with the
+/// same mean-element caveat. The force model for acceleration, jerk and residuals is the point mass
+/// plus J2 (SecularOrder::J2) or plus J2 and J4 (SecularOrder::J2SquaredJ4).
+///  - ModelOnly: secular propagation from position and velocity.
+///  - UnmodeledForce: the unmodeled force da0 + dj0 t is superposed on the secular trajectory,
+///    dr = da0 dt^2/2 + dj0 dt^3/6, dv = da0 dt + dj0 dt^2/2, ignoring how the displacement feeds
+///    back into gravity. That is fine while dr stays small compared with the orbit; otherwise use
+///    NumericalPropagator::j2j4 with HigherOrderMode::UnmodeledForce.
+[[nodiscard]] Propagation12 propagateSecular(const StateVector12& s0, double dt, const ZonalParameters& zp = {},
+                                             SecularOrder order = SecularOrder::J2SquaredJ4,
+                                             HigherOrderMode mode = HigherOrderMode::ModelOnly);
 
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;
 /// nodal rate 360 deg per tropical year). Throws astro::Error if no solution exists.

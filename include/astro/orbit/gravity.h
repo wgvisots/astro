@@ -30,6 +30,10 @@ namespace astro {
 /// Point-mass acceleration -mu r / |r|^3.
 [[nodiscard]] Vec3 pointMassAcceleration(const Vec3& r, double mu = constants::gmEarth) noexcept;
 
+/// Point-mass jerk (time derivative of pointMassAcceleration along the motion):
+/// -mu / |r|^3 (v - 3 (r.v) r / |r|^2).
+[[nodiscard]] Vec3 pointMassJerk(const Vec3& r, const Vec3& v, double mu = constants::gmEarth) noexcept;
+
 /// Acceleration from the zonal harmonics J2..Jn (point mass excluded).
 /// `J` holds unnormalized zonal coefficients indexed by degree: J[2] = J2, J[3] = J3, ...
 /// (entries 0 and 1 are ignored).

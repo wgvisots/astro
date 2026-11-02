@@ -27,6 +27,11 @@ Vec3 pointMassAcceleration(const Vec3& r, double mu) noexcept {
     return r * (-mu / (rm * rm * rm));
 }
 
+Vec3 pointMassJerk(const Vec3& r, const Vec3& v, double mu) noexcept {
+    const double r2 = norm2(r), rm = std::sqrt(r2);
+    return (v - r * (3.0 * dot(r, v) / r2)) * (-mu / (r2 * rm));
+}
+
 Vec3 zonalAcceleration(const Vec3& r, const std::vector<double>& J, double mu, double re) noexcept {
     // a_n = mu Jn re^n / r^(n+2) [ ((n+1) Pn(s) + s Pn'(s)) r_hat - Pn'(s) z_hat ],  s = z / r
     const double rm = norm(r);

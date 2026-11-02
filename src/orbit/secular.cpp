@@ -24,6 +24,7 @@
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
 #include "astro/orbit/kepler.h"
+#include "astro/orbit/numerical.h"
 
 namespace astro {
 
@@ -68,6 +69,36 @@ KeplerianElements propagateSecular(const KeplerianElements& mean, double dt, con
     out.raan = wrapTwoPi(mean.raan + r.raanDot * dt);
     out.argp = wrapTwoPi(mean.argp + r.argpDot * dt);
     out.nu = wrapTwoPi(meanToTrueAnomaly(mean.meanAnomaly() + r.meanAnomalyDot * dt, mean.e));
+    return out;
+}
+
+StateVector propagateSecular(const StateVector& s0, double dt, const ZonalParameters& zp, SecularOrder order) {
+    return elementsToState(propagateSecular(stateToElements(s0, zp.mu), dt, zp, order), zp.mu);
+}
+
+Propagation12 propagateSecular(const StateVector12& s0, double dt, const ZonalParameters& zp, SecularOrder order,
+                               HigherOrderMode mode) {
+    const GravityField field(order == SecularOrder::J2 ? std::vector<double>{0.0, 0.0, zp.J2}
+                                                       : std::vector<double>{0.0, 0.0, zp.J2, 0.0, zp.J4},
+                             zp.mu, zp.re);
+    const bool unmodeled = mode == HigherOrderMode::UnmodeledForce;
+    Propagation12 out;
+    const Vec3 a0 = field.acceleration(0.0, s0.r, s0.v);
+    out.accelerationResidual = s0.a - a0;
+    out.jerkResidual = s0.j - field.jerk(0.0, s0.r, s0.v, unmodeled ? s0.a : a0);
+
+    StateVector s = propagateSecular(s0.rv(), dt, zp, order);
+    Vec3 da, dj;
+    if (unmodeled) {
+        const Vec3& a = out.accelerationResidual;
+        const Vec3& j = out.jerkResidual;
+        s.r += a * (0.5 * dt * dt) + j * (dt * dt * dt / 6.0);
+        s.v += a * dt + j * (0.5 * dt * dt);
+        da = a + j * dt;
+        dj = j;
+    }
+    const Vec3 a = field.acceleration(dt, s.r, s.v) + da;
+    out.state = {s.r, s.v, a, field.jerk(dt, s.r, s.v, a) + dj};
     return out;
 }
 

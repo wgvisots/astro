@@ -20,8 +20,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
+#include <vector>
 
 #include "astro/core/error.h"
+#include "astro/orbit/gravity.h"
+#include "astro/orbit/numerical.h"
 
 namespace astro {
 
@@ -288,6 +292,22 @@ std::vector<LambertSolution> lambertIzzo(const Vec3& r1, const Vec3& r2, double 
 
 LambertSolution lambert(const Vec3& r1, const Vec3& r2, double tof, double mu, bool prograde) {
     return lambertIzzo(r1, r2, tof, mu, prograde, 0).front();
+}
+
+Propagation12 propagateKepler(const StateVector12& s0, double dt, double mu, HigherOrderMode mode) {
+    Propagation12 out;
+    out.accelerationResidual = s0.a - pointMassAcceleration(s0.r, mu);
+    out.jerkResidual = s0.j - pointMassJerk(s0.r, s0.v, mu);  // point-mass jerk does not depend on a
+    const bool unmodeled = mode == HigherOrderMode::UnmodeledForce &&
+                           (out.accelerationResidual != Vec3{} || out.jerkResidual != Vec3{});
+    if (unmodeled) {
+        const NumericalPropagator prop(Time(), s0, {std::make_shared<GravityField>(std::vector<double>{}, mu)}, mode);
+        out.state = prop.propagate12(dt);
+    } else {
+        const StateVector s = propagateKepler(s0.rv(), dt, mu);
+        out.state = {s.r, s.v, pointMassAcceleration(s.r, mu), pointMassJerk(s.r, s.v, mu)};
+    }
+    return out;
 }
 
 } // namespace astro

@@ -85,6 +85,23 @@ struct StateVector {
     friend constexpr bool operator==(const StateVector&, const StateVector&) noexcept = default;
 };
 
+/// Twelve-component state vector: position, velocity, acceleration and jerk (e.g. m, m/s, m/s^2,
+/// m/s^3). All four must be given when constructing one, so `{r, v}` always means a StateVector.
+struct StateVector12 {
+    Vec3 r; ///< position
+    Vec3 v; ///< velocity
+    Vec3 a; ///< acceleration
+    Vec3 j; ///< jerk (time derivative of acceleration)
+
+    constexpr StateVector12() noexcept = default;
+    constexpr StateVector12(const Vec3& r_, const Vec3& v_, const Vec3& a_, const Vec3& j_) noexcept
+        : r(r_), v(v_), a(a_), j(j_) {}
+
+    /// Position and velocity only.
+    [[nodiscard]] constexpr StateVector rv() const noexcept { return {r, v}; }
+    friend constexpr bool operator==(const StateVector12&, const StateVector12&) noexcept = default;
+};
+
 /// 3x3 matrix, row-major.
 struct Mat3 {
     std::array<std::array<double, 3>, 3> m{{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}}};
