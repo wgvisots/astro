@@ -19,6 +19,8 @@
 #pragma once
 
 #include <iosfwd>
+#include <span>
+#include <vector>
 
 #include <boost/describe/enum.hpp>
 
@@ -89,6 +91,83 @@ struct SecularRates {
                                              const ZonalParameters& zp    = {},
                                              SecularOrder           order = SecularOrder::J2SquaredJ4,
                                              HigherOrderMode        mode  = HigherOrderMode::ModelOnly);
+
+/// Secular J2/J4 propagation of one orbit to many times.
+///
+/// Everything that does not change with time (elements, secular rates, sin/cos of the inclination,
+/// residuals) is set up once in the constructor. Each later state then costs a Kepler solve and a
+/// few sines and cosines, so use this class instead of the free propagateSecular functions when
+/// propagating the same orbit more than once. Results are the same as the free functions (which use
+/// this class). Instances are immutable and safe to share between threads.
+class SecularPropagator {
+public:
+    /// From mean elements (elliptic: e < 1).
+    explicit SecularPropagator(const KeplerianElements& mean,
+                               const ZonalParameters&   zp    = {},
+                               SecularOrder             order = SecularOrder::J2SquaredJ4);
+    /// From an inertial state whose z axis is the Earth's pole; its osculating elements are taken
+    /// as mean elements (see propagateSecular).
+    explicit SecularPropagator(const StateVector&     s0,
+                               const ZonalParameters& zp    = {},
+                               SecularOrder           order = SecularOrder::J2SquaredJ4);
+    /// From a 12-component state; `mode` is as for propagateSecular(const StateVector12&, ...).
+    SecularPropagator(const StateVector12&   s0,
+                      const ZonalParameters& zp    = {},
+                      SecularOrder           order = SecularOrder::J2SquaredJ4,
+                      HigherOrderMode        mode  = HigherOrderMode::ModelOnly);
+
+    /// Mean elements dt seconds after the epoch.
+    [[nodiscard]] KeplerianElements elements(double dt) const;
+    /// State dt seconds after the epoch.
+    [[nodiscard]] StateVector propagate(double dt) const noexcept;
+    /// 12-component state dt seconds after the epoch. Acceleration and jerk are the point mass plus
+    /// zonal field (exact jerk), plus the unmodeled force in HigherOrderMode::UnmodeledForce.
+    [[nodiscard]] StateVector12 propagate12(double dt) const noexcept;
+
+    /// States at dt = start + k * step for k = 0 .. out.size() - 1, written into `out`.
+    void propagateGrid(double start, double step, std::span<StateVector> out) const noexcept;
+    void propagateGrid12(double start, double step, std::span<StateVector12> out) const noexcept;
+    [[nodiscard]] std::vector<StateVector>   propagateGrid(double start, double step, std::size_t count) const;
+    [[nodiscard]] std::vector<StateVector12> propagateGrid12(double start, double step, std::size_t count) const;
+
+    [[nodiscard]] const KeplerianElements& meanElements() const noexcept { return mean_; }
+    [[nodiscard]] const SecularRates&      rates() const noexcept { return rates_; }
+    /// Input acceleration minus the model's at the epoch (zero unless built from a StateVector12).
+    [[nodiscard]] const Vec3& accelerationResidual() const noexcept { return da0_; }
+    /// Input jerk minus the model's at the epoch (zero unless built from a StateVector12).
+    [[nodiscard]] const Vec3& jerkResidual() const noexcept { return dj0_; }
+
+private:
+    /// Time-dependent angles of one state: reduced mean anomaly, eccentric anomaly and the sines
+    /// and cosines needed to build the state.
+    struct Angles {
+        double M{0.0}, E{0.0}, sinE{0.0}, cosE{1.0};
+        double sinRaan{0.0}, cosRaan{1.0}, sinArgp{0.0}, cosArgp{1.0};
+    };
+
+    void                        init();
+    void                        fieldDerivatives(const Vec3& r, const Vec3& v, Vec3& a, Vec3& j) const noexcept;
+    [[nodiscard]] Angles        angles(double dt) const noexcept;
+    [[nodiscard]] StateVector   state(const Angles& x) const noexcept;
+    [[nodiscard]] StateVector12 complete(double dt, StateVector s) const noexcept;
+    template <class Emit>
+    void grid(double start, double step, std::size_t count, Emit&& emit) const noexcept;
+
+    KeplerianElements   mean_;
+    ZonalParameters     zp_;
+    SecularOrder        order_;
+    SecularRates        rates_;
+    std::vector<double> J_;       // zonal coefficients of the model, by degree
+    double              M0_{0.0}; // mean anomaly at the epoch
+    double              b_{0.0};  // semi-minor axis a sqrt(1 - e^2)
+    double              sqrtMuA_{0.0};
+    double              bOverA_{1.0};
+    double              cosI_{1.0};
+    double              sinI_{0.0};
+    bool                unmodeled_{false};
+    Vec3                da0_;
+    Vec3                dj0_;
+};
 
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;
 /// nodal rate 360 deg per tropical year). Throws astro::Error if no solution exists.

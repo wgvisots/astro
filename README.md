@@ -79,6 +79,31 @@ auto num = NumericalPropagator::j2j4(utc, s12, HigherOrderMode::UnmodeledForce);
 StateVector12 later = num.propagate12(3600.0);
 ```
 
+## Performance
+
+To propagate one orbit to many equally spaced times, use the grid APIs: `SecularPropagator`
+(analytic J2/J4) and `NumericalPropagator::propagateGrid`. LEO, one day of output, one core of an
+i7-1260P:
+
+| Method                                           | Y = 60 s     | Y = 10 s     |
+|--------------------------------------------------|--------------|--------------|
+| `SecularPropagator::propagateGrid`               | 42 ns/output | 43 ns/output |
+| `SecularPropagator::propagateGrid12`             | 70 ns/output | 71 ns/output |
+| `NumericalPropagator::j2j4(...).propagateGrid`   | 0.51 ms/day  | 0.56 ms/day  |
+| `NumericalPropagator::j2j4(...).propagateGrid12` | 0.56 ms/day  | 0.89 ms/day  |
+
+The numerical grid lets the integrator take its own error-controlled steps (about 96 s in LEO at the
+default tolerance) and interpolates the outputs with a degree-7 Hermite polynomial, so its cost
+barely depends on Y. Its accuracy is set by `AdaptiveOptions`: the defaults give about 2 mm after a
+day in LEO, and each 10x looser `relTol` cuts the run time by roughly a quarter and costs about
+10x in accuracy. Run `bench/propagation_bench.cpp` (`-DASTRO_BUILD_BENCHMARKS=ON`) with your own X
+and Y:
+
+```sh
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DASTRO_BUILD_BENCHMARKS=ON && cmake --build build -j
+build/bench/astro_propagation_bench 86400 10 100      # X seconds, Y seconds, number of states
+```
+
 ## External data
 
 The library never touches the network. `scripts/fetch_iers_data.sh` downloads the files below

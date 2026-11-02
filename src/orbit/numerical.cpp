@@ -19,10 +19,13 @@
 #include "astro/orbit/numerical.h"
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <utility>
 
+#include "astro/core/error.h"
 #include "astro/orbit/gravity.h"
+#include "gravity_detail.h"
 
 namespace astro {
 
@@ -54,27 +57,23 @@ GravityField::GravityField(std::vector<double> J, double mu, double re, const Ma
     , identity_(toBodyFrame == Mat3::identity()) {}
 
 Vec3 GravityField::acceleration(double /*t*/, const Vec3& r, const Vec3& /*v*/) const {
-    Vec3 a = pointMassAcceleration(r, mu_);
-    if (J_.size() > 2) {
-        if (identity_) {
-            a += zonalAcceleration(r, J_, mu_, re_);
-        } else {
-            a += R_.transpose() * zonalAcceleration(R_ * r, J_, mu_, re_);
-        }
+    Vec3 a;
+    if (identity_) {
+        detail::gravity<false>(r, Vec3{}, J_.data(), J_.size(), mu_, re_, true, &a, nullptr);
+        return a;
     }
-    return a;
+    detail::gravity<false>(R_ * r, Vec3{}, J_.data(), J_.size(), mu_, re_, true, &a, nullptr);
+    return R_.transpose() * a;
 }
 
-Vec3 GravityField::jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const {
-    Vec3 j = pointMassJerk(r, v, mu_);
-    if (J_.size() > 2) {
-        auto zonal = [this](double, const Vec3& rr, const Vec3&) {
-            return identity_ ? zonalAcceleration(rr, J_, mu_, re_)
-                             : R_.transpose() * zonalAcceleration(R_ * rr, J_, mu_, re_);
-        };
-        j += derivativeAlongMotion(zonal, t, r, v, totalAcceleration);
+Vec3 GravityField::jerk(double /*t*/, const Vec3& r, const Vec3& v, const Vec3& /*totalAcceleration*/) const {
+    Vec3 j;
+    if (identity_) {
+        detail::gravity<true>(r, v, J_.data(), J_.size(), mu_, re_, true, nullptr, &j);
+        return j;
     }
-    return j;
+    detail::gravity<true>(R_ * r, R_ * v, J_.data(), J_.size(), mu_, re_, true, nullptr, &j);
+    return R_.transpose() * j;
 }
 
 Vec3 UnmodeledAcceleration::acceleration(double t, const Vec3& /*r*/, const Vec3& /*v*/) const {
@@ -159,6 +158,127 @@ OdeState<6> NumericalPropagator::derivative(double t, const OdeState<6>& y) cons
         a += f->acceleration(t, r, v);
     }
     return {v.x, v.y, v.z, a.x, a.y, a.z};
+}
+
+namespace {
+
+StateVector toStateVector(const OdeState<6>& y) {
+    return {
+        {y[0], y[1], y[2]},
+        {y[3], y[4], y[5]}
+    };
+}
+
+/// Degree-7 Hermite interpolant of position over one step [ta, ta + h], matching position, velocity,
+/// acceleration and jerk at both ends: p(tau) = sum c_k tau^k with tau = (t - ta) / h.
+struct SepticHermite {
+    Vec3   c[8];
+    double h{0.0};
+
+    SepticHermite(const StateVector12& A, const StateVector12& B, double step) noexcept
+        : h(step) {
+        const double h2 = h * h, h3 = h2 * h;
+        c[0] = A.r;
+        c[1] = A.v * h;
+        c[2] = A.a * (0.5 * h2);
+        c[3] = A.j * (h3 / 6.0);
+        // Remaining conditions at tau = 1, then the exact inverse of the 4x4 system for c4..c7.
+        const Vec3 D0 = B.r - (c[0] + c[1] + c[2] + c[3]);
+        const Vec3 D1 = B.v * h - (c[1] + 2.0 * c[2] + 3.0 * c[3]);
+        const Vec3 D2 = B.a * (0.5 * h2) - (c[2] + 3.0 * c[3]);
+        const Vec3 D3 = B.j * (h3 / 6.0) - c[3];
+        c[4]          = 35.0 * D0 - 15.0 * D1 + 5.0 * D2 - D3;
+        c[5]          = -84.0 * D0 + 39.0 * D1 - 14.0 * D2 + 3.0 * D3;
+        c[6]          = 70.0 * D0 - 34.0 * D1 + 13.0 * D2 - 3.0 * D3;
+        c[7]          = -20.0 * D0 + 10.0 * D1 - 4.0 * D2 + D3;
+    }
+
+    [[nodiscard]] StateVector at(double tau) const noexcept {
+        Vec3 p = c[7], dp = 7.0 * c[7];
+        for (int k = 6; k >= 1; --k) {
+            p  = p * tau + c[k];
+            dp = dp * tau + static_cast<double>(k) * c[k];
+        }
+        p = p * tau + c[0];
+        return {p, dp / h};
+    }
+};
+
+} // namespace
+
+template <class Emit>
+void NumericalPropagator::grid(double start, double step, std::size_t count, Emit&& emit) const {
+    if (count == 0) {
+        return;
+    }
+    if (!(std::abs(step) > 0.0) || !std::isfinite(step) || !std::isfinite(start)) {
+        throw Error("NumericalPropagator::propagateGrid: step must be finite and non-zero");
+    }
+    auto f = [this](double t, const OdeState<6>& y) { return derivative(t, y); };
+
+    AdaptiveStats total, st;
+    auto          add = [&] {
+        total.accepted    += st.accepted;
+        total.rejected    += st.rejected;
+        total.evaluations += st.evaluations;
+        st                 = {};
+    };
+
+    // Integrate (exactly) to the first output time.
+    OdeState<6> y{s0_.r.x, s0_.r.y, s0_.r.z, s0_.v.x, s0_.v.y, s0_.v.z};
+    if (start != 0.0) {
+        y = integrateRkf78<6>(f, 0.0, y, start, opt_, &st);
+        add();
+    }
+    emit(std::size_t{0}, start, toStateVector(y));
+
+    if (count > 1) {
+        const double  dir    = step > 0.0 ? 1.0 : -1.0;
+        const double  tEnd   = start + step * static_cast<double>(count - 1);
+        std::size_t   k      = 1;
+        StateVector12 A      = withDerivatives(start, toStateVector(y));
+        auto          onStep = [&](double ta, const OdeState<6>& /*ya*/, double tb, const OdeState<6>& yb) {
+            const StateVector12 B   = withDerivatives(tb, toStateVector(yb));
+            const double        h   = tb - ta;
+            const double        tk0 = start + step * static_cast<double>(k);
+            if (k < count && dir * (tk0 - tb) <= 0.0) {
+                const SepticHermite poly(A, B, h);
+                for (; k < count; ++k) {
+                    const double tk = start + step * static_cast<double>(k);
+                    if (dir * (tk - tb) > 0.0) {
+                        break;
+                    }
+                    emit(k, tk, tk == tb ? B.rv() : poly.at((tk - ta) / h));
+                }
+            }
+            A = B;
+        };
+        (void)integrateRkf78Steps<6>(f, start, y, tEnd, onStep, opt_, &st);
+        add();
+    }
+    stats_ = total;
+}
+
+void NumericalPropagator::propagateGrid(double start, double step, std::span<StateVector> out) const {
+    grid(start, step, out.size(), [&](std::size_t k, double, const StateVector& s) { out[k] = s; });
+}
+
+void NumericalPropagator::propagateGrid12(double start, double step, std::span<StateVector12> out) const {
+    grid(start, step, out.size(), [&](std::size_t k, double t, const StateVector& s) {
+        out[k] = withDerivatives(t, s);
+    });
+}
+
+std::vector<StateVector> NumericalPropagator::propagateGrid(double start, double step, std::size_t count) const {
+    std::vector<StateVector> out(count);
+    propagateGrid(start, step, out);
+    return out;
+}
+
+std::vector<StateVector12> NumericalPropagator::propagateGrid12(double start, double step, std::size_t count) const {
+    std::vector<StateVector12> out(count);
+    propagateGrid12(start, step, out);
+    return out;
 }
 
 StateVector12 NumericalPropagator::withDerivatives(double t, const StateVector& s) const {

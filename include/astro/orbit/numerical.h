@@ -19,6 +19,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "astro/core/constants.h"
@@ -58,7 +59,7 @@ public:
                           double              re          = constants::earthRadiusEgm2008,
                           const Mat3&         toBodyFrame = Mat3::identity());
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
-    /// Exact for the point mass; the (much smaller) zonal part uses the default central difference.
+    /// Exact (point mass and zonal terms).
     [[nodiscard]] Vec3   jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
     [[nodiscard]] double mu() const noexcept { return mu_; }
 
@@ -145,6 +146,19 @@ public:
     [[nodiscard]] StateVector12              propagate12(const Time& t) const { return propagate12(t - epoch_); }
     [[nodiscard]] std::vector<StateVector12> propagate12(const std::vector<double>& dts) const;
 
+    /// States at dt = start + k * step for k = 0 .. out.size() - 1 (step != 0), written into `out`.
+    ///
+    /// Use this for many equally spaced outputs. The integrator takes its own (error-controlled)
+    /// steps instead of stopping on every output time, and outputs between steps come from a
+    /// degree-7 Hermite polynomial that matches position, velocity, acceleration and jerk at both
+    /// ends of the step. The cost therefore hardly depends on `step`. Positions agree with
+    /// propagate(dts) to about the integrator tolerance (micrometres in LEO with the defaults).
+    void propagateGrid(double start, double step, std::span<StateVector> out) const;
+    /// As propagateGrid, with acceleration and jerk from the force models at each output.
+    void propagateGrid12(double start, double step, std::span<StateVector12> out) const;
+    [[nodiscard]] std::vector<StateVector>   propagateGrid(double start, double step, std::size_t count) const;
+    [[nodiscard]] std::vector<StateVector12> propagateGrid12(double start, double step, std::size_t count) const;
+
     /// Acceleration and jerk of the force models at state s, t seconds after the epoch.
     [[nodiscard]] StateVector12 withDerivatives(double t, const StateVector& s) const;
 
@@ -158,6 +172,8 @@ public:
 
 private:
     [[nodiscard]] OdeState<6> derivative(double t, const OdeState<6>& y) const;
+    template <class Emit>
+    void grid(double start, double step, std::size_t count, Emit&& emit) const;
 
     Time                                           epoch_;
     StateVector                                    s0_;

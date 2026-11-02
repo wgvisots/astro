@@ -164,7 +164,7 @@ TEST(State12, KeplerUnmodeledForceDoesWorkOnOrbit) {
     const auto                states = prop.propagate12(ts);
     double                    work   = 0.0;
     for (int k = 0; k <= n; ++k) {
-        expectVecNear(states[k].a - pointMassAcceleration(states[k].r), da, 1e-15);
+        expectVecNear(states[k].a - pointMassAcceleration(states[k].r), da, 1e-13); // ~1 ulp of 8 m/s^2
         work += ((k == 0 || k == n) ? 1.0 : (k % 2 ? 4.0 : 2.0)) * dot(da, states[k].v);
     }
     work        *= T / n / 3.0;

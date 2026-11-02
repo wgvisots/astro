@@ -29,6 +29,7 @@ endif()
 
 option(ASTRO_BUILD_TESTS "Build the astro unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(ASTRO_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(ASTRO_BUILD_BENCHMARKS "Build the astro benchmarks" OFF)
 
 include(GNUInstallDirs)
 
@@ -96,4 +97,8 @@ install(FILES ${PROJECT_BINARY_DIR}/astroConfig.cmake ${PROJECT_BINARY_DIR}/astr
 if(ASTRO_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(ASTRO_BUILD_BENCHMARKS)
+    add_subdirectory(bench)
 endif()

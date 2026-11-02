@@ -96,8 +96,10 @@ struct Vec3 {
 [[nodiscard]] constexpr double norm2(const Vec3& a) noexcept {
     return dot(a, a);
 }
+/// Euclidean length. Uses sqrt(a.a) rather than std::hypot: the three-argument hypot guards
+/// against overflow far outside any physical range here and is ~20x slower.
 [[nodiscard]] inline double norm(const Vec3& a) noexcept {
-    return std::hypot(a.x, a.y, a.z);
+    return std::sqrt(dot(a, a));
 }
 /// Unit vector along a. Returns the zero vector if a is zero.
 [[nodiscard]] inline Vec3 normalized(const Vec3& a) noexcept {

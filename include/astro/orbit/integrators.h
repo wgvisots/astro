@@ -22,6 +22,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <utility>
 
 #include "astro/core/error.h"
 
@@ -107,15 +108,17 @@ struct AdaptiveStats {
     int evaluations{0};
 };
 
-/// Runge-Kutta-Fehlberg 7(8) adaptive integration from t0 to t1, landing exactly on t1.
-/// Error control per component: |err_i| <= absTol + relTol * max(|y_i|, |y_new_i|).
-template <std::size_t N, class F>
-[[nodiscard]] OdeState<N> integrateRkf78(F&&                    f,
-                                         double                 t0,
-                                         OdeState<N>            y,
-                                         double                 t1,
-                                         const AdaptiveOptions& opt   = {},
-                                         AdaptiveStats*         stats = nullptr) {
+/// Runge-Kutta-Fehlberg 7(8) adaptive integration from t0 to t1 (see integrateRkf78), calling
+/// onStep(tPrev, yPrev, t, y) after every accepted step. Use it for dense output: let the
+/// integrator choose its own steps and interpolate between them.
+template <std::size_t N, class F, class OnStep>
+OdeState<N> integrateRkf78Steps(F&&                    f,
+                                double                 t0,
+                                OdeState<N>            y,
+                                double                 t1,
+                                OnStep&&               onStep,
+                                const AdaptiveOptions& opt   = {},
+                                AdaptiveStats*         stats = nullptr) {
     // Fehlberg (1968) 7(8) coefficients.
     // clang-format off
     static constexpr double c[13] = {0.0, 2.0 / 27.0, 1.0 / 9.0, 1.0 / 6.0, 5.0 / 12.0, 0.5, 5.0 / 6.0,
@@ -158,10 +161,9 @@ template <std::size_t N, class F>
         for (int s = 0; s < 13; ++s) {
             OdeState<N> ys = y;
             for (int j = 0; j < s; ++j) {
-                if (a[s][j] != 0.0) {
-                    for (std::size_t i = 0; i < N; ++i) {
-                        ys[i] += h * a[s][j] * k[static_cast<std::size_t>(j)][i];
-                    }
+                const double ha = h * a[s][j]; // zeros included: a branch here blocks vectorization
+                for (std::size_t i = 0; i < N; ++i) {
+                    ys[i] += ha * k[static_cast<std::size_t>(j)][i];
                 }
             }
             k[static_cast<std::size_t>(s)] = f(t + c[s] * h, ys);
@@ -180,6 +182,7 @@ template <std::size_t N, class F>
             errNorm           = std::max(errNorm, std::abs(err) / sc);
         }
         if (errNorm <= 1.0) {
+            onStep(t, static_cast<const OdeState<N>&>(y), t + h, static_cast<const OdeState<N>&>(yn));
             t += h;
             y  = yn;
             ++st.accepted;
@@ -199,6 +202,25 @@ template <std::size_t N, class F>
         }
     }
     throw Error("integrateRkf78: maximum number of steps exceeded");
+}
+
+/// Runge-Kutta-Fehlberg 7(8) adaptive integration from t0 to t1, landing exactly on t1.
+/// Error control per component: |err_i| <= absTol + relTol * max(|y_i|, |y_new_i|).
+template <std::size_t N, class F>
+[[nodiscard]] OdeState<N> integrateRkf78(F&&                    f,
+                                         double                 t0,
+                                         OdeState<N>            y,
+                                         double                 t1,
+                                         const AdaptiveOptions& opt   = {},
+                                         AdaptiveStats*         stats = nullptr) {
+    return integrateRkf78Steps<N>(
+        std::forward<F>(f),
+        t0,
+        y,
+        t1,
+        [](double, const OdeState<N>&, double, const OdeState<N>&) {},
+        opt,
+        stats);
 }
 
 } // namespace astro
