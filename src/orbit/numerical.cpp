@@ -41,6 +41,26 @@ Vec3 derivativeAlongMotion(const F& accel, double t, const Vec3& r, const Vec3& 
 
 } // namespace
 
+Vec3 ForceModel::partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const {
+    // Central differences, one column per position and velocity component.
+    const double hr = 1e-6 * std::max(norm(r), 1.0);
+    const double hv = 1e-6 * std::max(norm(v), 1.0);
+    for (std::size_t j = 0; j < 3; ++j) {
+        Vec3 dr, dv;
+        (j == 0 ? dr.x : j == 1 ? dr.y : dr.z) = hr;
+        (j == 0 ? dv.x : j == 1 ? dv.y : dv.z) = hv;
+        const Vec3 ar                          = (acceleration(t, r + dr, v) - acceleration(t, r - dr, v)) / (2.0 * hr);
+        const Vec3 av                          = (acceleration(t, r, v + dv) - acceleration(t, r, v - dv)) / (2.0 * hv);
+        dadr(0, j)                             = ar.x;
+        dadr(1, j)                             = ar.y;
+        dadr(2, j)                             = ar.z;
+        dadv(0, j)                             = av.x;
+        dadv(1, j)                             = av.y;
+        dadv(2, j)                             = av.z;
+    }
+    return acceleration(t, r, v);
+}
+
 Vec3 ForceModel::jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const {
     return derivativeAlongMotion([this](double tt, const Vec3& rr, const Vec3& vv) { return acceleration(tt, rr, vv); },
                                  t,
@@ -59,21 +79,34 @@ GravityField::GravityField(std::vector<double> J, double mu, double re, const Ma
 Vec3 GravityField::acceleration(double /*t*/, const Vec3& r, const Vec3& /*v*/) const {
     Vec3 a;
     if (identity_) {
-        detail::gravity<false>(r, Vec3{}, J_.data(), J_.size(), mu_, re_, true, &a, nullptr);
+        detail::gravity<false>(r, J_.data(), J_.size(), mu_, re_, true, &a, nullptr);
         return a;
     }
-    detail::gravity<false>(R_ * r, Vec3{}, J_.data(), J_.size(), mu_, re_, true, &a, nullptr);
+    detail::gravity<false>(R_ * r, J_.data(), J_.size(), mu_, re_, true, &a, nullptr);
     return R_.transpose() * a;
 }
 
 Vec3 GravityField::jerk(double /*t*/, const Vec3& r, const Vec3& v, const Vec3& /*totalAcceleration*/) const {
-    Vec3 j;
+    detail::GravityPartials p;
     if (identity_) {
-        detail::gravity<true>(r, v, J_.data(), J_.size(), mu_, re_, true, nullptr, &j);
-        return j;
+        detail::gravity<true>(r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
+        return p.jerk(v);
     }
-    detail::gravity<true>(R_ * r, R_ * v, J_.data(), J_.size(), mu_, re_, true, nullptr, &j);
-    return R_.transpose() * j;
+    detail::gravity<true>(R_ * r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
+    return R_.transpose() * p.jerk(R_ * v);
+}
+
+Vec3 GravityField::partials(double /*t*/, const Vec3& r, const Vec3& /*v*/, Mat3& dadr, Mat3& dadv) const {
+    detail::GravityPartials p;
+    dadv = Mat3{};
+    if (identity_) {
+        detail::gravity<true>(r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
+        dadr = p.gradient();
+        return p.acceleration;
+    }
+    detail::gravity<true>(R_ * r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
+    dadr = R_.transpose() * p.gradient() * R_;
+    return R_.transpose() * p.acceleration;
 }
 
 Vec3 UnmodeledAcceleration::acceleration(double t, const Vec3& /*r*/, const Vec3& /*v*/) const {
@@ -84,6 +117,12 @@ Vec3 UnmodeledAcceleration::jerk(double /*t*/, const Vec3& /*r*/, const Vec3& /*
     return j0_;
 }
 
+Vec3 UnmodeledAcceleration::partials(double t, const Vec3& /*r*/, const Vec3& /*v*/, Mat3& dadr, Mat3& dadv) const {
+    dadr = Mat3{};
+    dadv = Mat3{};
+    return a0_ + j0_ * t;
+}
+
 ThirdBodyForce::ThirdBodyForce(Body body, double muBody, std::shared_ptr<const Ephemeris> ephemeris, const Time& epoch)
     : body_(body)
     , mu_(muBody)
@@ -92,6 +131,14 @@ ThirdBodyForce::ThirdBodyForce(Body body, double muBody, std::shared_ptr<const E
 
 Vec3 ThirdBodyForce::acceleration(double t, const Vec3& r, const Vec3& /*v*/) const {
     return thirdBodyAcceleration(r, eph_->position(body_, Body::Earth, epoch_ + t), mu_);
+}
+
+Vec3 ThirdBodyForce::partials(double t, const Vec3& r, const Vec3& /*v*/, Mat3& dadr, Mat3& dadv) const {
+    // a = mu (d / |d|^3 - s / |s|^3) with d = s - r, so da/dr = mu / |d|^3 (3 d_hat d_hat^T - I).
+    const Vec3 s = eph_->position(body_, Body::Earth, epoch_ + t);
+    dadr         = pointMassGradient(s - r, mu_);
+    dadv         = Mat3{};
+    return thirdBodyAcceleration(r, s, mu_);
 }
 
 NumericalPropagator::NumericalPropagator(const Time&                                    epoch,
@@ -257,6 +304,268 @@ void NumericalPropagator::grid(double start, double step, std::size_t count, Emi
         add();
     }
     stats_ = total;
+}
+
+// ------------------------------------------------------------ variational equations
+//
+// The extended state y holds r, v (0-5), Phi row-major (6-41) and, with process noise, Q row-major
+// (42-77). With A = [[0, I], [G, D]], G = da/dr and D = da/dv:
+//     Phi' = A Phi,     Q' = A Q + Q A^T + diag(0, 0, 0, q, q, q).
+
+namespace {
+
+constexpr std::size_t kPhi = 6;  // offset of Phi in the extended state
+constexpr std::size_t kQ   = 42; // offset of Q
+
+/// Writes A X into d for the 6x6 row-major block X at y (A = [[0, I], [G, D]]).
+void applyA(const double* y, double* d, const Mat3& G, const Mat3& D) noexcept {
+    for (std::size_t j = 0; j < 6; ++j) {
+        for (std::size_t i = 0; i < 3; ++i) {
+            d[6 * i + j] = y[6 * (i + 3) + j];
+            double s     = 0.0;
+            for (std::size_t m = 0; m < 3; ++m) {
+                s += G(i, m) * y[6 * m + j] + D(i, m) * y[6 * (m + 3) + j];
+            }
+            d[6 * (i + 3) + j] = s;
+        }
+    }
+}
+
+/// Adds Adot X to d for the 6x6 row-major block X at y, with Adot = [[0, 0], [Gd, Dd]].
+void addAdot(const double* y, double* d, const Mat3& Gd, const Mat3& Dd) noexcept {
+    for (std::size_t j = 0; j < 6; ++j) {
+        for (std::size_t i = 0; i < 3; ++i) {
+            double s = 0.0;
+            for (std::size_t m = 0; m < 3; ++m) {
+                s += Gd(i, m) * y[6 * m + j] + Dd(i, m) * y[6 * (m + 3) + j];
+            }
+            d[6 * (i + 3) + j] += s;
+        }
+    }
+}
+
+/// The 6x6 row-major block at y.
+Mat6 unpack(const double* y) noexcept {
+    Mat6 m;
+    for (std::size_t i = 0; i < 6; ++i) {
+        for (std::size_t j = 0; j < 6; ++j) {
+            m[i][j] = y[6 * i + j];
+        }
+    }
+    return m;
+}
+
+} // namespace
+
+template <std::size_t N, class Emit>
+void NumericalPropagator::variationalGrid(double start, double step, std::size_t count, double q, Emit&& emit) const {
+    static_assert(N == 42 || N == 78);
+    constexpr bool withNoise = N == 78;
+    if (count == 0) {
+        return;
+    }
+    if (!(std::abs(step) > 0.0) || !std::isfinite(step) || !std::isfinite(start)) {
+        throw Error("NumericalPropagator: grid step must be finite and non-zero");
+    }
+    if (!(q >= 0.0) || !std::isfinite(q)) {
+        throw Error("NumericalPropagator: acceleration noise PSD must be finite and non-negative");
+    }
+    AdaptiveOptions opt = opt_;
+    opt.errorComponents = 6; // same steps as the state alone
+
+    // Sum of the force models' acceleration and partials.
+    auto partialsAt = [this](double t, const Vec3& r, const Vec3& v, Mat3& G, Mat3& D) {
+        Vec3 a;
+        G = Mat3{};
+        D = Mat3{};
+        for (const auto& force : forces_) {
+            Mat3 gr, gv;
+            a += force->partials(t, r, v, gr, gv);
+            G += gr;
+            D += gv;
+        }
+        return a;
+    };
+    auto f = [&](double t, const OdeState<N>& y) {
+        const Vec3  r{y[0], y[1], y[2]}, v{y[3], y[4], y[5]};
+        Mat3        G, D;
+        const Vec3  a = partialsAt(t, r, v, G, D);
+        OdeState<N> d{};
+        d[0] = v.x;
+        d[1] = v.y;
+        d[2] = v.z;
+        d[3] = a.x;
+        d[4] = a.y;
+        d[5] = a.z;
+        applyA(y.data() + kPhi, d.data() + kPhi, G, D);
+        if constexpr (withNoise) {
+            double m[36]; // A Q
+            applyA(y.data() + kQ, m, G, D);
+            for (std::size_t i = 0; i < 6; ++i) {
+                for (std::size_t j = 0; j < 6; ++j) {
+                    d[kQ + 6 * i + j] = m[6 * i + j] + m[6 * j + i] + (i == j && i >= 3 ? q : 0.0);
+                }
+            }
+        }
+        return d;
+    };
+    // Second derivatives of Phi and Q for the quintic Hermite interpolation:
+    //     Phi'' = A Phi' + Adot Phi,   Q'' = A Q' + Q' A^T + Adot Q + Q Adot^T,
+    // with Adot from a central difference of G and D along the motion.
+    auto second = [&partialsAt](double t, const OdeState<N>& y, const OdeState<N>& dy) {
+        const Vec3   r{y[0], y[1], y[2]}, v{y[3], y[4], y[5]}, a{dy[3], dy[4], dy[5]};
+        const double vm = norm(v);
+        const double h  = vm > 0.0 ? 1e-5 * norm(r) / vm : 1.0;
+        Mat3         G, D, Gp, Dp, Gm, Dm;
+        (void)partialsAt(t, r, v, G, D);
+        (void)partialsAt(t + h, r + v * h, v + a * h, Gp, Dp);
+        (void)partialsAt(t - h, r - v * h, v - a * h, Gm, Dm);
+        const Mat3  Gd = (Gp - Gm) * (0.5 / h);
+        const Mat3  Dd = (Dp - Dm) * (0.5 / h);
+        OdeState<N> dd{};
+        applyA(dy.data() + kPhi, dd.data() + kPhi, G, D);
+        addAdot(y.data() + kPhi, dd.data() + kPhi, Gd, Dd);
+        if constexpr (withNoise) {
+            double m[36]; // A Q' + Adot Q
+            applyA(dy.data() + kQ, m, G, D);
+            addAdot(y.data() + kQ, m, Gd, Dd);
+            for (std::size_t i = 0; i < 6; ++i) {
+                for (std::size_t j = 0; j < 6; ++j) {
+                    dd[kQ + 6 * i + j] = m[6 * i + j] + m[6 * j + i];
+                }
+            }
+        }
+        return dd;
+    };
+
+    AdaptiveStats total, st;
+    auto          add = [&] {
+        total.accepted    += st.accepted;
+        total.rejected    += st.rejected;
+        total.evaluations += st.evaluations;
+        st                 = {};
+    };
+    auto noiseOf = [](const OdeState<N>& y) {
+        if constexpr (withNoise) {
+            return unpack(y.data() + kQ);
+        } else {
+            (void)y;
+            return Mat6{};
+        }
+    };
+    auto stateOf = [](const OdeState<N>& y) {
+        return StateVector{
+            {y[0], y[1], y[2]},
+            {y[3], y[4], y[5]}
+        };
+    };
+
+    OdeState<N> y{};
+    y[0] = s0_.r.x;
+    y[1] = s0_.r.y;
+    y[2] = s0_.r.z;
+    y[3] = s0_.v.x;
+    y[4] = s0_.v.y;
+    y[5] = s0_.v.z;
+    for (std::size_t i = 0; i < 6; ++i) {
+        y[kPhi + 7 * i] = 1.0;
+    }
+    if (start != 0.0) {
+        y = integrateRkf78<N>(f, 0.0, y, start, opt, &st);
+        add();
+    }
+    emit(std::size_t{0}, stateOf(y), unpack(y.data() + kPhi), noiseOf(y));
+
+    if (count > 1) {
+        const double  dir    = step > 0.0 ? 1.0 : -1.0;
+        const double  tEnd   = start + step * static_cast<double>(count - 1);
+        std::size_t   k      = 1;
+        StateVector12 A      = withDerivatives(start, stateOf(y));
+        OdeState<N>   dA     = f(start, y);
+        OdeState<N>   ddA    = second(start, y, dA);
+        auto          onStep = [&](double ta, const OdeState<N>& ya, double tb, const OdeState<N>& yb) {
+            const StateVector12 B   = withDerivatives(tb, stateOf(yb));
+            const OdeState<N>   dB  = f(tb, yb);
+            const OdeState<N>   ddB = second(tb, yb, dB);
+            const double        h   = tb - ta;
+            const double        tk0 = start + step * static_cast<double>(k);
+            if (k < count && dir * (tk0 - tb) <= 0.0) {
+                const SepticHermite poly(A, B, h);
+                for (; k < count; ++k) {
+                    const double tk = start + step * static_cast<double>(k);
+                    if (dir * (tk - tb) > 0.0) {
+                        break;
+                    }
+                    if (tk == tb) {
+                        emit(k, B.rv(), unpack(yb.data() + kPhi), noiseOf(yb));
+                        continue;
+                    }
+                    // Quintic Hermite for Phi and Q from values, first and second derivatives.
+                    const double tau = (tk - ta) / h, t2 = tau * tau, t3 = t2 * tau, t4 = t3 * tau, t5 = t4 * tau;
+                    const double H0 = 1.0 - 10.0 * t3 + 15.0 * t4 - 6.0 * t5;
+                    const double H1 = (tau - 6.0 * t3 + 8.0 * t4 - 3.0 * t5) * h;
+                    const double H2 = 0.5 * (t2 - 3.0 * t3 + 3.0 * t4 - t5) * h * h;
+                    const double H3 = 10.0 * t3 - 15.0 * t4 + 6.0 * t5;
+                    const double H4 = (-4.0 * t3 + 7.0 * t4 - 3.0 * t5) * h;
+                    const double H5 = 0.5 * (t3 - 2.0 * t4 + t5) * h * h;
+                    OdeState<N>  yi{};
+                    for (std::size_t i = kPhi; i < N; ++i) {
+                        yi[i] = H0 * ya[i] + H1 * dA[i] + H2 * ddA[i] + H3 * yb[i] + H4 * dB[i] + H5 * ddB[i];
+                    }
+                    emit(k, poly.at(tau), unpack(yi.data() + kPhi), noiseOf(yi));
+                }
+            }
+            A   = B;
+            dA  = dB;
+            ddA = ddB;
+        };
+        (void)integrateRkf78Steps<N>(f, start, y, tEnd, onStep, opt, &st);
+        add();
+    }
+    stats_ = total;
+}
+
+void NumericalPropagator::propagateGridWithCovariance(double                     start,
+                                                      double                     step,
+                                                      const Mat6&                P0,
+                                                      std::span<StateCovariance> out,
+                                                      double                     accelerationNoisePsd) const {
+    auto emit = [&](std::size_t k, const StateVector& s, const Mat6& phi, const Mat6& Q) {
+        out[k].state      = s;
+        out[k].covariance = add(congruence(phi, P0), Q);
+    };
+    if (accelerationNoisePsd > 0.0) {
+        variationalGrid<78>(start, step, out.size(), accelerationNoisePsd, emit);
+    } else {
+        variationalGrid<42>(start, step, out.size(), accelerationNoisePsd, emit);
+    }
+}
+
+std::vector<StateCovariance> NumericalPropagator::propagateGridWithCovariance(double      start,
+                                                                              double      step,
+                                                                              std::size_t count,
+                                                                              const Mat6& P0,
+                                                                              double      accelerationNoisePsd) const {
+    std::vector<StateCovariance> out(count);
+    propagateGridWithCovariance(start, step, P0, out, accelerationNoisePsd);
+    return out;
+}
+
+void NumericalPropagator::propagateGridStm(double                 start,
+                                           double                 step,
+                                           std::span<StateVector> states,
+                                           std::span<Mat6>        stm) const {
+    if (states.size() != stm.size()) {
+        throw Error("NumericalPropagator::propagateGridStm: states and stm must have the same size");
+    }
+    variationalGrid<42>(start,
+                        step,
+                        states.size(),
+                        0.0,
+                        [&](std::size_t k, const StateVector& s, const Mat6& phi, const Mat6&) {
+                            states[k] = s;
+                            stm[k]    = phi;
+                        });
 }
 
 void NumericalPropagator::propagateGrid(double start, double step, std::span<StateVector> out) const {

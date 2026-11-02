@@ -18,8 +18,7 @@
 
 #pragma once
 
-#include <array>
-
+#include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 
 /// Satellite-centered orbital frames. Each function returns the rotation from
@@ -41,8 +40,6 @@ namespace astro {
 [[nodiscard]] StateVector relativeStateRic(const StateVector& chief, const StateVector& deputy) noexcept;
 /// Inverse of relativeStateRic: inertial deputy state from a relative RIC state.
 [[nodiscard]] StateVector deputyFromRelativeRic(const StateVector& chief, const StateVector& relRic) noexcept;
-
-using Mat6 = std::array<std::array<double, 6>, 6>;
 
 /// Rotate a 6x6 position/velocity covariance by a (static) 3x3 frame rotation:
 /// P' = diag(R, R) P diag(R, R)^T.

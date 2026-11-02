@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "astro/core/constants.h"
+#include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 #include "astro/ephemeris/ephemeris.h"
 #include "astro/orbit/integrators.h"
@@ -44,6 +45,11 @@ public:
     /// (1, v, totalAcceleration) with a step of 1e-5 |r| / |v| seconds (about 0.01 s in LEO), which
     /// is accurate to roughly 1e-9 relative for orbital forces. Override it for an exact form.
     [[nodiscard]] virtual Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const;
+
+    /// acceleration(t, r, v), and its partial derivatives with respect to position (dadr) and
+    /// velocity (dadv), for the state transition matrix. The default uses central differences
+    /// (12 extra acceleration evaluations); override it with an exact form where one exists.
+    virtual Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const;
 };
 
 /// Central body gravity: point mass plus zonal harmonics J2..Jn.
@@ -60,7 +66,9 @@ public:
                           const Mat3&         toBodyFrame = Mat3::identity());
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
     /// Exact (point mass and zonal terms).
-    [[nodiscard]] Vec3   jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
+    [[nodiscard]] Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
+    /// Exact gravity gradient; no velocity dependence.
+    Vec3                 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
     [[nodiscard]] double mu() const noexcept { return mu_; }
 
 private:
@@ -77,6 +85,8 @@ class ThirdBodyForce final : public ForceModel {
 public:
     ThirdBodyForce(Body body, double muBody, std::shared_ptr<const Ephemeris> ephemeris, const Time& epoch);
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
+    /// Exact tidal gradient; no velocity dependence.
+    Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
 
 private:
     Body                             body_;
@@ -94,10 +104,18 @@ public:
         , j0_(j0) {}
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
     [[nodiscard]] Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
+    /// Zero: the unmodeled acceleration depends on time only.
+    Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
 
 private:
     Vec3 a0_;
     Vec3 j0_;
+};
+
+/// A state and its 6x6 position/velocity covariance at one time.
+struct StateCovariance {
+    StateVector state;
+    Mat6        covariance;
 };
 
 /// Integrates the equations of motion with RKF7(8).
@@ -159,6 +177,35 @@ public:
     [[nodiscard]] std::vector<StateVector>   propagateGrid(double start, double step, std::size_t count) const;
     [[nodiscard]] std::vector<StateVector12> propagateGrid12(double start, double step, std::size_t count) const;
 
+    /// States and covariances at dt = start + k * step for k = 0 .. out.size() - 1 (step != 0).
+    ///
+    /// P0 is the covariance of the initial state: position and velocity in the propagation frame
+    /// (m^2, m^2/s, m^2/s^2). The state transition matrix Phi(t, epoch) is integrated with the
+    /// state from each force model's partials(), and P(t) = Phi P0 Phi^T + Q(t).
+    ///
+    /// The integrator takes exactly the steps of propagateGrid, so the states are identical to it.
+    /// Between steps Phi and Q are interpolated with quintic Hermite polynomials (values, first and
+    /// second derivatives at both ends of the step): relative error about 2e-9 at the default
+    /// tolerance and 4e-7 at relTol = 1e-9.
+    ///
+    /// Q(t) is the process noise from white, isotropic acceleration noise with power spectral
+    /// density accelerationNoisePsd (m^2/s^3), standing in for forces the model leaves out (drag,
+    /// solar pressure, higher harmonics). 0 gives the purely deterministic propagation.
+    void                                       propagateGridWithCovariance(double                     start,
+                                                                           double                     step,
+                                                                           const Mat6&                P0,
+                                                                           std::span<StateCovariance> out,
+                                                                           double                     accelerationNoisePsd = 0.0) const;
+    [[nodiscard]] std::vector<StateCovariance> propagateGridWithCovariance(double      start,
+                                                                           double      step,
+                                                                           std::size_t count,
+                                                                           const Mat6& P0,
+                                                                           double accelerationNoisePsd = 0.0) const;
+
+    /// States and state transition matrices Phi(t, epoch) at dt = start + k * step, as for
+    /// propagateGridWithCovariance. states and stm must have the same size.
+    void propagateGridStm(double start, double step, std::span<StateVector> states, std::span<Mat6> stm) const;
+
     /// Acceleration and jerk of the force models at state s, t seconds after the epoch.
     [[nodiscard]] StateVector12 withDerivatives(double t, const StateVector& s) const;
 
@@ -174,6 +221,8 @@ private:
     [[nodiscard]] OdeState<6> derivative(double t, const OdeState<6>& y) const;
     template <class Emit>
     void grid(double start, double step, std::size_t count, Emit&& emit) const;
+    template <std::size_t N, class Emit>
+    void variationalGrid(double start, double step, std::size_t count, double q, Emit&& emit) const;
 
     Time                                           epoch_;
     StateVector                                    s0_;

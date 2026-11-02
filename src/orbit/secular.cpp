@@ -192,7 +192,10 @@ void SecularPropagator::init() {
 }
 
 void SecularPropagator::fieldDerivatives(const Vec3& r, const Vec3& v, Vec3& a, Vec3& j) const noexcept {
-    detail::gravity<true>(r, v, J_.data(), J_.size(), zp_.mu, zp_.re, true, &a, &j);
+    detail::GravityPartials p;
+    detail::gravity<true>(r, J_.data(), J_.size(), zp_.mu, zp_.re, true, nullptr, &p);
+    a = p.acceleration;
+    j = p.jerk(v);
 }
 
 KeplerianElements SecularPropagator::elements(double dt) const {

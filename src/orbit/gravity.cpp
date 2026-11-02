@@ -55,21 +55,32 @@ constexpr LegendreFactors kLegendre;
 
 namespace detail {
 
-/// Zonal (and optionally point-mass) acceleration and, if WithJerk, its time derivative along v.
-/// Allocation-free: P_n(s), P_n'(s) and P_n''(s) are carried in a rolling window of two degrees.
+Mat3 GravityPartials::gradient() const noexcept {
+    return outer(U, rhat) + outer(W, w) + Mat3::identity() * c;
+}
+
+/// Point mass (if pointMass) plus zonal acceleration and, if WithPartials, the gradient in the
+/// factored form of GravityPartials. Allocation-free: P_n(s), P_n'(s) and P_n''(s) are carried in
+/// a rolling window of two degrees.
 ///
-///   a = mu / r^2 [ (cr - pm) r_hat + cz z_hat ],   s = z / r,   k_n = Jn (re / r)^n,
-///   cr = sum k_n ((n + 1) P_n + s P_n'),     cz = -sum k_n P_n',   pm = 1 with the point mass.
-template <bool WithJerk>
-void gravity(const Vec3&   r,
-             const Vec3&   v,
-             const double* J,
-             std::size_t   size,
-             double        mu,
-             double        re,
-             bool          pointMass,
-             Vec3*         acc,
-             Vec3*         jerk) noexcept {
+///   a = mu / r^2 [ cr r_hat + cz z_hat ],   s = z / r,   k_n = Jn (re / r)^n,
+///   cr = -pm + sum k_n ((n + 1) P_n + s P_n'),   cz = -sum k_n P_n',   pm = 1 with the point mass.
+///
+/// Differentiating along a velocity v, with r' = r_hat . v and s' = w . v, w = (z_hat - s r_hat) / r:
+///   cr' = Ar r' + As s',   Ar = -sum n k_n ((n + 1) P_n + s P_n') / r,  As = sum k_n ((n + 2) P_n' + s P_n'')
+///   cz' = Br r' + Bs s',   Br =  sum n k_n P_n' / r,                    Bs = -sum k_n P_n''
+/// which gives jerk = U (r_hat . v) + W (w . v) + c v with
+///   U = -(2 g / r)(cr r_hat + cz z_hat) + g (Ar r_hat + Br z_hat) - (g cr / r) r_hat,
+///   W = g (As r_hat + Bs z_hat),   c = g cr / r,   g = mu / r^2.
+template <bool WithPartials>
+void gravity(const Vec3&      r,
+             const double*    J,
+             std::size_t      size,
+             double           mu,
+             double           re,
+             bool             pointMass,
+             Vec3*            acc,
+             GravityPartials* partials) noexcept {
     const double invR = 1.0 / std::sqrt(dot(r, r));
     const Vec3   rhat = r * invR;
     const double s    = rhat.z;
@@ -79,12 +90,8 @@ void gravity(const Vec3&   r,
     double dP2 = 0.0, dP1 = 1.0;
     double ddP2 = 0.0, ddP1 = 0.0;
     double qn = q;
-    double cr = pointMass ? -1.0 : 0.0, cz = 0.0, crDot = 0.0, czDot = 0.0;
-    double rDot = 0.0, sDot = 0.0;
-    if constexpr (WithJerk) {
-        rDot = dot(rhat, v);
-        sDot = (v.z - s * rDot) * invR;
-    }
+    double cr = pointMass ? -1.0 : 0.0, cz = 0.0;
+    double Ar = 0.0, As = 0.0, Br = 0.0, Bs = 0.0;
     for (std::size_t n = 2; n < size; ++n) {
         const double dn  = static_cast<double>(n);
         const double an  = n < LegendreFactors::size ? kLegendre.a[n] : (2.0 * dn - 1.0) / dn;
@@ -92,7 +99,7 @@ void gravity(const Vec3&   r,
         const double P   = an * s * P1 - bn * P2;
         const double dP  = dP2 + (2.0 * dn - 1.0) * P1;
         double       ddP = 0.0;
-        if constexpr (WithJerk) {
+        if constexpr (WithPartials) {
             ddP = ddP2 + (2.0 * dn - 1.0) * dP1;
         }
         qn *= q;
@@ -101,50 +108,57 @@ void gravity(const Vec3&   r,
             const double fr  = (dn + 1.0) * P + s * dP;
             cr              += k * fr;
             cz              -= k * dP;
-            if constexpr (WithJerk) {
-                const double kDot  = -dn * k * rDot * invR;
-                crDot             += kDot * fr + k * sDot * ((dn + 2.0) * dP + s * ddP);
-                czDot             -= kDot * dP + k * sDot * ddP;
+            if constexpr (WithPartials) {
+                Ar -= dn * k * fr;
+                As += k * ((dn + 2.0) * dP + s * ddP);
+                Br += dn * k * dP;
+                Bs -= k * ddP;
             }
         }
         P2  = P1;
         P1  = P;
         dP2 = dP1;
         dP1 = dP;
-        if constexpr (WithJerk) {
+        if constexpr (WithPartials) {
             ddP2 = ddP1;
             ddP1 = ddP;
         }
     }
-    const double scale = mu * invR * invR;
+    const double g     = mu * invR * invR;
+    const Vec3   zhat  = {0.0, 0.0, 1.0};
+    const Vec3   accel = g * (cr * rhat + cz * zhat);
     if (acc) {
-        *acc = scale * (cr * rhat + Vec3{0.0, 0.0, cz});
+        *acc = accel;
     }
-    if constexpr (WithJerk) {
-        const double scaleDot = -2.0 * scale * rDot * invR;
-        const Vec3   rhatDot  = (v - rhat * rDot) * invR;
-        *jerk =
-            scaleDot * (cr * rhat + Vec3{0.0, 0.0, cz}) + scale * (crDot * rhat + cr * rhatDot + Vec3{0.0, 0.0, czDot});
+    if constexpr (WithPartials) {
+        Ar                     *= invR;
+        Br                     *= invR;
+        partials->acceleration  = accel;
+        partials->rhat          = rhat;
+        partials->w             = (zhat - s * rhat) * invR;
+        partials->c             = g * cr * invR;
+        partials->U             = -2.0 * invR * accel + g * (Ar * rhat + Br * zhat) - partials->c * rhat;
+        partials->W             = g * (As * rhat + Bs * zhat);
     }
 }
 
 template void
-gravity<false>(const Vec3&, const Vec3&, const double*, std::size_t, double, double, bool, Vec3*, Vec3*) noexcept;
+gravity<false>(const Vec3&, const double*, std::size_t, double, double, bool, Vec3*, GravityPartials*) noexcept;
 template void
-gravity<true>(const Vec3&, const Vec3&, const double*, std::size_t, double, double, bool, Vec3*, Vec3*) noexcept;
+gravity<true>(const Vec3&, const double*, std::size_t, double, double, bool, Vec3*, GravityPartials*) noexcept;
 
 } // namespace detail
 
 Vec3 zonalAcceleration(const Vec3& r, const std::vector<double>& J, double mu, double re) noexcept {
     Vec3 a;
-    detail::gravity<false>(r, Vec3{}, J.data(), J.size(), mu, re, false, &a, nullptr);
+    detail::gravity<false>(r, J.data(), J.size(), mu, re, false, &a, nullptr);
     return a;
 }
 
 Vec3 zonalJerk(const Vec3& r, const Vec3& v, const std::vector<double>& J, double mu, double re) noexcept {
-    Vec3 j;
-    detail::gravity<true>(r, v, J.data(), J.size(), mu, re, false, nullptr, &j);
-    return j;
+    detail::GravityPartials p;
+    detail::gravity<true>(r, J.data(), J.size(), mu, re, false, nullptr, &p);
+    return p.jerk(v);
 }
 
 void zonalAccelerationAndJerk(const Vec3&                r,
@@ -154,7 +168,21 @@ void zonalAccelerationAndJerk(const Vec3&                r,
                               Vec3&                      jerk,
                               double                     mu,
                               double                     re) noexcept {
-    detail::gravity<true>(r, v, J.data(), J.size(), mu, re, false, &acceleration, &jerk);
+    detail::GravityPartials p;
+    detail::gravity<true>(r, J.data(), J.size(), mu, re, false, nullptr, &p);
+    acceleration = p.acceleration;
+    jerk         = p.jerk(v);
+}
+
+Mat3 pointMassGradient(const Vec3& r, double mu) noexcept {
+    const double r2 = dot(r, r), rm = std::sqrt(r2);
+    return (outer(r, r) * (3.0 / r2) - Mat3::identity()) * (mu / (r2 * rm));
+}
+
+Mat3 zonalGradient(const Vec3& r, const std::vector<double>& J, double mu, double re) noexcept {
+    detail::GravityPartials p;
+    detail::gravity<true>(r, J.data(), J.size(), mu, re, false, nullptr, &p);
+    return p.gradient();
 }
 
 Vec3 j2Acceleration(const Vec3& r, double J2, double mu, double re) noexcept {

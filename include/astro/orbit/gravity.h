@@ -42,6 +42,15 @@ namespace astro {
                                      double                     mu = constants::gmEarth,
                                      double                     re = constants::earthRadiusEgm2008) noexcept;
 
+/// Gradient d(pointMassAcceleration)/dr = mu / |r|^3 (3 r_hat r_hat^T - I).
+[[nodiscard]] Mat3 pointMassGradient(const Vec3& r, double mu = constants::gmEarth) noexcept;
+
+/// Gradient d(zonalAcceleration)/dr (symmetric, exact).
+[[nodiscard]] Mat3 zonalGradient(const Vec3&                r,
+                                 const std::vector<double>& J,
+                                 double                     mu = constants::gmEarth,
+                                 double                     re = constants::earthRadiusEgm2008) noexcept;
+
 /// Time derivative of zonalAcceleration along the motion (r moving with velocity v). Exact.
 [[nodiscard]] Vec3 zonalJerk(const Vec3&                r,
                              const Vec3&                v,

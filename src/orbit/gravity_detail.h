@@ -24,17 +24,27 @@
 
 namespace astro::detail {
 
-/// Point mass (if pointMass) plus zonal J[2..size-1] acceleration and, if WithJerk, jerk, in one
-/// pass sharing the square root and Legendre recursion. Defined in gravity.cpp.
-template <bool WithJerk>
-void gravity(const Vec3&   r,
-             const Vec3&   v,
-             const double* J,
-             std::size_t   size,
-             double        mu,
-             double        re,
-             bool          pointMass,
-             Vec3*         acc,
-             Vec3*         jerk) noexcept;
+/// Acceleration and its gradient G = d(acceleration)/dr in factored form
+/// G = U rhat^T + W w^T + c I, so that the jerk along a velocity v is G v.
+struct GravityPartials {
+    Vec3   acceleration;
+    Vec3   U, W, rhat, w;
+    double c{0.0};
+
+    [[nodiscard]] Vec3 jerk(const Vec3& v) const noexcept { return U * dot(rhat, v) + W * dot(w, v) + c * v; }
+    [[nodiscard]] Mat3 gradient() const noexcept;
+};
+
+/// Point mass (if pointMass) plus zonal J[2..size-1] acceleration and, if WithPartials, its
+/// gradient, in one pass sharing the square root and Legendre recursion. Defined in gravity.cpp.
+template <bool WithPartials>
+void gravity(const Vec3&      r,
+             const double*    J,
+             std::size_t      size,
+             double           mu,
+             double           re,
+             bool             pointMass,
+             Vec3*            acc,
+             GravityPartials* partials) noexcept;
 
 } // namespace astro::detail

@@ -100,6 +100,9 @@ struct AdaptiveOptions {
     double minStep{1e-6};
     double maxStep{1e30};
     int    maxSteps{10000000};
+    /// Only the first errorComponents components enter the error control (e.g. the state but not
+    /// an attached state transition matrix). Default: all.
+    std::size_t errorComponents{static_cast<std::size_t>(-1)};
 };
 
 struct AdaptiveStats {
@@ -176,10 +179,12 @@ OdeState<N> integrateRkf78Steps(F&&                    f,
             for (int s = 0; s < 13; ++s) {
                 acc += b8[s] * k[static_cast<std::size_t>(s)][i];
             }
-            yn[i]            += h * acc;
-            const double err  = h * 41.0 / 840.0 * (k[0][i] + k[10][i] - k[11][i] - k[12][i]);
-            const double sc   = opt.absTol + opt.relTol * std::max(std::abs(y[i]), std::abs(yn[i]));
-            errNorm           = std::max(errNorm, std::abs(err) / sc);
+            yn[i] += h * acc;
+            if (i < opt.errorComponents) {
+                const double err = h * 41.0 / 840.0 * (k[0][i] + k[10][i] - k[11][i] - k[12][i]);
+                const double sc  = opt.absTol + opt.relTol * std::max(std::abs(y[i]), std::abs(yn[i]));
+                errNorm          = std::max(errNorm, std::abs(err) / sc);
+            }
         }
         if (errNorm <= 1.0) {
             onStep(t, static_cast<const OdeState<N>&>(y), t + h, static_cast<const OdeState<N>&>(yn));

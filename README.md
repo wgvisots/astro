@@ -104,6 +104,22 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DASTRO_BUILD_BENCHMARKS=ON && cmake -
 build/bench/astro_propagation_bench 86400 10 100      # X seconds, Y seconds, number of states
 ```
 
+### Covariance
+
+`propagateGridWithCovariance` carries a 6x6 position/velocity covariance along the grid. The state
+transition matrix is integrated with the state using exact gravity partials (same steps, so the
+states are identical to `propagateGrid`), and P(t) = Phi P0 Phi^T + Q(t). Q is optional process
+noise: white acceleration noise with a power spectral density in m^2/s^3. `propagateGridStm`
+returns Phi itself. Expect about 6x the cost of the states alone (8x with process noise).
+
+```cpp
+AdaptiveOptions opt;
+opt.relTol = 1e-9;   // ~0.2 m worst case over 4 h
+opt.absTol = 1e-6;
+NumericalPropagator prop(epoch, state, {std::make_shared<GravityField>(std::vector<double>{0, 0, constants::J2, 0, constants::J4})}, opt);
+std::vector<StateCovariance> out = prop.propagateGridWithCovariance(0.0, 10.0, 1441, P0, 1e-9);
+```
+
 ## External data
 
 The library never touches the network. `scripts/fetch_iers_data.sh` downloads the files below
