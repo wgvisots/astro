@@ -68,7 +68,16 @@ auto passes = findPasses(sgp4ItrsFunction(sgp4, eop), g, utc, utc + 86400.0, deg
 
 ## External data
 
-The library never touches the network. You supply:
+The library never touches the network. `scripts/fetch_iers_data.sh` downloads the files below
+(`--c04` and `--de440s` add the optional ones; `--max-age DAYS` makes it cron-friendly). Each file is
+checked before it replaces the previous copy:
+
+```sh
+scripts/fetch_iers_data.sh -o data            # finals2000A.all, Leap_Second.dat, leap-seconds.list
+scripts/fetch_iers_data.sh -o data --all      # plus eopc04.1962-now and de440s.bsp
+```
+
+You supply:
 - **Leap seconds**: a table through 2017 (TAI−UTC = 37 s) is built in. Install a newer one with
   `setLeapSecondTable(LeapSecondTable::load("Leap_Second.dat"))`.
 - **Earth orientation (UT1−UTC, polar motion, dX/dY)**: `EopTable::loadFinals2000A(...)` or `loadC04(...)`,
