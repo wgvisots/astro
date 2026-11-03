@@ -148,7 +148,8 @@ struct ConsistencyCheck {
 checkConsistency(const StateEstimate& prior, const StateEstimate& next, const TrackerOptions& options = {});
 
 /// Latest-wins tracking of an upstream filter's estimates with a consistency check per delivery.
-/// Not safe to use from several threads at once; use one tracker per thread.
+/// Like the standard containers: const member functions (current, predict, predictGrid, options)
+/// may be called concurrently, while update() needs exclusive access.
 class EstimateTracker {
 public:
     explicit EstimateTracker(TrackerOptions options = {});

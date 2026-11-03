@@ -149,10 +149,11 @@ TEST(NumericalGrid, MatchesStoppingAtEachOutput) {
         EXPECT_EQ(grid.front(), prop.propagate(start));
     }
     // The grid never takes more steps than the error control asks for, whatever the output spacing.
-    (void)prop.propagateGrid(0.0, 1.0, 5401);
-    const int gridSteps = prop.lastStats().accepted;
-    (void)prop.propagate(5400.0);
-    EXPECT_LE(gridSteps, prop.lastStats().accepted + 1);
+    AdaptiveStats gridStats, endStats;
+    (void)prop.propagateGrid(0.0, 1.0, 5401, &gridStats);
+    (void)prop.propagate(5400.0, &endStats);
+    EXPECT_GT(gridStats.accepted, 0);
+    EXPECT_LE(gridStats.accepted, endStats.accepted + 1);
 }
 
 TEST(NumericalGrid, DefaultToleranceInterpolationAddsLittleError) {

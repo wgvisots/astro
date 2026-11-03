@@ -278,7 +278,7 @@ struct SepticHermite {
 } // namespace
 
 template <class Emit>
-void NumericalPropagator::grid(double start, double step, std::size_t count, Emit&& emit) const {
+void NumericalPropagator::grid(double start, double step, std::size_t count, AdaptiveStats* stats, Emit&& emit) const {
     if (count == 0) {
         return;
     }
@@ -327,7 +327,9 @@ void NumericalPropagator::grid(double start, double step, std::size_t count, Emi
         (void)integrateRkf78Steps<6>(f, start, y, tEnd, onStep, opt_, &st);
         add();
     }
-    stats_ = total;
+    if (stats) {
+        *stats = total;
+    }
 }
 
 // ------------------------------------------------------------ variational equations
@@ -382,7 +384,12 @@ Mat6 unpack(const double* y) noexcept {
 } // namespace
 
 template <std::size_t N, class Emit>
-void NumericalPropagator::variationalGrid(double start, double step, std::size_t count, double q, Emit&& emit) const {
+void NumericalPropagator::variationalGrid(double         start,
+                                          double         step,
+                                          std::size_t    count,
+                                          double         q,
+                                          AdaptiveStats* stats,
+                                          Emit&&         emit) const {
     static_assert(N == 42 || N == 78);
     constexpr bool withNoise = N == 78;
     if (count == 0) {
@@ -546,39 +553,44 @@ void NumericalPropagator::variationalGrid(double start, double step, std::size_t
         (void)integrateRkf78Steps<N>(f, start, y, tEnd, onStep, opt, &st);
         add();
     }
-    stats_ = total;
+    if (stats) {
+        *stats = total;
+    }
 }
 
 void NumericalPropagator::propagateGridWithCovariance(double                     start,
                                                       double                     step,
                                                       const Mat6&                P0,
                                                       std::span<StateCovariance> out,
-                                                      double                     accelerationNoisePsd) const {
+                                                      double                     accelerationNoisePsd,
+                                                      AdaptiveStats*             stats) const {
     auto emit = [&](std::size_t k, const StateVector& s, const Mat6& phi, const Mat6& Q) {
         out[k].state      = s;
         out[k].covariance = add(congruence(phi, P0), Q);
     };
     if (accelerationNoisePsd > 0.0) {
-        variationalGrid<78>(start, step, out.size(), accelerationNoisePsd, emit);
+        variationalGrid<78>(start, step, out.size(), accelerationNoisePsd, stats, emit);
     } else {
-        variationalGrid<42>(start, step, out.size(), accelerationNoisePsd, emit);
+        variationalGrid<42>(start, step, out.size(), accelerationNoisePsd, stats, emit);
     }
 }
 
-std::vector<StateCovariance> NumericalPropagator::propagateGridWithCovariance(double      start,
-                                                                              double      step,
-                                                                              std::size_t count,
-                                                                              const Mat6& P0,
-                                                                              double      accelerationNoisePsd) const {
+std::vector<StateCovariance> NumericalPropagator::propagateGridWithCovariance(double         start,
+                                                                              double         step,
+                                                                              std::size_t    count,
+                                                                              const Mat6&    P0,
+                                                                              double         accelerationNoisePsd,
+                                                                              AdaptiveStats* stats) const {
     std::vector<StateCovariance> out(count);
-    propagateGridWithCovariance(start, step, P0, out, accelerationNoisePsd);
+    propagateGridWithCovariance(start, step, P0, out, accelerationNoisePsd, stats);
     return out;
 }
 
 void NumericalPropagator::propagateGridStm(double                 start,
                                            double                 step,
                                            std::span<StateVector> states,
-                                           std::span<Mat6>        stm) const {
+                                           std::span<Mat6>        stm,
+                                           AdaptiveStats*         stats) const {
     if (states.size() != stm.size()) {
         throw Error("NumericalPropagator::propagateGridStm: states and stm must have the same size");
     }
@@ -586,31 +598,40 @@ void NumericalPropagator::propagateGridStm(double                 start,
                         step,
                         states.size(),
                         0.0,
+                        stats,
                         [&](std::size_t k, const StateVector& s, const Mat6& phi, const Mat6&) {
                             states[k] = s;
                             stm[k]    = phi;
                         });
 }
 
-void NumericalPropagator::propagateGrid(double start, double step, std::span<StateVector> out) const {
-    grid(start, step, out.size(), [&](std::size_t k, double, const StateVector& s) { out[k] = s; });
+void NumericalPropagator::propagateGrid(double                 start,
+                                        double                 step,
+                                        std::span<StateVector> out,
+                                        AdaptiveStats*         stats) const {
+    grid(start, step, out.size(), stats, [&](std::size_t k, double, const StateVector& s) { out[k] = s; });
 }
 
-void NumericalPropagator::propagateGrid12(double start, double step, std::span<StateVector12> out) const {
-    grid(start, step, out.size(), [&](std::size_t k, double t, const StateVector& s) {
+void NumericalPropagator::propagateGrid12(double                   start,
+                                          double                   step,
+                                          std::span<StateVector12> out,
+                                          AdaptiveStats*           stats) const {
+    grid(start, step, out.size(), stats, [&](std::size_t k, double t, const StateVector& s) {
         out[k] = withDerivatives(t, s);
     });
 }
 
-std::vector<StateVector> NumericalPropagator::propagateGrid(double start, double step, std::size_t count) const {
+std::vector<StateVector>
+NumericalPropagator::propagateGrid(double start, double step, std::size_t count, AdaptiveStats* stats) const {
     std::vector<StateVector> out(count);
-    propagateGrid(start, step, out);
+    propagateGrid(start, step, out, stats);
     return out;
 }
 
-std::vector<StateVector12> NumericalPropagator::propagateGrid12(double start, double step, std::size_t count) const {
+std::vector<StateVector12>
+NumericalPropagator::propagateGrid12(double start, double step, std::size_t count, AdaptiveStats* stats) const {
     std::vector<StateVector12> out(count);
-    propagateGrid12(start, step, out);
+    propagateGrid12(start, step, out, stats);
     return out;
 }
 
@@ -626,12 +647,13 @@ StateVector12 NumericalPropagator::withDerivatives(double t, const StateVector& 
     return {s.r, s.v, a, j};
 }
 
-StateVector12 NumericalPropagator::propagate12(double dt) const {
-    return withDerivatives(dt, propagate(dt));
+StateVector12 NumericalPropagator::propagate12(double dt, AdaptiveStats* stats) const {
+    return withDerivatives(dt, propagate(dt, stats));
 }
 
-std::vector<StateVector12> NumericalPropagator::propagate12(const std::vector<double>& dts) const {
-    const std::vector<StateVector> states = propagate(dts);
+std::vector<StateVector12> NumericalPropagator::propagate12(const std::vector<double>& dts,
+                                                            AdaptiveStats*             stats) const {
+    const std::vector<StateVector> states = propagate(dts, stats);
     std::vector<StateVector12>     out;
     out.reserve(states.size());
     for (std::size_t i = 0; i < states.size(); ++i) {
@@ -640,11 +662,11 @@ std::vector<StateVector12> NumericalPropagator::propagate12(const std::vector<do
     return out;
 }
 
-StateVector NumericalPropagator::propagate(double dt) const {
-    return propagate(std::vector<double>{dt}).front();
+StateVector NumericalPropagator::propagate(double dt, AdaptiveStats* stats) const {
+    return propagate(std::vector<double>{dt}, stats).front();
 }
 
-std::vector<StateVector> NumericalPropagator::propagate(const std::vector<double>& dts) const {
+std::vector<StateVector> NumericalPropagator::propagate(const std::vector<double>& dts, AdaptiveStats* stats) const {
     std::vector<StateVector> out(dts.size());
     std::vector<std::size_t> order(dts.size());
     std::iota(order.begin(), order.end(), 0);
@@ -675,7 +697,9 @@ std::vector<StateVector> NumericalPropagator::propagate(const std::vector<double
     const auto split = std::find_if(order.begin(), order.end(), [&](std::size_t i) { return dts[i] >= 0.0; });
     run(split, order.end());
     run(std::make_reverse_iterator(split), std::make_reverse_iterator(order.begin()));
-    stats_ = total;
+    if (stats) {
+        *stats = total;
+    }
     return out;
 }
 

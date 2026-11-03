@@ -169,17 +169,28 @@ public:
                                                   double               J2   = constants::J2,
                                                   double               J4   = constants::J4);
 
+    // Every propagation call takes an optional `stats` out-parameter for the integrator's step
+    // counts. The propagator itself is immutable, so all member functions may be called
+    // concurrently on a shared instance (provided its force models are thread-safe; the library's
+    // are).
+
     /// State dt seconds after the epoch (negative dt propagates backward).
-    [[nodiscard]] StateVector propagate(double dt) const;
-    [[nodiscard]] StateVector propagate(const Time& t) const { return propagate(t - epoch_); }
+    [[nodiscard]] StateVector propagate(double dt, AdaptiveStats* stats = nullptr) const;
+    [[nodiscard]] StateVector propagate(const Time& t, AdaptiveStats* stats = nullptr) const {
+        return propagate(t - epoch_, stats);
+    }
     /// States at several offsets (any order), integrating once in each direction.
-    [[nodiscard]] std::vector<StateVector> propagate(const std::vector<double>& dts) const;
+    [[nodiscard]] std::vector<StateVector> propagate(const std::vector<double>& dts,
+                                                     AdaptiveStats*             stats = nullptr) const;
 
     /// 12-component state dt seconds after the epoch; acceleration and jerk come from the force
     /// models (including any unmodeled acceleration).
-    [[nodiscard]] StateVector12              propagate12(double dt) const;
-    [[nodiscard]] StateVector12              propagate12(const Time& t) const { return propagate12(t - epoch_); }
-    [[nodiscard]] std::vector<StateVector12> propagate12(const std::vector<double>& dts) const;
+    [[nodiscard]] StateVector12 propagate12(double dt, AdaptiveStats* stats = nullptr) const;
+    [[nodiscard]] StateVector12 propagate12(const Time& t, AdaptiveStats* stats = nullptr) const {
+        return propagate12(t - epoch_, stats);
+    }
+    [[nodiscard]] std::vector<StateVector12> propagate12(const std::vector<double>& dts,
+                                                         AdaptiveStats*             stats = nullptr) const;
 
     /// States at dt = start + k * step for k = 0 .. out.size() - 1 (step != 0), written into `out`.
     ///
@@ -188,11 +199,13 @@ public:
     /// degree-7 Hermite polynomial that matches position, velocity, acceleration and jerk at both
     /// ends of the step. The cost therefore hardly depends on `step`. Positions agree with
     /// propagate(dts) to about the integrator tolerance (micrometres in LEO with the defaults).
-    void propagateGrid(double start, double step, std::span<StateVector> out) const;
+    void propagateGrid(double start, double step, std::span<StateVector> out, AdaptiveStats* stats = nullptr) const;
     /// As propagateGrid, with acceleration and jerk from the force models at each output.
-    void propagateGrid12(double start, double step, std::span<StateVector12> out) const;
-    [[nodiscard]] std::vector<StateVector>   propagateGrid(double start, double step, std::size_t count) const;
-    [[nodiscard]] std::vector<StateVector12> propagateGrid12(double start, double step, std::size_t count) const;
+    void propagateGrid12(double start, double step, std::span<StateVector12> out, AdaptiveStats* stats = nullptr) const;
+    [[nodiscard]] std::vector<StateVector>
+    propagateGrid(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
+    [[nodiscard]] std::vector<StateVector12>
+    propagateGrid12(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
 
     /// States and covariances at dt = start + k * step for k = 0 .. out.size() - 1 (step != 0).
     ///
@@ -212,16 +225,22 @@ public:
                                                                            double                     step,
                                                                            const Mat6&                P0,
                                                                            std::span<StateCovariance> out,
-                                                                           double                     accelerationNoisePsd = 0.0) const;
-    [[nodiscard]] std::vector<StateCovariance> propagateGridWithCovariance(double      start,
-                                                                           double      step,
-                                                                           std::size_t count,
-                                                                           const Mat6& P0,
-                                                                           double accelerationNoisePsd = 0.0) const;
+                                                                           double                     accelerationNoisePsd = 0.0,
+                                                                           AdaptiveStats*             stats = nullptr) const;
+    [[nodiscard]] std::vector<StateCovariance> propagateGridWithCovariance(double         start,
+                                                                           double         step,
+                                                                           std::size_t    count,
+                                                                           const Mat6&    P0,
+                                                                           double         accelerationNoisePsd = 0.0,
+                                                                           AdaptiveStats* stats = nullptr) const;
 
     /// States and state transition matrices Phi(t, epoch) at dt = start + k * step, as for
     /// propagateGridWithCovariance. states and stm must have the same size.
-    void propagateGridStm(double start, double step, std::span<StateVector> states, std::span<Mat6> stm) const;
+    void propagateGridStm(double                 start,
+                          double                 step,
+                          std::span<StateVector> states,
+                          std::span<Mat6>        stm,
+                          AdaptiveStats*         stats = nullptr) const;
 
     /// Acceleration and jerk of the force models at state s, t seconds after the epoch.
     [[nodiscard]] StateVector12 withDerivatives(double t, const StateVector& s) const;
@@ -231,15 +250,15 @@ public:
     /// Input jerk minus the force models' at the epoch (zero for a 6-component start).
     [[nodiscard]] const Vec3& jerkResidual() const noexcept { return dj0_; }
 
-    [[nodiscard]] const Time&          epoch() const noexcept { return epoch_; }
-    [[nodiscard]] const AdaptiveStats& lastStats() const noexcept { return stats_; }
+    [[nodiscard]] const Time& epoch() const noexcept { return epoch_; }
 
 private:
     [[nodiscard]] OdeState<6> derivative(double t, const OdeState<6>& y) const;
     template <class Emit>
-    void grid(double start, double step, std::size_t count, Emit&& emit) const;
+    void grid(double start, double step, std::size_t count, AdaptiveStats* stats, Emit&& emit) const;
     template <std::size_t N, class Emit>
-    void variationalGrid(double start, double step, std::size_t count, double q, Emit&& emit) const;
+    void
+    variationalGrid(double start, double step, std::size_t count, double q, AdaptiveStats* stats, Emit&& emit) const;
 
     Time                                           epoch_;
     StateVector                                    s0_;
@@ -247,7 +266,6 @@ private:
     AdaptiveOptions                                opt_;
     Vec3                                           da0_;
     Vec3                                           dj0_;
-    mutable AdaptiveStats                          stats_;
 };
 
 } // namespace astro

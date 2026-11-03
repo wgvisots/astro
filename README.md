@@ -177,6 +177,10 @@ You supply:
   `NumericalPropagator::j2j4(epoch, state, Frame::GCRS)`, `TrackerOptions::frame`, or
   `poleOfDateMatrix` for a hand-built `GravityField`. TOD, TEME and CIRS need no rotation.
   `EstimateTracker` also expresses predictions in the of-date frame of their own time.
+- Thread safety: propagators, ephemerides and the other library objects are immutable after
+  construction (the SPK reader locks internally), so const member functions may be called from
+  many threads on a shared instance. `setLeapSecondTable` swaps the table atomically.
+  `EstimateTracker::update` needs exclusive access. ThreadSanitizer runs clean on the test suite.
 - Celestial frames use the IERS 2010 CIO-based chain. The equinox-based frames are also available
   for interoperability.
 
