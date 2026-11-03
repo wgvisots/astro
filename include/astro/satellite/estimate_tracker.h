@@ -49,21 +49,30 @@ struct StateEstimate {
     Mat6        covariance;
 };
 
-/// Which residual decides ConsistencyCheck::consistent. Both statistics are always reported.
+/// Which residual decides ConsistencyCheck::consistent. All three statistics are always reported.
+///
+/// Measured with sampled priors (LEO, SSO, HEO, near-equatorial, polar and retrograde orbits; 20 m /
+/// 2 cm/s and 100 m / 0.1 m/s priors; gaps of 0.5, 2 and 4 h) at a nominal false-alarm rate of 1e-3:
+/// Elements and Position kept the nominal rate in every case; PositionVelocity reached 0.06 at 4 h
+/// for 20 m / 2 cm/s and 0.34 for 100 m / 0.1 m/s, from the Cartesian linearization.
 enum class ConsistencyTest {
-    /// Position residual against the predicted position covariance (3 degrees of freedom). Holds its
-    /// nominal false-alarm rate even 4 h out with 100 m / 0.1 m/s priors (measured, LEO). Misses a
-    /// velocity change until it has moved the position, e.g. a burn just before the delivery.
+    /// Position residual against the predicted position covariance (3 degrees of freedom). Robust,
+    /// but blind to a velocity change until it has moved the position by several sigma: it missed a
+    /// 0.5 m/s burn 20 s before the delivery entirely, and caught a 0.1 m/s in-track burn 15 min
+    /// before a 30 min gap 40% of the time (Elements: 100% in both cases).
     Position,
-    /// Position and velocity residual against the full predicted covariance (6 degrees of freedom).
-    /// Also sees velocity changes, but Cartesian linear covariance propagation stops describing the
-    /// error distribution once the propagated uncertainty grows: measured false-alarm rates at a
-    /// nominal 1e-3 were 1e-3 up to 2 h and 0.06 at 4 h for 20 m / 2 cm/s priors, and 0.011 at
-    /// 2 h for 100 m / 0.1 m/s priors.
+    /// Position and velocity residual against the full Cartesian predicted covariance (6 degrees of
+    /// freedom). As sensitive as Elements, but over-alarms once the propagated uncertainty is large
+    /// (see above); fine while gap and prior uncertainty are both small.
     PositionVelocity,
+    /// Recommended. Position and velocity residual in equinoctial elements (a, h, k, p, q, mean
+    /// longitude), against the predicted covariance mapped into elements (6 degrees of freedom). The
+    /// error stays nearly linear in elements (it grows mostly in mean longitude), so this has the
+    /// sensitivity of PositionVelocity with the nominal false-alarm rate of Position.
+    Elements,
 };
 
-BOOST_DESCRIBE_ENUM(ConsistencyTest, Position, PositionVelocity)
+BOOST_DESCRIBE_ENUM(ConsistencyTest, Position, PositionVelocity, Elements)
 
 /// Writes "ConsistencyTest::<enumerator>", or "ConsistencyTest::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, ConsistencyTest value);
@@ -86,7 +95,7 @@ struct TrackerOptions {
     double accelerationNoisePsd{0.0};
     /// A delivery is flagged inconsistent when the selected test's p-value falls below this.
     double          alarmProbability{1e-3};
-    ConsistencyTest test{ConsistencyTest::Position};
+    ConsistencyTest test{ConsistencyTest::Elements};
 };
 
 /// How a new estimate compares with the previous one propagated to its epoch.
@@ -100,17 +109,21 @@ struct ConsistencyCheck {
     double      dt{0.0};   ///< new epoch minus previous epoch (s)
     StateVector predicted; ///< previous estimate propagated to the new epoch
     Mat6        predictedCovariance{};
-    Vec3        positionResidualRic;       ///< new - predicted position along radial, in-track, cross-track (m)
-    Vec3        velocityResidualRic;       ///< new - predicted inertial velocity in the same axes (m/s)
-    Vec3        positionSigmaRic;          ///< predicted 1-sigma position along R, I, C (m)
-    Vec3        velocitySigmaRic;          ///< predicted 1-sigma velocity along R, I, C (m/s)
-    double      mahalanobis2{0.0};         ///< 6-D squared distance
-    double      positionMahalanobis2{0.0}; ///< position-only (3-D) squared distance
-    double      pValue{1.0};               ///< P(chi^2 with 6 dof >= mahalanobis2)
-    double      positionPValue{1.0};       ///< P(chi^2 with 3 dof >= positionMahalanobis2)
-    bool        valid{false};              ///< false if the predicted covariance is not positive definite
-    bool        consistent{false};         ///< valid and the selected test's p-value >= alarmProbability
-    bool        replaced{false};           ///< whether the tracker took the new estimate (it is not older)
+    Vec3        positionResidualRic;        ///< new - predicted position along radial, in-track, cross-track (m)
+    Vec3        velocityResidualRic;        ///< new - predicted inertial velocity in the same axes (m/s)
+    Vec3        positionSigmaRic;           ///< predicted 1-sigma position along R, I, C (m)
+    Vec3        velocitySigmaRic;           ///< predicted 1-sigma velocity along R, I, C (m/s)
+    double      mahalanobis2{0.0};          ///< 6-D squared distance
+    double      positionMahalanobis2{0.0};  ///< position-only (3-D) squared distance
+    double      pValue{1.0};                ///< P(chi^2 with 6 dof >= mahalanobis2)
+    double      positionPValue{1.0};        ///< P(chi^2 with 3 dof >= positionMahalanobis2)
+    double      elementsMahalanobis2{0.0};  ///< 6-D squared distance in equinoctial elements
+    double      elementsPValue{1.0};        ///< P(chi^2 with 6 dof >= elementsMahalanobis2)
+    double      semiMajorAxisResidual{0.0}; ///< new - predicted osculating semi-major axis (m)
+    double      semiMajorAxisSigma{0.0};    ///< predicted 1-sigma of the semi-major axis (m)
+    bool        valid{false};               ///< false if the predicted covariance is not positive definite
+    bool        consistent{false};          ///< valid and the selected test's p-value >= alarmProbability
+    bool        replaced{false};            ///< whether the tracker took the new estimate (it is not older)
 };
 
 /// Survival function of the chi-square distribution with 3 and 6 degrees of freedom, P(X >= x).

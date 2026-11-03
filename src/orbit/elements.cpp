@@ -179,6 +179,37 @@ StateVector equinoctialToState(const EquinoctialElements& q, double mu) {
     return elementsToState(equinoctialToKeplerian(q), mu);
 }
 
+Mat6 stateToEquinoctialJacobian(const StateVector& s, double mu) {
+    const double hr = 1e-7 * norm(s.r);
+    const double hv = 1e-7 * norm(s.v);
+    Mat6         J{};
+    for (std::size_t j = 0; j < 6; ++j) {
+        StateVector  plus = s, minus = s;
+        double&      cp              = j < 3 ? (j == 0   ? plus.r.x
+                                                : j == 1 ? plus.r.y
+                                                         : plus.r.z)
+                                             : (j == 3   ? plus.v.x
+                                                : j == 4 ? plus.v.y
+                                                         : plus.v.z);
+        double&      cm              = j < 3 ? (j == 0   ? minus.r.x
+                                                : j == 1 ? minus.r.y
+                                                         : minus.r.z)
+                                             : (j == 3   ? minus.v.x
+                                                : j == 4 ? minus.v.y
+                                                         : minus.v.z);
+        const double h               = j < 3 ? hr : hv;
+        cp                          += h;
+        cm                          -= h;
+        const EquinoctialElements a  = stateToEquinoctial(plus, mu);
+        const EquinoctialElements b  = stateToEquinoctial(minus, mu);
+        const double d[6] = {a.a - b.a, a.h - b.h, a.k - b.k, a.p - b.p, a.q - b.q, wrapPi(a.lambda - b.lambda)};
+        for (std::size_t i = 0; i < 6; ++i) {
+            J[i][j] = d[i] / (2.0 * h);
+        }
+    }
+    return J;
+}
+
 double orbitalPeriod(double a, double mu) noexcept {
     return constants::twoPi * std::sqrt(a * a * a / mu);
 }

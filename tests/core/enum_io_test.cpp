@@ -112,7 +112,8 @@ TEST(EnumIo, WritesInvalidValue) {
     EXPECT_EQ(str(invalid<Sgp4Gravity>(3)), "Sgp4Gravity::INVALID_VALUE");
     EXPECT_EQ(str(invalid<Sgp4OpsMode>(2)), "Sgp4OpsMode::INVALID_VALUE");
     EXPECT_EQ(str(invalid<HigherOrderMode>(2)), "HigherOrderMode::INVALID_VALUE");
-    EXPECT_EQ(str(invalid<ConsistencyTest>(2)), "ConsistencyTest::INVALID_VALUE");
+    EXPECT_EQ(str(ConsistencyTest::Elements), "ConsistencyTest::Elements");
+    EXPECT_EQ(str(invalid<ConsistencyTest>(3)), "ConsistencyTest::INVALID_VALUE");
 }
 
 TEST(EnumIo, FieldWidthAppliesToWholeToken) {
@@ -159,5 +160,5 @@ TEST(EnumIo, AgreesWithBoostDescribe) {
     checkAgainstDescribe<Sgp4Gravity>("Sgp4Gravity", 3);
     checkAgainstDescribe<Sgp4OpsMode>("Sgp4OpsMode", 2);
     checkAgainstDescribe<HigherOrderMode>("HigherOrderMode", 2);
-    checkAgainstDescribe<ConsistencyTest>("ConsistencyTest", 2);
+    checkAgainstDescribe<ConsistencyTest>("ConsistencyTest", 3);
 }

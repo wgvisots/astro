@@ -19,10 +19,13 @@
 #include "astro/satellite/estimate_tracker.h"
 
 #include <cmath>
+#include <limits>
 #include <memory>
 
 #include "../core/enum_io.h"
+#include "astro/core/angle.h"
 #include "astro/core/error.h"
+#include "astro/orbit/elements.h"
 #include "astro/satellite/orbital_frames.h"
 
 namespace astro {
@@ -55,6 +58,41 @@ NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions&
 
 namespace {
 
+/// Squared Mahalanobis distance between `next` and the prediction in equinoctial elements, with
+/// the predicted covariance mapped through the element Jacobian. Retrograde orbits are first
+/// mirrored (180 deg about x) so that the elements stay far from their i = 180 deg singularity.
+/// Also fills the semi-major axis residual and sigma.
+std::optional<double> elementsDistance(const StateCovariance& pred, StateVector next, double mu, ConsistencyCheck& c) {
+    StateVector p = pred.state;
+    Mat6        P = pred.covariance;
+    if (cross(p.r, p.v).z < 0.0) {
+        const Mat3 M{1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0};
+        p    = {M * p.r, M * p.v};
+        next = {M * next.r, M * next.v};
+        P    = rotateCovariance(P, M);
+    }
+    const Vec3 wn = normalized(cross(next.r, next.v));
+    if (wn.z < -0.5) {
+        // After the mirroring the prediction has i <= 90 deg; a new state with i > 120 deg is beyond
+        // any plausible covariance (and near the element singularity): infinitely far.
+        c.semiMajorAxisResidual = 0.0;
+        c.semiMajorAxisSigma    = 0.0;
+        return std::numeric_limits<double>::infinity();
+    }
+    const EquinoctialElements   ep = stateToEquinoctial(p, mu);
+    const EquinoctialElements   en = stateToEquinoctial(next, mu);
+    const Mat6                  Pe = congruence(stateToEquinoctialJacobian(p, mu), P);
+    const std::array<double, 6> d{en.a - ep.a,
+                                  en.h - ep.h,
+                                  en.k - ep.k,
+                                  en.p - ep.p,
+                                  en.q - ep.q,
+                                  wrapPi(en.lambda - ep.lambda)};
+    c.semiMajorAxisResidual = d[0];
+    c.semiMajorAxisSigma    = Pe[0][0] > 0.0 ? std::sqrt(Pe[0][0]) : 0.0;
+    return mahalanobis2(d, Pe, 6);
+}
+
 ConsistencyCheck compare(const StateCovariance& pred, const StateEstimate& next, double dt, const TrackerOptions& opt) {
     ConsistencyCheck c;
     c.dt                  = dt;
@@ -73,15 +111,22 @@ ConsistencyCheck compare(const StateCovariance& pred, const StateEstimate& next,
     const std::array<double, 6> d{dr.x, dr.y, dr.z, dv.x, dv.y, dv.z};
     const auto                  d6 = mahalanobis2(d, pred.covariance, 6);
     const auto                  d3 = mahalanobis2(d, pred.covariance, 3);
-    c.valid                        = d6.has_value() && d3.has_value();
+    const auto                  de = elementsDistance(pred, next.state, opt.mu, c);
+    c.valid                        = d6.has_value() && d3.has_value() && de.has_value();
     if (c.valid) {
         c.mahalanobis2         = *d6;
         c.positionMahalanobis2 = *d3;
+        c.elementsMahalanobis2 = *de;
         c.pValue               = chiSquareSurvival6(*d6);
         c.positionPValue       = chiSquareSurvival3(*d3);
-        c.consistent = (opt.test == ConsistencyTest::Position ? c.positionPValue : c.pValue) >= opt.alarmProbability;
+        c.elementsPValue       = chiSquareSurvival6(*de);
+        const double p         = opt.test == ConsistencyTest::Position         ? c.positionPValue
+                               : opt.test == ConsistencyTest::PositionVelocity ? c.pValue
+                                                                               : c.elementsPValue;
+        c.consistent           = p >= opt.alarmProbability;
     } else {
-        c.mahalanobis2 = c.positionMahalanobis2 = c.pValue = c.positionPValue = std::nan("");
+        c.mahalanobis2 = c.positionMahalanobis2 = c.elementsMahalanobis2 = std::nan("");
+        c.pValue = c.positionPValue = c.elementsPValue = std::nan("");
     }
     return c;
 }

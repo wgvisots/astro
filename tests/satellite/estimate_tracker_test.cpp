@@ -26,6 +26,7 @@
 #include "astro/core/error.h"
 #include "astro/orbit/elements.h"
 #include "astro/satellite/estimate_tracker.h"
+#include "astro/satellite/orbital_frames.h"
 #include "test_util.h"
 
 using namespace astro;
@@ -110,6 +111,8 @@ TEST(EstimateTracker, ConsistentDeliveryPasses) {
     EXPECT_DOUBLE_EQ(c.dt, 1800.0);
     EXPECT_LT(norm(c.positionResidualRic), 1.0); // only the integrator error at relTol 1e-9
     EXPECT_LT(c.mahalanobis2, 1e-2);
+    EXPECT_LT(c.elementsMahalanobis2, 1e-2);
+    EXPECT_LT(std::abs(c.semiMajorAxisResidual), 0.1);
     // The in-track uncertainty grows fastest.
     EXPECT_GT(c.positionSigmaRic.y, c.positionSigmaRic.x);
     EXPECT_GT(c.positionSigmaRic.y, c.positionSigmaRic.z);
@@ -160,6 +163,29 @@ TEST(EstimateTracker, PositionTestHoldsOverLongGaps) {
     EXPECT_NEAR(sum / samples, 3.0, 0.45); // standard error ~0.14
 }
 
+TEST(EstimateTracker, ElementTestHoldsOverLongGaps) {
+    // Same setting: the full 6-D distance in elements stays chi-square with 6 dof, while the
+    // Cartesian 6-D distance does not (measured mean ~78 here).
+    const StateVector                s0 = leo();
+    const Mat6                       P0 = diagonal(1e4, 1e-2);
+    const double                     dt = 14400.0;
+    const StateEstimate              truth{kEpoch + dt, truthAt(s0, dt), diagonal(1e-6, 1e-12)};
+    std::mt19937_64                  rng(98);
+    std::normal_distribution<double> n01(0.0, 1.0);
+    const int                        samples  = 300;
+    double                           elements = 0.0, cartesian = 0.0;
+    for (int k = 0; k < samples; ++k) {
+        StateVector s  = s0;
+        s.r           += Vec3{n01(rng), n01(rng), n01(rng)} * 100.0;
+        s.v           += Vec3{n01(rng), n01(rng), n01(rng)} * 0.1;
+        const auto c   = checkConsistency({kEpoch, s, P0}, truth);
+        elements      += c.elementsMahalanobis2;
+        cartesian     += c.mahalanobis2;
+    }
+    EXPECT_NEAR(elements / samples, 6.0, 0.9); // standard error ~0.2
+    EXPECT_GT(cartesian / samples, 20.0);
+}
+
 TEST(EstimateTracker, ManoeuvreIsFlaggedInTrack) {
     // A 0.5 m/s along-track burn 15 minutes after the prior.
     const StateVector s0    = leo();
@@ -180,9 +206,9 @@ TEST(EstimateTracker, ManoeuvreIsFlaggedInTrack) {
     EXPECT_LT(std::abs(c.positionResidualRic.z), 1.0);
 }
 
-TEST(EstimateTracker, VelocityTestSeesAFreshBurn) {
-    // A 0.5 m/s burn 20 s before the delivery has barely moved the position: only the
-    // position-and-velocity test sees it.
+TEST(EstimateTracker, FreshBurnNeedsAVelocityTest) {
+    // A 0.5 m/s burn 20 s before the delivery has barely moved the position: the element test
+    // (default) and the Cartesian 6-D test see it, the position test does not.
     const StateVector s0    = leo();
     StateVector       burn  = truthAt(s0, 1780.0);
     burn.v                 += normalized(burn.v) * 0.5;
@@ -192,10 +218,62 @@ TEST(EstimateTracker, VelocityTestSeesAFreshBurn) {
     const StateVector   after = makePropagator({kEpoch + 1780.0, burn, Mat6{}}, tight).propagate(20.0);
     const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
     const StateEstimate next{kEpoch + 1800.0, after, diagonal(25.0, 1e-5)};
-    TrackerOptions      full;
-    full.test = ConsistencyTest::PositionVelocity;
-    EXPECT_TRUE(checkConsistency(prior, next).consistent); // default: position only
+    TrackerOptions      position, full;
+    position.test = ConsistencyTest::Position;
+    full.test     = ConsistencyTest::PositionVelocity;
+    EXPECT_EQ(TrackerOptions{}.test, ConsistencyTest::Elements);
+    EXPECT_FALSE(checkConsistency(prior, next).consistent);
     EXPECT_FALSE(checkConsistency(prior, next, full).consistent);
+    EXPECT_TRUE(checkConsistency(prior, next, position).consistent);
+}
+
+TEST(EstimateTracker, SemiMajorAxisResidualOfABurn) {
+    // An in-track burn dv changes a by about 2 a^2 v dv / mu (vis-viva).
+    const StateVector s0    = leo();
+    StateVector       burn  = truthAt(s0, 1500.0);
+    const double      dv    = 0.3;
+    const double      a     = stateToElements(burn).a;
+    const double      da    = 2.0 * a * a * norm(burn.v) * dv / constants::gmEarth;
+    burn.v                 += normalized(burn.v) * dv;
+    TrackerOptions tight;
+    tight.integrator.relTol = 1e-13;
+    tight.integrator.absTol = 1e-10;
+    const StateVector after = makePropagator({kEpoch + 1500.0, burn, Mat6{}}, tight).propagate(300.0);
+    const auto        c =
+        checkConsistency({kEpoch, s0, diagonal(100.0, 1e-4)}, {kEpoch + 1800.0, after, diagonal(25.0, 1e-5)});
+    EXPECT_NEAR(c.semiMajorAxisResidual / da, 1.0, 0.05);
+    EXPECT_GT(c.semiMajorAxisSigma, 0.0);
+    EXPECT_GT(c.semiMajorAxisResidual / c.semiMajorAxisSigma, 10.0);
+    EXPECT_FALSE(c.consistent);
+}
+
+TEST(EstimateTracker, ElementTestIsMirrorInvariant) {
+    // Retrograde orbits are mirrored (180 deg about x) before the element conversion. Mirroring the
+    // whole problem by hand gives a prograde orbit with the same zonal dynamics (J2 and J4 are even),
+    // so the distance must agree.
+    const StateVector s0  = elementsToState({7000 * km, 0.002, deg2rad(140.0), 0.5, 1.0, 2.0});
+    StateVector       sp  = s0;
+    sp.r                 += Vec3{30.0, -10.0, 5.0};
+    sp.v                 += Vec3{0.01, 0.02, -0.01};
+    Mat6 P                = diagonal(400.0, 4e-4);
+    P[0][4] = P[4][0] = 0.05;
+    const StateEstimate prior{kEpoch, sp, P};
+    const StateEstimate next{kEpoch + 3600.0, truthAt(s0, 3600.0), diagonal(1e-6, 1e-12)};
+    const Mat3          M{1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0};
+    auto                mirror = [&](const StateEstimate& e) {
+        return StateEstimate{
+            e.epoch,
+                           {M * e.state.r, M * e.state.v},
+            rotateCovariance(e.covariance, M)
+        };
+    };
+    const auto c  = checkConsistency(prior, next);
+    const auto cm = checkConsistency(mirror(prior), mirror(next));
+    ASSERT_TRUE(c.valid);
+    ASSERT_TRUE(cm.valid);
+    EXPECT_GT(c.elementsMahalanobis2, 1.0);
+    EXPECT_NEAR(c.elementsMahalanobis2 / cm.elementsMahalanobis2, 1.0, 1e-6);
+    EXPECT_NEAR(c.mahalanobis2 / cm.mahalanobis2, 1.0, 1e-6);
 }
 
 TEST(EstimateTracker, LatestWins) {

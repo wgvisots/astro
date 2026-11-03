@@ -135,6 +135,36 @@ TEST(Gravity, ForceModelPartialsMatchDefaultDifferences) {
     EXPECT_LT(maxRelDiff(G, Gfd), 1e-5);
 }
 
+TEST(Covariance, EquinoctialJacobianIsTheLinearization) {
+    // J dx against the element change for small dx, including circular, near-equatorial, eccentric,
+    // polar and (non-equatorial) retrograde orbits.
+    const KeplerianElements orbits[] = {
+        {7000 * km,  0.001, deg2rad(51.6),  0.3, 0.6, 0.9},
+        {7000 * km,  0.0,   deg2rad(0.3),   0.0, 0.0, 1.0},
+        {26000 * km, 0.6,   deg2rad(63.4),  1.0, 4.7, 0.5},
+        {7100 * km,  0.002, deg2rad(90.0),  2.0, 0.3, 0.1},
+        {7000 * km,  0.001, deg2rad(140.0), 0.5, 1.0, 2.0}
+    };
+    for (const auto& el : orbits) {
+        const StateVector s          = elementsToState(el);
+        const Mat6        J          = stateToEquinoctialJacobian(s);
+        const double      dx[6]      = {0.7, -0.4, 0.2, 3e-4, -2e-4, 5e-4}; // m, m/s
+        StateVector       t          = s;
+        t.r                         += Vec3{dx[0], dx[1], dx[2]};
+        t.v                         += Vec3{dx[3], dx[4], dx[5]};
+        const EquinoctialElements a = stateToEquinoctial(s), b = stateToEquinoctial(t);
+        const double d[6] = {b.a - a.a, b.h - a.h, b.k - a.k, b.p - a.p, b.q - a.q, wrapPi(b.lambda - a.lambda)};
+        for (std::size_t i = 0; i < 6; ++i) {
+            double lin = 0.0, scale = 0.0;
+            for (std::size_t j = 0; j < 6; ++j) {
+                lin   += J[i][j] * dx[j];
+                scale += std::abs(J[i][j] * dx[j]);
+            }
+            EXPECT_NEAR(lin, d[i], 1e-5 * scale + 1e-15) << "element " << i << ", e = " << el.e << ", i = " << el.i;
+        }
+    }
+}
+
 TEST(Covariance, StmMatchesFiniteDifferences) {
     // Columns of Phi against central differences of two propagations with perturbed initial states.
     const StateVector s0    = leo();

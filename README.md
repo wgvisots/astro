@@ -134,11 +134,13 @@ if (auto check = tracker.update({epoch, state, P}); check && !check->consistent)
 auto ahead = tracker.predictGrid(0.0, 10.0, 1441);    // states + covariances, 4 h at 10 s
 ```
 
-The check reports residuals and predicted 1-sigma along radial / in-track / cross-track, and
-Mahalanobis distances with chi-square p-values for position (3-D) and position + velocity (6-D).
-`TrackerOptions::test` picks which one sets `consistent`: position by default, which keeps its
-false-alarm rate over long gaps; position + velocity also catches a burn just before the delivery
-but over-alarms once the propagated uncertainty is large.
+The check reports residuals and predicted 1-sigma along radial / in-track / cross-track, the
+semi-major axis residual, and Mahalanobis distances with chi-square p-values for position (3-D),
+position + velocity (6-D, Cartesian) and position + velocity in equinoctial elements (6-D).
+`TrackerOptions::test` picks which one sets `consistent`. The default, `Elements`, kept its nominal
+false-alarm rate in Monte Carlo runs out to 4 h for LEO, SSO, HEO, near-equatorial, polar and
+retrograde orbits, and catches a burn even just before the delivery. The Cartesian 6-D test is as
+sensitive but over-alarms over long gaps, and the position test misses fresh velocity changes.
 
 ## External data
 

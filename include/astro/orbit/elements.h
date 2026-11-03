@@ -19,6 +19,7 @@
 #pragma once
 
 #include "astro/core/constants.h"
+#include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 
 /// Classical and equinoctial orbital elements. SI units, radians.
@@ -68,6 +69,12 @@ struct EquinoctialElements {
 [[nodiscard]] KeplerianElements   equinoctialToKeplerian(const EquinoctialElements& eq);
 [[nodiscard]] EquinoctialElements stateToEquinoctial(const StateVector& s, double mu = constants::gmEarth);
 [[nodiscard]] StateVector         equinoctialToState(const EquinoctialElements& eq, double mu = constants::gmEarth);
+
+/// Partial derivatives of stateToEquinoctial: row i is element i (a, h, k, p, q, lambda), column j
+/// is state component j (x, y, z, vx, vy, vz). Central differences with steps of 1e-7 |r| and
+/// 1e-7 |v| (relative accuracy ~1e-8); lambda differences are wrapped. Use it to map a position /
+/// velocity covariance P into elements as J P J^T. Same singularity as stateToEquinoctial.
+[[nodiscard]] Mat6 stateToEquinoctialJacobian(const StateVector& s, double mu = constants::gmEarth);
 
 /// Orbital period (s) for a > 0.
 [[nodiscard]] double orbitalPeriod(double a, double mu = constants::gmEarth) noexcept;
