@@ -26,13 +26,16 @@ namespace astro {
 
 /// Right ascension [0, 2pi), declination [-pi/2, pi/2] (rad), and distance (any unit).
 struct RaDec {
-    double ra{0.0};
-    double dec{0.0};
-    double distance{1.0};
+    double ra{0.0};       ///< right ascension, rad, [0, 2pi)
+    double dec{0.0};      ///< declination, rad, [-pi/2, pi/2]
+    double distance{1.0}; ///< distance (any unit; 1 for a direction)
 };
 
-[[nodiscard]] RaDec       raDecFromVector(const Vec3& v) noexcept;
-[[nodiscard]] Vec3        vectorFromRaDec(const RaDec& rd) noexcept;
+/// RA/Dec and length of a vector; RA is 0 on the z axis.
+[[nodiscard]] RaDec raDecFromVector(const Vec3& v) noexcept;
+/// Vector of length `rd.distance` in the direction (ra, dec).
+[[nodiscard]] Vec3 vectorFromRaDec(const RaDec& rd) noexcept;
+/// Unit vector in the direction (ra, dec), rad.
 [[nodiscard]] inline Vec3 unitVectorFromRaDec(double ra, double dec) noexcept {
     return vectorFromRaDec({ra, dec, 1.0});
 }
@@ -46,12 +49,16 @@ struct RaDec {
 [[nodiscard]] Mat3 equatorialToEclipticMatrix(double eps) noexcept;
 /// Ecliptic coordinates of an equatorial vector (lon, lat as RaDec fields ra/dec).
 [[nodiscard]] RaDec equatorialToEcliptic(const Vec3& eq, double eps) noexcept;
-[[nodiscard]] Vec3  eclipticToEquatorial(const RaDec& ecl, double eps) noexcept;
+/// Equatorial vector from ecliptic coordinates (lon, lat, distance as RaDec
+/// fields ra/dec/distance): v_eq = R1(-eps) v_ecl.
+[[nodiscard]] Vec3 eclipticToEquatorial(const RaDec& ecl, double eps) noexcept;
 
 /// ICRS -> Galactic rotation matrix (Hipparcos definition, ESA 1997).
 [[nodiscard]] const Mat3& icrsToGalacticMatrix() noexcept;
 /// Galactic longitude/latitude (as RaDec ra/dec fields) from ICRS RA/Dec.
 [[nodiscard]] RaDec icrsToGalactic(double ra, double dec) noexcept;
+/// ICRS RA/Dec (as RaDec ra/dec fields, unit distance) from Galactic longitude
+/// `l` and latitude `b` (rad).
 [[nodiscard]] RaDec galacticToIcrs(double l, double b) noexcept;
 
 } // namespace astro

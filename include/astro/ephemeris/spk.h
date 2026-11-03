@@ -30,13 +30,13 @@ namespace astro {
 
 /// Description of one SPK segment.
 struct SpkSegmentInfo {
-    int         target{0};
-    int         center{0};
+    int         target{0};    ///< NAIF id of the target body
+    int         center{0};    ///< NAIF id of the center body
     int         frame{0};     ///< NAIF frame id (1 = J2000/ICRF)
     int         type{0};      ///< SPK data type
     double      startEt{0.0}; ///< TDB seconds past J2000
-    double      endEt{0.0};
-    std::string name;
+    double      endEt{0.0};   ///< end of coverage, TDB seconds past J2000
+    std::string name;         ///< segment name from the file (trailing blanks removed)
 };
 
 /// Reader for JPL/NAIF SPK (.bsp) ephemeris files, e.g. DE440/DE441.
@@ -48,17 +48,23 @@ struct SpkSegmentInfo {
 /// Records are read on demand; the file stays open. Thread-safe.
 class SpkEphemeris final : public Ephemeris {
 public:
+    /// Open the kernel at `path` and read its segment summaries. Throws astro::Error if the file
+    /// cannot be opened or read, is not a DAF/SPK file in IEEE format, or has no segments.
     explicit SpkEphemeris(const std::string& path);
     ~SpkEphemeris() override;
+    /// Move; the moved-from object may only be destroyed or assigned to.
     SpkEphemeris(SpkEphemeris&&) noexcept;
+    /// Move; the moved-from object may only be destroyed or assigned to.
     SpkEphemeris& operator=(SpkEphemeris&&) noexcept;
 
     [[nodiscard]] StateVector state(Body target, Body center, const Time& t) const override;
     /// State by NAIF id at an ephemeris time (TDB seconds past J2000); meters, m/s.
     [[nodiscard]] StateVector stateById(int target, int center, double et) const;
 
+    /// Summaries of all segments, in file order.
     [[nodiscard]] const std::vector<SpkSegmentInfo>& segments() const noexcept;
-    [[nodiscard]] bool                               bigEndian() const noexcept;
+    /// True if the file is big-endian (BIG-IEEE).
+    [[nodiscard]] bool bigEndian() const noexcept;
 
 private:
     struct Impl;

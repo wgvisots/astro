@@ -46,9 +46,9 @@ namespace astro {
 /// A state estimate: inertial position and velocity (z axis along the Earth's pole, e.g. GCRS) and
 /// their 6x6 covariance (m^2, m^2/s, m^2/s^2) at an epoch.
 struct StateEstimate {
-    Time        epoch;
-    StateVector state;
-    Mat6        covariance;
+    Time        epoch;      ///< time of the estimate
+    StateVector state;      ///< position (m) and velocity (m/s)
+    Mat6        covariance; ///< covariance of (r, v)
 };
 
 /// Which residual decides ConsistencyCheck::consistent. All three statistics are always reported.
@@ -90,8 +90,8 @@ struct TrackerOptions {
     Frame frame{Frame::GCRS};
     /// Zonal coefficients by degree (J[2] = J2, ...) for the gravity model; point mass included.
     std::vector<double> J{0.0, 0.0, constants::J2, 0.0, constants::J4};
-    double              mu{constants::gmEarth};
-    double              re{constants::earthRadiusEgm2008};
+    double              mu{constants::gmEarth};            ///< gravitational parameter (m^3/s^2)
+    double              re{constants::earthRadiusEgm2008}; ///< reference radius of J (m)
     /// Integrator settings. The default (relTol 1e-9) keeps LEO positions within ~0.2 m over 4 h.
     AdaptiveOptions integrator{[] {
         AdaptiveOptions o;
@@ -104,7 +104,7 @@ struct TrackerOptions {
     double accelerationNoisePsd{0.0};
     /// A delivery is flagged inconsistent when the selected test's p-value falls below this.
     double          alarmProbability{1e-3};
-    ConsistencyTest test{ConsistencyTest::Elements};
+    ConsistencyTest test{ConsistencyTest::Elements}; ///< the test that sets ConsistencyCheck::consistent
 };
 
 /// How a new estimate compares with the previous one propagated to its epoch.
@@ -115,9 +115,9 @@ struct TrackerOptions {
 /// conservative. A large d^2 means the new state is not where the previous estimate said it would
 /// be. See ConsistencyTest for which statistic sets `consistent`.
 struct ConsistencyCheck {
-    double      dt{0.0};   ///< new epoch minus previous epoch (s)
-    StateVector predicted; ///< previous estimate propagated to the new epoch
-    Mat6        predictedCovariance{};
+    double      dt{0.0};                    ///< new epoch minus previous epoch (s)
+    StateVector predicted;                  ///< previous estimate propagated to the new epoch
+    Mat6        predictedCovariance{};      ///< covariance of `predicted`, including process noise
     Vec3        positionResidualRic;        ///< new - predicted position along radial, in-track, cross-track (m)
     Vec3        velocityResidualRic;        ///< new - predicted inertial velocity in the same axes (m/s)
     Vec3        positionSigmaRic;           ///< predicted 1-sigma position along R, I, C (m)
@@ -135,9 +135,12 @@ struct ConsistencyCheck {
     bool        replaced{false};            ///< whether the tracker took the new estimate (it is not older)
 };
 
+/// @{
+
 /// Survival function of the chi-square distribution with 3 and 6 degrees of freedom, P(X >= x).
 [[nodiscard]] double chiSquareSurvival3(double x) noexcept;
 [[nodiscard]] double chiSquareSurvival6(double x) noexcept;
+/// @}
 
 /// The numerical propagator TrackerOptions describes, started from `e` (in options.frame): point
 /// mass and zonal field aligned with the true pole at e.epoch, with options.frame treated as
@@ -153,6 +156,7 @@ checkConsistency(const StateEstimate& prior, const StateEstimate& next, const Tr
 /// may be called concurrently, while update() needs exclusive access.
 class EstimateTracker {
 public:
+    /// Throws astro::Error if options.frame is not a celestial frame.
     explicit EstimateTracker(TrackerOptions options = {});
 
     /// Take a new estimate. If there is a current one, `next` is first checked against it; the
@@ -160,6 +164,7 @@ public:
     /// estimate, consistent or not, unless it is older than the current one (check.replaced).
     std::optional<ConsistencyCheck> update(const StateEstimate& next);
 
+    /// Whether an estimate has been taken yet.
     [[nodiscard]] bool hasEstimate() const noexcept { return current_.has_value(); }
     /// The current estimate. Throws astro::Error if there is none yet.
     [[nodiscard]] const StateEstimate& current() const;
@@ -168,8 +173,10 @@ public:
     [[nodiscard]] StateCovariance predict(const Time& t) const;
     /// States and covariances at current().epoch + start + k * step for k = 0 .. out.size() - 1.
     void predictGrid(double start, double step, std::span<StateCovariance> out) const;
+    /// As above, returning `count` predictions.
     [[nodiscard]] std::vector<StateCovariance> predictGrid(double start, double step, std::size_t count) const;
 
+    /// The settings given at construction.
     [[nodiscard]] const TrackerOptions& options() const noexcept { return opt_; }
 
 private:

@@ -71,8 +71,10 @@ BOOST_DESCRIBE_ENUM(Body,
 /// Writes "Body::<enumerator>", or "Body::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, Body value);
 
+/// Enumerator name of `b` (e.g. "Moon"), or "?" for any other value.
 [[nodiscard]] std::string_view toString(Body b) noexcept;
-[[nodiscard]] constexpr int    naifId(Body b) noexcept {
+/// NAIF integer ID of `b`.
+[[nodiscard]] constexpr int naifId(Body b) noexcept {
     return static_cast<int>(b);
 }
 
@@ -86,6 +88,7 @@ public:
     virtual ~Ephemeris() = default;
     /// State of `target` relative to `center` at time t (any scale; converted to TDB).
     [[nodiscard]] virtual StateVector state(Body target, Body center, const Time& t) const = 0;
+    /// Position (m) of `target` relative to `center` at time t: the position part of state().
     [[nodiscard]] Vec3 position(Body target, Body center, const Time& t) const { return state(target, center, t).r; }
 };
 

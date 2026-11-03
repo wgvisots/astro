@@ -31,6 +31,8 @@
 /// Ground-station geometry: look angles, range rate, Doppler, and pass prediction.
 namespace astro {
 
+/// Topocentric look angles from a site to a satellite, relative to the site's geodetic horizon
+/// (geometric: no refraction or light time).
 struct LookAngles {
     double az{0.0};        ///< azimuth, rad [0, 2pi), clockwise from north
     double el{0.0};        ///< elevation, rad
@@ -50,12 +52,12 @@ lookAngles(const StateVector& satItrs, const Geodetic& site, const Ellipsoid& el
 
 /// A visibility pass of a satellite over a site.
 struct Pass {
-    Time   aos; ///< acquisition of signal (rise above the mask)
-    Time   tca; ///< time of maximum elevation
-    Time   los; ///< loss of signal
-    double maxElevation{0.0};
-    double aosAzimuth{0.0};
-    double losAzimuth{0.0};
+    Time   aos;                       ///< acquisition of signal (rise above the mask)
+    Time   tca;                       ///< time of maximum elevation
+    Time   los;                       ///< loss of signal
+    double maxElevation{0.0};         ///< elevation at tca (rad)
+    double aosAzimuth{0.0};           ///< azimuth at aos (rad)
+    double losAzimuth{0.0};           ///< azimuth at los (rad)
     bool   startsBeforeWindow{false}; ///< already above the mask at the search start
     bool   endsAfterWindow{false};    ///< still above the mask at the search end
 };

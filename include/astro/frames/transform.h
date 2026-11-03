@@ -37,6 +37,7 @@
 /// TEME (the SGP4 output frame) available for interoperability.
 namespace astro {
 
+/// Reference frames handled by FrameTransformer. All are geocentric.
 enum class Frame {
     GCRS,  ///< Geocentric Celestial Reference System ("ECI")
     J2000, ///< mean equator and equinox of J2000.0 (EME2000), frame bias applied
@@ -54,12 +55,14 @@ BOOST_DESCRIBE_ENUM(Frame, GCRS, J2000, MOD, TOD, TEME, CIRS, TIRS, PEF, ITRS)
 /// Writes "Frame::<enumerator>", or "Frame::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, Frame value);
 
+/// Short name of a frame ("GCRS", "ITRS", ...), or "?" for an invalid value.
 [[nodiscard]] std::string_view toString(Frame f) noexcept;
 /// True for frames that rotate with the Earth (TIRS, PEF, ITRS).
 [[nodiscard]] bool isEarthFixed(Frame f) noexcept;
 
+/// Model options for FrameTransformer.
 struct FrameOptions {
-    PrecessionNutationModel model{PrecessionNutationModel::IAU2006_2000A};
+    PrecessionNutationModel model{PrecessionNutationModel::IAU2006_2000A}; ///< precession-nutation model
     /// Apply the EOP celestial pole offsets dX, dY.
     bool applyPoleOffsets{true};
 };
@@ -79,19 +82,29 @@ public:
     /// Earth's angular velocity vector expressed in frame f (zero for non-rotating frames).
     [[nodiscard]] Vec3 angularVelocity(Frame f) const noexcept;
 
+    /// Rotate a vector (any units): matrix(from, to) * r. No Earth-rotation term.
     [[nodiscard]] Vec3 transform(const Vec3& r, Frame from, Frame to) const noexcept;
     /// Position and velocity, including the Earth-rotation (omega x r) term for Earth-fixed frames.
     [[nodiscard]] StateVector transform(const StateVector& s, Frame from, Frame to) const noexcept;
 
-    [[nodiscard]] const Time&      tt() const noexcept { return tt_; }
-    [[nodiscard]] const Time&      ut1() const noexcept { return ut1_; }
+    /// The epoch in TT.
+    [[nodiscard]] const Time& tt() const noexcept { return tt_; }
+    /// The epoch in UT1.
+    [[nodiscard]] const Time& ut1() const noexcept { return ut1_; }
+    /// EOP used at this epoch (dX, dY zeroed if FrameOptions::applyPoleOffsets is false).
     [[nodiscard]] const EopValues& eop() const noexcept { return eop_; }
-    [[nodiscard]] const CipXY&     cip() const noexcept { return xy_; }
-    [[nodiscard]] double           cioLocator() const noexcept { return s_; }
-    [[nodiscard]] double           earthRotationAngle() const noexcept { return era_; }
-    [[nodiscard]] double           gast() const noexcept { return gast_; }
-    [[nodiscard]] double           gmst() const noexcept { return gmst_; }
-    [[nodiscard]] double           gmst82() const noexcept { return gmst82_; }
+    /// CIP X, Y in the GCRS including the EOP pole offsets dX, dY (rad).
+    [[nodiscard]] const CipXY& cip() const noexcept { return xy_; }
+    /// CIO locator s (rad).
+    [[nodiscard]] double cioLocator() const noexcept { return s_; }
+    /// Earth Rotation Angle, [0, 2pi) (rad).
+    [[nodiscard]] double earthRotationAngle() const noexcept { return era_; }
+    /// Greenwich Apparent Sidereal Time for FrameOptions::model, [0, 2pi) (rad).
+    [[nodiscard]] double gast() const noexcept { return gast_; }
+    /// Greenwich Mean Sidereal Time, IAU 2006, [0, 2pi) (rad).
+    [[nodiscard]] double gmst() const noexcept { return gmst_; }
+    /// Greenwich Mean Sidereal Time, IAU 1982 (the TEME definition), [0, 2pi) (rad).
+    [[nodiscard]] double gmst82() const noexcept { return gmst82_; }
 
 private:
     Time      tt_;
@@ -123,6 +136,11 @@ private:
 /// GCRS -> ITRS rotation matrix ("ECI to ECEF").
 [[nodiscard]] Mat3 gcrsToItrsMatrix(const Time& t, const EopProvider& eop, const FrameOptions& options = {});
 
+/// One-off conversions between GCRS, ITRS and TEME at epoch `t` (any time
+/// scale), with default FrameOptions. Velocities include the Earth-rotation
+/// term. Each call builds a FrameTransformer; reuse one for many conversions at
+/// the same epoch. Throws astro::Error if `eop` has no data at `t`.
+/// @{
 [[nodiscard]] Vec3        gcrsToItrs(const Vec3& r, const Time& t, const EopProvider& eop);
 [[nodiscard]] Vec3        itrsToGcrs(const Vec3& r, const Time& t, const EopProvider& eop);
 [[nodiscard]] StateVector gcrsToItrs(const StateVector& s, const Time& t, const EopProvider& eop);
@@ -131,8 +149,10 @@ private:
 [[nodiscard]] StateVector itrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
 [[nodiscard]] StateVector temeToGcrs(const StateVector& s, const Time& t, const EopProvider& eop);
 [[nodiscard]] StateVector gcrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
+/// @}
 
-/// Aliases using the common names.
+/// Aliases using the common names: ECI = GCRS, ECEF = ITRS.
+/// @{
 [[nodiscard]] inline Vec3 eciToEcef(const Vec3& r, const Time& t, const EopProvider& eop) {
     return gcrsToItrs(r, t, eop);
 }
@@ -145,5 +165,6 @@ private:
 [[nodiscard]] inline StateVector ecefToEci(const StateVector& s, const Time& t, const EopProvider& eop) {
     return itrsToGcrs(s, t, eop);
 }
+/// @}
 
 } // namespace astro

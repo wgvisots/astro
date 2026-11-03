@@ -33,6 +33,7 @@
 /// geocentric, in any common frame, in meters.
 namespace astro {
 
+/// Earth shadow model for shadow() and findEclipses().
 enum class ShadowModel {
     Cylindrical, ///< umbra only, Earth's shadow as a cylinder
     Conical,     ///< umbra and penumbra with the finite solar disk
@@ -43,11 +44,12 @@ BOOST_DESCRIBE_ENUM(ShadowModel, Cylindrical, Conical)
 /// Writes "ShadowModel::<enumerator>", or "ShadowModel::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, ShadowModel value);
 
+/// Where a satellite is relative to the Earth's shadow.
 enum class ShadowState {
-    Sunlit,
-    Penumbra,
-    Umbra,
-    Annular
+    Sunlit,   ///< the whole solar disk is visible
+    Penumbra, ///< the Earth hides part of the solar disk
+    Umbra,    ///< the Earth hides the whole solar disk
+    Annular   ///< the Earth's disk lies inside the solar disk (a ring of Sun stays visible)
 };
 
 BOOST_DESCRIBE_ENUM(ShadowState, Sunlit, Penumbra, Umbra, Annular)
@@ -55,9 +57,10 @@ BOOST_DESCRIBE_ENUM(ShadowState, Sunlit, Penumbra, Umbra, Annular)
 /// Writes "ShadowState::<enumerator>", or "ShadowState::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, ShadowState value);
 
+/// Result of shadow().
 struct ShadowResult {
-    ShadowState state{ShadowState::Sunlit};
-    double      illumination{1.0}; ///< fraction of the solar disk visible, 0..1
+    ShadowState state{ShadowState::Sunlit}; ///< shadow region (only Sunlit or Umbra for the cylindrical model)
+    double      illumination{1.0};          ///< fraction of the solar disk visible, 0..1
 };
 
 /// Shadow condition of a satellite at `sat` with the Sun at `sun` (geocentric).
@@ -72,12 +75,13 @@ struct ShadowResult {
 /// Solar beta angle (rad): elevation of the Sun above the orbit plane.
 [[nodiscard]] double betaAngle(const StateVector& sat, const Vec3& sun) noexcept;
 
+/// One eclipse found by findEclipses().
 struct EclipseInterval {
-    Time penumbraEntry;
-    Time umbraEntry; ///< equals penumbraEntry for the cylindrical model or a penumbral-only eclipse
-    Time umbraExit;
-    Time penumbraExit;
-    bool umbral{true}; ///< false for a penumbral-only (grazing) eclipse
+    Time penumbraEntry; ///< start of the eclipse (shadow entry for the cylindrical model)
+    Time umbraEntry;    ///< equals penumbraEntry for the cylindrical model or a penumbral-only eclipse
+    Time umbraExit;     ///< equals penumbraExit for the cylindrical model or a penumbral-only eclipse
+    Time penumbraExit;  ///< end of the eclipse
+    bool umbral{true};  ///< false for a penumbral-only (grazing) eclipse
 };
 
 /// Find eclipse intervals in [start, end] given geocentric satellite and Sun

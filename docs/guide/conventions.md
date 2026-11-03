@@ -16,9 +16,9 @@ std::cout << formatDms(lat) << '\n';
 ## Rotations
 
 Rotation matrices are passive (frame) rotations, as in the Explanatory Supplement
-[[ref:expsupp|Urban & Seidelmann (2013)]] and SOFA: `v_new = R3(theta) * v_old` re-expresses a fixed vector in
+[Urban & Seidelmann (2013)](https://aa.usno.navy.mil/publications/exp_supp) and SOFA: `v_new = R3(theta) * v_old` re-expresses a fixed vector in
 axes turned by theta. `Quat` converts to and from matrices (Shepperd's method
-[[ref:shepperd1978|Shepperd (1978)]]) and to and from all twelve Euler sequences.
+[Shepperd (1978)](https://doi.org/10.2514/3.55767b)) and to and from all twelve Euler sequences.
 
 ## Times and frames are explicit
 

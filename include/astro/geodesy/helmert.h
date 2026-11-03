@@ -33,9 +33,10 @@
 /// has the opposite rotation signs.
 namespace astro {
 
+/// Sign convention of the Helmert rotation angles.
 enum class HelmertConvention {
-    PositionVector,
-    CoordinateFrame
+    PositionVector, ///< rotation matrix R as in the header formula (IERS)
+    CoordinateFrame ///< R transposed (opposite rotation signs)
 };
 
 BOOST_DESCRIBE_ENUM(HelmertConvention, PositionVector, CoordinateFrame)
@@ -43,26 +44,28 @@ BOOST_DESCRIBE_ENUM(HelmertConvention, PositionVector, CoordinateFrame)
 /// Writes "HelmertConvention::<enumerator>", or "HelmertConvention::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, HelmertConvention value);
 
+/// Seven-parameter Helmert transformation (translation, rotation, scale).
 struct HelmertParams {
-    Vec3              t;      ///< translation (m)
-    Vec3              r;      ///< rotation angles (rad)
-    double            s{0.0}; ///< scale (unitless, e.g. 1.5 ppb -> 1.5e-9)
-    HelmertConvention convention{HelmertConvention::PositionVector};
+    Vec3              t;                                             ///< translation (m)
+    Vec3              r;                                             ///< rotation angles (rad)
+    double            s{0.0};                                        ///< scale (unitless, e.g. 1.5 ppb -> 1.5e-9)
+    HelmertConvention convention{HelmertConvention::PositionVector}; ///< sign convention of `r`
 };
 
 /// Time-dependent (14-parameter) Helmert transformation: parameters at epoch
 /// `epoch` (decimal years) plus their rates per year.
 struct HelmertTimeDependent {
-    HelmertParams p;
-    Vec3          tRate;      ///< m / yr
-    Vec3          rRate;      ///< rad / yr
-    double        sRate{0.0}; ///< 1 / yr
-    double        epoch{2010.0};
+    HelmertParams p;             ///< parameters at `epoch`
+    Vec3          tRate;         ///< m / yr
+    Vec3          rRate;         ///< rad / yr
+    double        sRate{0.0};    ///< 1 / yr
+    double        epoch{2010.0}; ///< reference epoch of `p`, decimal years
 
     /// The 7 parameters at a given epoch (decimal years).
     [[nodiscard]] HelmertParams at(double decimalYear) const noexcept;
 };
 
+/// Transform a position (m): X2 = X1 + T + s X1 + R X1.
 [[nodiscard]] Vec3 helmertTransform(const Vec3& x, const HelmertParams& p) noexcept;
 /// First-order inverse transformation (all parameters negated).
 [[nodiscard]] HelmertParams inverse(const HelmertParams& p) noexcept;

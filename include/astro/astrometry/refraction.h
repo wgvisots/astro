@@ -25,8 +25,8 @@ namespace astro {
 
 /// Meteorological conditions at the observer.
 struct Atmosphere {
-    double pressureHpa{1013.25};
-    double temperatureC{15.0};
+    double pressureHpa{1013.25};    ///< air pressure at the observer, hPa (0 = no refraction)
+    double temperatureC{15.0};      ///< air temperature, degrees Celsius
     double relativeHumidity{0.5};   ///< 0..1
     double wavelengthMicron{0.574}; ///< > 100 means radio
 };
@@ -34,9 +34,11 @@ struct Atmosphere {
 /// Refraction constants for the model  dZ = A tan Z + B tan^3 Z  (rad), computed as in SOFA/ERFA refco
 /// (Green 1987 / Hohenkerk & Sinclair). Valid for zenith distances up to ~75-80 deg.
 struct RefractionConstants {
-    double A{0.0};
-    double B{0.0};
+    double A{0.0}; ///< coefficient of tan Z (rad)
+    double B{0.0}; ///< coefficient of tan^3 Z (rad)
 };
+/// Refraction constants for the given conditions (inputs are clamped to safe
+/// ranges, as in SOFA refco).
 [[nodiscard]] RefractionConstants refractionConstants(const Atmosphere& atm) noexcept;
 
 /// Observed elevation from true elevation using the A/B model, with the SOFA

@@ -10,11 +10,11 @@ and m/s in GCRS axes. Bodies use their NAIF ids (`Body::Moon` is 301, `Body::Ear
 | `LowPrecisionEphemeris` | Sun better than 30" and 6e-5 in distance; Moon better than 6' and 0.14% (1950-2050, measured against DE440) | nothing |
 | `SpkEphemeris` | that of the kernel (reads it to 1e-12 relative) | a JPL SPK file such as `de440s.bsp` |
 
-The low-precision Sun follows Meeus [[ref:meeus|Meeus (1998)]] with a correction from the Earth-Moon
+The low-precision Sun follows Meeus [Meeus (1998)](../references.md) with a correction from the Earth-Moon
 barycentre to the Earth; the Moon is the truncated series in Montenbruck & Gill
-[[ref:montenbruck|Montenbruck & Gill (2000)]]. `SpkEphemeris` reads JPL SPK kernels (DAF files, segment
-types 2 and 3, either byte order) [[ref:naif-spk|NAIF SPK Required Reading]] such as DE440
-[[ref:de440|Park et al. (2021)]], chaining segments (Moon -> Earth-Moon barycentre -> Earth, ...) as
+[Montenbruck & Gill (2000)](https://doi.org/10.1007/978-3-642-58351-3). `SpkEphemeris` reads JPL SPK kernels (DAF files, segment
+types 2 and 3, either byte order) [NAIF SPK Required Reading](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html) such as DE440
+[Park et al. (2021)](https://doi.org/10.3847/1538-3881/abd414), chaining segments (Moon -> Earth-Moon barycentre -> Earth, ...) as
 needed. It matches the reference `jplephem` reader to 1e-12 relative.
 
 <!-- snippet: examples/sun_moon.cpp#ephemeris -->
@@ -56,7 +56,7 @@ refines each event with Brent's method to about 1 ms.
 ## Apparent and observed places
 
 For stars (`CatalogStar`: ICRS position, proper motion, parallax, radial velocity) and solar-system
-bodies, the library computes the full chain SOFA uses [[ref:sofa|SOFA]]: space motion, parallax,
+bodies, the library computes the full chain SOFA uses [SOFA](https://www.iausofa.org/): space motion, parallax,
 light deflection by the Sun, annual and diurnal aberration, precession-nutation, Earth rotation,
 polar motion, and optionally refraction:
 
@@ -69,9 +69,9 @@ They agree with ERFA's `atco13` to 1 mas without refraction and above 10 deg wit
 
 Refraction: `refractTrueToObserved` / `refractObservedToTrue` use the A tan z + B tan^3 z model
 with constants from pressure, temperature, humidity and wavelength (as SOFA's `refco`);
-`refractionBennett` [[ref:bennett1982|Bennett (1982)]] and `refractionSaemundsson`
-[[ref:saemundsson1986|Saemundsson (1986)]] are the simple formulas good to about 0.1' down to the horizon.
+`refractionBennett` [Bennett (1982)](https://doi.org/10.1017/S0373463300022037) and `refractionSaemundsson`
+[Saemundsson (1986), as given in Meeus (1998)](../references.md) are the simple formulas good to about 0.1' down to the horizon.
 
 Coordinates: `raDecFromVector`, `angularSeparation`, `positionAngle`, ecliptic conversions with the
-IAU 2006 obliquity, and ICRS <-> galactic with the Hipparcos matrix [[ref:hipparcos|ESA (1997)]].
+IAU 2006 obliquity, and ICRS <-> galactic with the Hipparcos matrix [ESA (1997)](https://ui.adsabs.harvard.edu/abs/1997ESASP1200.....E).
 Sidereal time: `localMeanSiderealTime`, `localApparentSiderealTime`, `hourAngle`.

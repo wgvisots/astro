@@ -1,8 +1,8 @@
 # Reference frames
 
 The celestial ("ECI") and terrestrial ("ECEF") frames, and the transformations between them,
-follow the IERS Conventions (2010) [[ref:iers2010|IERS Conventions (2010), ch. 5]] and match SOFA/ERFA
-[[ref:sofa|SOFA]] [[ref:erfa|ERFA]] to about a microarcsecond ([Accuracy](../accuracy.md)).
+follow the IERS Conventions (2010) [IERS Conventions (2010), ch. 5](https://www.iers.org/TN36) and match SOFA/ERFA
+[SOFA](https://www.iausofa.org/) [ERFA](https://github.com/liberfa/erfa) to about a microarcsecond ([Accuracy](../accuracy.md)).
 
 | `Frame` | What it is |
 |---|---|
@@ -10,7 +10,7 @@ follow the IERS Conventions (2010) [[ref:iers2010|IERS Conventions (2010), ch. 5
 | `J2000` | mean equator and equinox of J2000.0 (EME2000); GCRS plus a 20 mas frame bias |
 | `MOD` | mean equator and equinox of date (precession only) |
 | `TOD` | true equator and equinox of date (precession and nutation) |
-| `TEME` | true equator, mean equinox: the frame of SGP4 and two-line elements [[ref:vallado2006|Vallado et al. (2006)]] |
+| `TEME` | true equator, mean equinox: the frame of SGP4 and two-line elements [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/) |
 | `CIRS` | Celestial Intermediate Reference System (true equator, CIO origin) |
 | `TIRS` | Terrestrial Intermediate Reference System (Earth-fixed, before polar motion) |
 | `PEF` | pseudo Earth-fixed (equinox-based counterpart of TIRS) |
@@ -20,16 +20,16 @@ The main chain is the CIO-based transformation
 
     ITRS = W^T(xp, yp, s') * R3(ERA) * C(X + dX, Y + dY, s) * GCRS
 
-with the IAU 2006 precession [[ref:hilton2006|Hilton et al. (2006)]] and IAU 2000A nutation
-[[ref:capitaine2006|Capitaine & Wallace (2006)]], ERA the Earth rotation angle, and W the polar
+with the IAU 2006 precession [Hilton et al. (2006)](https://doi.org/10.1007/s10569-006-0001-2) and IAU 2000A nutation
+[Capitaine & Wallace (2006)](https://doi.org/10.1051/0004-6361:20054550), ERA the Earth rotation angle, and W the polar
 motion. The equinox-based frames (MOD, TOD, PEF) and TEME are available for interoperability.
-`PrecessionNutationModel::IAU2006_2000B` [[ref:mccarthy2003|McCarthy & Luzum (2003)]] is about 20x
+`PrecessionNutationModel::IAU2006_2000B` [McCarthy & Luzum (2003)](https://doi.org/10.1023/A:1021762727016) is about 20x
 faster (in `FrameTransformer`) and accurate to about 1 mas.
 
 ## Earth orientation data
 
 Earth-fixed transformations need UT1 - UTC, polar motion (xp, yp) and, for full accuracy, the
-celestial pole offsets (dX, dY) [[ref:iers-eop|IERS EOP]]. Pass an `EopProvider`:
+celestial pole offsets (dX, dY) [IERS EOP](https://www.iers.org/iers/en/dataproducts/earthorientationdata/eop). Pass an `EopProvider`:
 
 <!-- snippet: examples/frames.cpp#eop -->
 ```cpp

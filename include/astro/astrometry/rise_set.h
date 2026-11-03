@@ -30,10 +30,11 @@
 /// Rise, set, transit and twilight times, and lunar phase.
 namespace astro {
 
+/// Kind of event found by findElevationEvents().
 enum class SkyEventType {
-    Rise,
-    Set,
-    Transit
+    Rise,   ///< upward crossing of the threshold elevation
+    Set,    ///< downward crossing of the threshold elevation
+    Transit ///< local maximum of elevation
 };
 
 BOOST_DESCRIBE_ENUM(SkyEventType, Rise, Set, Transit)
@@ -41,9 +42,10 @@ BOOST_DESCRIBE_ENUM(SkyEventType, Rise, Set, Transit)
 /// Writes "SkyEventType::<enumerator>", or "SkyEventType::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, SkyEventType value);
 
+/// A rise, set or transit event.
 struct SkyEvent {
-    SkyEventType type;
-    Time         time;
+    SkyEventType type;      ///< kind of event
+    Time         time;      ///< time of the event, in the time scale of the search start
     double       elevation; ///< elevation function value at the event (rad)
 };
 
@@ -60,10 +62,11 @@ struct SkyEvent {
 /// Standard horizon for sunrise/sunset: upper limb with 34' refraction (-0.8333 deg).
 inline constexpr double kSunriseElevation = -0.8333 * constants::degToRad;
 
+/// Twilight definitions, by the Sun's elevation.
 enum class Twilight {
-    Civil,
-    Nautical,
-    Astronomical
+    Civil,       ///< Sun 6 deg below the horizon
+    Nautical,    ///< Sun 12 deg below the horizon
+    Astronomical ///< Sun 18 deg below the horizon
 };
 
 BOOST_DESCRIBE_ENUM(Twilight, Civil, Nautical, Astronomical)
@@ -96,13 +99,15 @@ bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider&
 [[nodiscard]] std::vector<SkyEvent>
 moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop, const Ephemeris& eph);
 
+/// Geocentric lunar phase quantities.
 struct MoonPhase {
     double phaseAngle{0.0};          ///< Sun-Moon-Earth angle (rad), 0 = full
     double illuminatedFraction{0.0}; ///< 0..1
     double elongation{0.0};          ///< Moon-Earth-Sun angle (rad)
     double age{0.0};                 ///< ecliptic longitude Moon - Sun, [0, 2pi): 0 new, pi/2 first quarter
-    bool   waxing{false};
+    bool   waxing{false};            ///< true while `age` < pi (new to full)
 };
+/// Geocentric phase of the Moon at `t`, from the Moon and Sun positions in `eph`.
 [[nodiscard]] MoonPhase moonPhase(const Time& t, const Ephemeris& eph);
 
 } // namespace astro

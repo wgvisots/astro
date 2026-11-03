@@ -32,7 +32,7 @@ namespace astro {
 ///   TAI - UTC = offset + (MJD_UTC - mjdRef) * rate   [seconds]
 /// The rate term is non-zero only for 1961-1971 ("rubber second" UTC).
 struct LeapSecondEntry {
-    int    year;
+    int    year;        ///< UTC year in which the step takes effect
     int    month;       ///< steps always occur on the 1st of a month
     double offset;      ///< seconds
     double mjdRef{0.0}; ///< reference MJD for the drift term
@@ -52,13 +52,18 @@ class LeapSecondTable {
 public:
     /// The built-in table.
     LeapSecondTable();
+    /// From explicit entries (sorted by date here) and an optional expiration
+    /// MJD. Throws astro::Error if `entries` is empty.
     explicit LeapSecondTable(std::vector<LeapSecondEntry> entries, std::optional<double> expiresMjd = std::nullopt);
 
+    /// The built-in table (same as the default constructor).
     [[nodiscard]] static LeapSecondTable builtin();
     /// Load from a file; the format is detected from its content. Entries before
     /// 1972 (absent from Leap_Second.dat and leap-seconds.list) are taken from
     /// the built-in table.
     [[nodiscard]] static LeapSecondTable load(const std::string& path);
+    /// As load(), from file contents already in memory. Throws astro::Error if
+    /// no entries are found (and, for tai-utc.dat, on a malformed line).
     [[nodiscard]] static LeapSecondTable parse(std::string_view content);
 
     /// TAI-UTC in seconds for the UTC calendar date and fraction of day.
@@ -67,6 +72,7 @@ public:
     /// TAI-UTC in seconds for an MJD (UTC).
     [[nodiscard]] double taiMinusUtc(double mjdUtc) const;
 
+    /// The entries, sorted by date.
     [[nodiscard]] const std::vector<LeapSecondEntry>& entries() const noexcept { return entries_; }
     /// Expiration (MJD) declared by the loaded file, if any.
     [[nodiscard]] std::optional<double> expiresMjd() const noexcept { return expiresMjd_; }

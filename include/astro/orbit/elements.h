@@ -42,13 +42,22 @@ struct KeplerianElements {
     double argp{0.0}; ///< argument of periapsis
     double nu{0.0};   ///< true anomaly
 
+    /// Semi-latus rectum p = a (1 - e^2) (m); positive for elliptic and hyperbolic orbits.
     [[nodiscard]] double semiLatusRectum() const noexcept { return a * (1.0 - e * e); }
+    /// Mean anomaly (rad) from `nu`: M = E - e sin E (elliptic) or M = e sinh F - F (hyperbolic).
     [[nodiscard]] double meanAnomaly() const noexcept;
+    /// Eccentric anomaly E (rad) for e < 1; the hyperbolic anomaly F for e > 1.
     [[nodiscard]] double eccentricAnomaly() const noexcept;
 };
 
+/// Osculating elements of an inertial state (m, m/s) about a body with gravitational parameter
+/// `mu` (m^3/s^2). Inclination and RAAN refer to the z axis and x-y plane of the state's frame.
+/// Hyperbolic true anomalies are in [-pi, pi). Throws astro::Error for a rectilinear state
+/// (r = 0 or r parallel to v) or a parabolic orbit (|e - 1| < 1e-14).
 [[nodiscard]] KeplerianElements stateToElements(const StateVector& s, double mu = constants::gmEarth);
-[[nodiscard]] StateVector       elementsToState(const KeplerianElements& el, double mu = constants::gmEarth);
+/// Inertial position (m) and velocity (m/s) from elements; the inverse of stateToElements.
+/// Throws astro::Error if the semi-latus rectum is not positive (inconsistent a and e).
+[[nodiscard]] StateVector elementsToState(const KeplerianElements& el, double mu = constants::gmEarth);
 /// Elements from mean anomaly instead of true anomaly.
 [[nodiscard]] KeplerianElements
 elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp, double M);
@@ -58,18 +67,25 @@ elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp, 
 ///   p = tan(i/2) sin(raan), q = tan(i/2) cos(raan), lambda = mean longitude.
 /// Non-singular for circular and equatorial orbits (singular at i = 180 deg).
 struct EquinoctialElements {
-    double a{0.0};
-    double h{0.0};
-    double k{0.0};
-    double p{0.0};
-    double q{0.0};
-    double lambda{0.0};
+    double a{0.0};      ///< semi-major axis (m)
+    double h{0.0};      ///< e sin(raan + argp)
+    double k{0.0};      ///< e cos(raan + argp)
+    double p{0.0};      ///< tan(i/2) sin(raan)
+    double q{0.0};      ///< tan(i/2) cos(raan)
+    double lambda{0.0}; ///< mean longitude raan + argp + M (rad, [0, 2pi))
 };
 
+/// Equinoctial elements from Keplerian ones (lambda from the mean anomaly).
 [[nodiscard]] EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el) noexcept;
-[[nodiscard]] KeplerianElements   equinoctialToKeplerian(const EquinoctialElements& eq);
+/// Keplerian elements from equinoctial ones (RAAN and argp set to 0 where undefined). Throws
+/// astro::Error if the mean-to-true anomaly conversion does (see meanToTrueAnomaly).
+[[nodiscard]] KeplerianElements equinoctialToKeplerian(const EquinoctialElements& eq);
+/// Equinoctial elements of an inertial state (m, m/s), computed directly from the vectors (no
+/// classical singularities). Throws astro::Error for a retrograde equatorial orbit (i = 180 deg).
 [[nodiscard]] EquinoctialElements stateToEquinoctial(const StateVector& s, double mu = constants::gmEarth);
-[[nodiscard]] StateVector         equinoctialToState(const EquinoctialElements& eq, double mu = constants::gmEarth);
+/// Inertial position (m) and velocity (m/s) from equinoctial elements, via equinoctialToKeplerian
+/// and elementsToState; throws astro::Error as they do.
+[[nodiscard]] StateVector equinoctialToState(const EquinoctialElements& eq, double mu = constants::gmEarth);
 
 /// Partial derivatives of stateToEquinoctial: row i is element i (a, h, k, p, q, lambda), column j
 /// is state component j (x, y, z, vx, vy, vz). Central differences with steps of 1e-7 |r| and
@@ -86,10 +102,12 @@ struct EquinoctialElements {
 /// Specific orbital energy (J/kg).
 [[nodiscard]] double specificEnergy(const StateVector& s, double mu = constants::gmEarth) noexcept;
 /// Flight-path angle (rad): angle of the velocity above the local horizontal.
-[[nodiscard]] double        flightPathAngle(const StateVector& s) noexcept;
+[[nodiscard]] double flightPathAngle(const StateVector& s) noexcept;
+/// Periapsis radius a (1 - e) (m).
 [[nodiscard]] inline double periapsisRadius(double a, double e) noexcept {
     return a * (1.0 - e);
 }
+/// Apoapsis radius a (1 + e) (m); meaningful for elliptic orbits only.
 [[nodiscard]] inline double apoapsisRadius(double a, double e) noexcept {
     return a * (1.0 + e);
 }

@@ -25,6 +25,7 @@ namespace astro {
 
 /// Elliptic: true -> eccentric anomaly.
 [[nodiscard]] double trueToEccentricAnomaly(double nu, double e) noexcept;
+/// Elliptic: eccentric -> true anomaly.
 [[nodiscard]] double eccentricToTrueAnomaly(double E, double e) noexcept;
 /// Kepler's equation M = E - e sin E.
 [[nodiscard]] double eccentricToMeanAnomaly(double E, double e) noexcept;
@@ -33,19 +34,26 @@ namespace astro {
 
 /// Hyperbolic: true -> hyperbolic anomaly F (tanh(F/2) = sqrt((e-1)/(e+1)) tan(nu/2)).
 [[nodiscard]] double trueToHyperbolicAnomaly(double nu, double e) noexcept;
+/// Hyperbolic: hyperbolic anomaly F -> true anomaly.
 [[nodiscard]] double hyperbolicToTrueAnomaly(double F, double e) noexcept;
 /// M = e sinh F - F.
 [[nodiscard]] double hyperbolicToMeanAnomaly(double F, double e) noexcept;
+/// Solve M = e sinh F - F for F (Newton-Raphson), e > 1. Throws astro::Error if e <= 1 or the
+/// iteration does not converge.
 [[nodiscard]] double meanToHyperbolicAnomaly(double M, double e);
 
 /// Parabolic: D = tan(nu/2); Barker's equation M = D + D^3/3.
 [[nodiscard]] double trueToParabolicAnomaly(double nu) noexcept;
+/// Parabolic: D -> true anomaly, nu = 2 atan(D).
 [[nodiscard]] double parabolicToTrueAnomaly(double D) noexcept;
+/// Barker's equation M = D + D^3/3.
 [[nodiscard]] double parabolicToMeanAnomaly(double D) noexcept;
+/// Solve Barker's equation for D (closed form).
 [[nodiscard]] double meanToParabolicAnomaly(double M) noexcept;
 
 /// Mean anomaly <-> true anomaly for any eccentricity.
 [[nodiscard]] double meanToTrueAnomaly(double M, double e);
+/// True -> mean anomaly for any eccentricity (elliptic, parabolic or hyperbolic M).
 [[nodiscard]] double trueToMeanAnomaly(double nu, double e) noexcept;
 
 } // namespace astro

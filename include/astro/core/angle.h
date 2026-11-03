@@ -27,21 +27,27 @@
 /// Angle units and wrapping, and sexagesimal (HMS/DMS) parsing and formatting.
 namespace astro {
 
+/// Degrees to radians.
 [[nodiscard]] constexpr double deg2rad(double deg) noexcept {
     return deg * constants::degToRad;
 }
+/// Radians to degrees.
 [[nodiscard]] constexpr double rad2deg(double rad) noexcept {
     return rad * constants::radToDeg;
 }
+/// Arcseconds to radians.
 [[nodiscard]] constexpr double arcsec2rad(double as) noexcept {
     return as * constants::arcsecToRad;
 }
+/// Radians to arcseconds.
 [[nodiscard]] constexpr double rad2arcsec(double rad) noexcept {
     return rad / constants::arcsecToRad;
 }
+/// Milliarcseconds to radians.
 [[nodiscard]] constexpr double mas2rad(double mas) noexcept {
     return mas * constants::masToRad;
 }
+/// Radians to milliarcseconds.
 [[nodiscard]] constexpr double rad2mas(double rad) noexcept {
     return rad / constants::masToRad;
 }
@@ -58,10 +64,10 @@ namespace astro {
 /// Sexagesimal components. `negative` carries the sign so that "-00 30 00" is
 /// representable; deg/hours and minutes are non-negative.
 struct Sexagesimal {
-    bool   negative{false};
-    int    whole{0}; ///< degrees or hours
-    int    minutes{0};
-    double seconds{0.0};
+    bool   negative{false}; ///< true if the angle is negative (never set for zero)
+    int    whole{0};        ///< degrees or hours
+    int    minutes{0};      ///< minutes (of arc or of time), 0-59
+    double seconds{0.0};    ///< seconds (of arc or of time), [0, 60)
 };
 
 /// Hours, minutes, seconds of time to radians (15 deg per hour).
@@ -75,11 +81,12 @@ struct Sexagesimal {
 /// Decompose radians into degrees/arcminutes/arcseconds.
 [[nodiscard]] Sexagesimal radToDms(double rad, int decimals = 2) noexcept;
 
-/// Parse a sexagesimal string into radians. Accepts separators made of spaces,
+/// Parse an hours/minutes/seconds string into radians. Accepts separators made of spaces,
 /// ':', 'h', 'd', 'm', 's', '\'', '"', and the degree sign; one to three fields;
 /// a leading '+' or '-'. E.g. "12:34:56.7", "-05d30m00s", "12h 30m".
 /// Throws astro::Error on malformed input.
 [[nodiscard]] double parseHms(std::string_view text);
+/// Parse a degrees/arcminutes/arcseconds string into radians; same syntax and errors as parseHms.
 [[nodiscard]] double parseDms(std::string_view text);
 
 /// Format as "HH:MM:SS.sss" (sep=':').

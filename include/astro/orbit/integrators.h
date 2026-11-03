@@ -31,6 +31,7 @@
 /// y an std::array<double, N>.
 namespace astro {
 
+/// State vector of an N-dimensional first-order ODE system.
 template <std::size_t N>
 using OdeState = std::array<double, N>;
 
@@ -94,22 +95,25 @@ template <std::size_t N, class F>
     return y;
 }
 
+/// Settings for the adaptive integrators (integrateRkf78, integrateRkf78Steps). Steps and times
+/// are in the units of the independent variable (seconds for the orbit propagators).
 struct AdaptiveOptions {
-    double relTol{1e-12};
-    double absTol{1e-9};
-    double initialStep{60.0};
-    double minStep{1e-6};
-    double maxStep{1e30};
-    int    maxSteps{10000000};
+    double relTol{1e-12};      ///< relative error tolerance per component
+    double absTol{1e-9};       ///< absolute error tolerance per component (units of y)
+    double initialStep{60.0};  ///< size of the first trial step (clipped to |t1 - t0|)
+    double minStep{1e-6};      ///< smallest step; throws astro::Error if the error is still too large
+    double maxStep{1e30};      ///< largest step
+    int    maxSteps{10000000}; ///< limit on attempted steps; throws astro::Error when exceeded
     /// Only the first errorComponents components enter the error control (e.g. the state but not
     /// an attached state transition matrix). Default: all.
     std::size_t errorComponents{static_cast<std::size_t>(-1)};
 };
 
+/// Work done by an adaptive integration.
 struct AdaptiveStats {
-    int accepted{0};
-    int rejected{0};
-    int evaluations{0};
+    int accepted{0};    ///< accepted steps
+    int rejected{0};    ///< rejected (retried) steps
+    int evaluations{0}; ///< evaluations of the derivative function (13 per attempted step)
 };
 
 /// Runge-Kutta-Fehlberg 7(8) adaptive integration from t0 to t1 (see integrateRkf78), calling

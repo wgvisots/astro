@@ -47,6 +47,7 @@ void stumpff(double psi, double& c2, double& c3) noexcept;
                                             double               mu   = constants::gmEarth,
                                             HigherOrderMode      mode = HigherOrderMode::ModelOnly);
 
+/// One solution of Lambert's problem; velocities (m/s) in the frame of r1 and r2.
 struct LambertSolution {
     Vec3 v1;                 ///< departure velocity
     Vec3 v2;                 ///< arrival velocity

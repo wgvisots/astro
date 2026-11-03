@@ -132,8 +132,8 @@ template <class F>
 
 /// Result of a scalar minimization.
 struct MinimizeResult {
-    double x;
-    double fx;
+    double x;  ///< abscissa of the minimum found
+    double fx; ///< f(x)
 };
 
 /// Brent's method minimizer of f on [a, b] (no derivatives). Finds a local minimum.

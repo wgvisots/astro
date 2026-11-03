@@ -26,22 +26,22 @@
 namespace astro::constants {
 
 // ------------------------------------------------------------ math
-inline constexpr double pi          = std::numbers::pi;
-inline constexpr double twoPi       = 2.0 * std::numbers::pi;
-inline constexpr double halfPi      = 0.5 * std::numbers::pi;
-inline constexpr double degToRad    = pi / 180.0;
-inline constexpr double radToDeg    = 180.0 / pi;
-inline constexpr double arcsecToRad = pi / 648000.0;
-inline constexpr double masToRad    = arcsecToRad / 1000.0;
-inline constexpr double uasToRad    = arcsecToRad / 1.0e6;
+inline constexpr double pi          = std::numbers::pi;       ///< pi
+inline constexpr double twoPi       = 2.0 * std::numbers::pi; ///< 2 pi (one turn, rad)
+inline constexpr double halfPi      = 0.5 * std::numbers::pi; ///< pi / 2 (90 degrees, rad)
+inline constexpr double degToRad    = pi / 180.0;             ///< Degrees to radians (multiply).
+inline constexpr double radToDeg    = 180.0 / pi;             ///< Radians to degrees (multiply).
+inline constexpr double arcsecToRad = pi / 648000.0;          ///< Arcseconds to radians (multiply).
+inline constexpr double masToRad    = arcsecToRad / 1000.0;   ///< Milliarcseconds to radians (multiply).
+inline constexpr double uasToRad    = arcsecToRad / 1.0e6;    ///< Microarcseconds to radians (multiply).
 /// Turns (revolutions) to radians.
 inline constexpr double turnToRad = twoPi;
 
 // ------------------------------------------------------------ time
-inline constexpr double secondsPerDay           = 86400.0;
-inline constexpr double daysPerJulianYear       = 365.25;
-inline constexpr double daysPerJulianCentury    = 36525.0;
-inline constexpr double daysPerJulianMillennium = 365250.0;
+inline constexpr double secondsPerDay           = 86400.0;  ///< SI seconds in a day (86400 s).
+inline constexpr double daysPerJulianYear       = 365.25;   ///< Days in a Julian year.
+inline constexpr double daysPerJulianCentury    = 36525.0;  ///< Days in a Julian century.
+inline constexpr double daysPerJulianMillennium = 365250.0; ///< Days in a Julian millennium.
 /// Julian Date of the J2000.0 epoch (2000-01-01 12:00:00 TT).
 inline constexpr double jdJ2000 = 2451545.0;
 /// MJD = JD - mjdOffset.
@@ -90,21 +90,21 @@ inline constexpr double earthRadiusEgm2008 = 6378136.3;
 inline constexpr double earthRadiusIers2010 = 6378136.6;
 /// Unnormalized zonal harmonics from EGM2008 (tide-free), Jn = -sqrt(2n+1) * Cbar_n0.
 inline constexpr double J2 = 1.0826261738522227e-3;
-inline constexpr double J3 = -2.5324105185677225e-6;
-inline constexpr double J4 = -1.6198975999169731e-6;
-inline constexpr double J5 = -2.2775359073083618e-7;
-inline constexpr double J6 = 5.406665762838132e-7;
+inline constexpr double J3 = -2.5324105185677225e-6; ///< Unnormalized zonal harmonic J3 (EGM2008, tide-free).
+inline constexpr double J4 = -1.6198975999169731e-6; ///< Unnormalized zonal harmonic J4 (EGM2008, tide-free).
+inline constexpr double J5 = -2.2775359073083618e-7; ///< Unnormalized zonal harmonic J5 (EGM2008, tide-free).
+inline constexpr double J6 = 5.406665762838132e-7;   ///< Unnormalized zonal harmonic J6 (EGM2008, tide-free).
 
 // ------------------------------------------------------------ ellipsoids
-inline constexpr double wgs84A       = 6378137.0;
-inline constexpr double wgs84InvF    = 298.257223563;
-inline constexpr double wgs84F       = 1.0 / wgs84InvF;
-inline constexpr double grs80A       = 6378137.0;
-inline constexpr double grs80InvF    = 298.257222101;
-inline constexpr double grs80F       = 1.0 / grs80InvF;
-inline constexpr double iers2010A    = 6378136.6;
-inline constexpr double iers2010InvF = 298.25642;
-inline constexpr double iers2010F    = 1.0 / iers2010InvF;
+inline constexpr double wgs84A       = 6378137.0;          ///< WGS84 semi-major axis, m.
+inline constexpr double wgs84InvF    = 298.257223563;      ///< WGS84 inverse flattening 1/f.
+inline constexpr double wgs84F       = 1.0 / wgs84InvF;    ///< WGS84 flattening f.
+inline constexpr double grs80A       = 6378137.0;          ///< GRS80 semi-major axis, m.
+inline constexpr double grs80InvF    = 298.257222101;      ///< GRS80 inverse flattening 1/f.
+inline constexpr double grs80F       = 1.0 / grs80InvF;    ///< GRS80 flattening f.
+inline constexpr double iers2010A    = 6378136.6;          ///< IERS 2010 conventional ellipsoid semi-major axis, m.
+inline constexpr double iers2010InvF = 298.25642;          ///< IERS 2010 conventional ellipsoid inverse flattening 1/f.
+inline constexpr double iers2010F    = 1.0 / iers2010InvF; ///< IERS 2010 conventional ellipsoid flattening f.
 
 // ------------------------------------------------------------ bodies
 /// IAU 2015 nominal solar radius, m.

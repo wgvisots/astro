@@ -34,25 +34,31 @@ namespace astro {
 /// ECEF position to ENU relative to a geodetic origin.
 [[nodiscard]] Vec3
 ecefToEnu(const Vec3& ecef, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+/// ENU position relative to a geodetic origin to ECEF (m).
 [[nodiscard]] Vec3
 enuToEcef(const Vec3& enu, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+/// ECEF position to NED relative to a geodetic origin (m).
 [[nodiscard]] Vec3
 ecefToNed(const Vec3& ecef, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+/// NED position relative to a geodetic origin to ECEF (m).
 [[nodiscard]] Vec3
 nedToEcef(const Vec3& ned, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Azimuth (rad, [0, 2pi), clockwise from north), elevation (rad), range (m).
 struct Aer {
-    double az{0.0};
-    double el{0.0};
-    double range{0.0};
+    double az{0.0};    ///< azimuth, rad, [0, 2pi), clockwise from north
+    double el{0.0};    ///< elevation above the local horizontal, rad, [-pi/2, pi/2]
+    double range{0.0}; ///< range, m (same units as the ENU vector)
 };
 
-[[nodiscard]] Aer  enuToAer(const Vec3& enu) noexcept;
+/// Azimuth, elevation and range of an ENU vector.
+[[nodiscard]] Aer enuToAer(const Vec3& enu) noexcept;
+/// ENU vector from azimuth, elevation and range.
 [[nodiscard]] Vec3 aerToEnu(const Aer& aer) noexcept;
 /// Look angles from an observer to an ECEF target.
 [[nodiscard]] Aer
 ecefToAer(const Vec3& target, const Geodetic& observer, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+/// ECEF position of a target seen at the given look angles from an observer.
 [[nodiscard]] Vec3
 aerToEcef(const Aer& aer, const Geodetic& observer, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 

@@ -36,8 +36,8 @@ namespace astro {
 
 /// A catalog star (ICRS).
 struct CatalogStar {
-    double ra{0.0};
-    double dec{0.0};
+    double ra{0.0};                        ///< right ascension at the catalog epoch, rad
+    double dec{0.0};                       ///< declination at the catalog epoch, rad
     double pmRaCosDec{0.0};                ///< proper motion in RA times cos(dec), rad / Julian year
     double pmDec{0.0};                     ///< rad / Julian year
     double parallax{0.0};                  ///< rad (0 = unknown / very distant)
@@ -47,8 +47,8 @@ struct CatalogStar {
 
 /// Barycentric state and heliocentric position of an observer (m, m/s, ICRF axes).
 struct ObserverEphemeris {
-    StateVector barycentric;
-    Vec3        heliocentric;
+    StateVector barycentric;  ///< position and velocity relative to the solar-system barycenter
+    Vec3        heliocentric; ///< position relative to the Sun
 };
 
 /// Ephemeris of the geocenter, plus an optional geocentric observer offset
@@ -101,9 +101,13 @@ lightDeflection(const Vec3& p, const Vec3& q, const Vec3& e, double emAu, double
                                       const Geodetic&         site,
                                       const Ellipsoid&        ell = Ellipsoid::wgs84());
 
-/// Local mean / apparent sidereal time (rad) at east longitude `lon`.
+/// Local mean / apparent sidereal time (rad, [0, 2pi)) at east longitude `lon`
+/// (rad): GMST (IAU 2006) / GAST (IAU 2006/2000A) plus `lon`. `t` may be in any
+/// time scale; throws astro::Error if `eop` has no data at `t`.
+/// @{
 [[nodiscard]] double localMeanSiderealTime(const Time& t, const EopProvider& eop, double lon);
 [[nodiscard]] double localApparentSiderealTime(const Time& t, const EopProvider& eop, double lon);
+/// @}
 /// Hour angle (rad, [-pi, pi)) from local sidereal time and right ascension.
 [[nodiscard]] double hourAngle(double lst, double ra) noexcept;
 

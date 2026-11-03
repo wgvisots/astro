@@ -1,0 +1,102 @@
+# Build and test with GCC and Clang (warnings as errors), under ThreadSanitizer, check formatting,
+# and build the documentation (Doxygen warnings as errors; code in the docs must match the examples).
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: ${{ matrix.compiler }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-dev libgtest-dev
+
+    - name: Configure
+      env:
+        CC: ${{ matrix.cc }}
+        CXX: ${{ matrix.cxx }}
+      run: >
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DASTRO_WARNINGS_AS_ERRORS=ON
+        -DASTRO_BUILD_BENCHMARKS=ON -DASTRO_BUILD_STUDIES=ON
+
+    - name: Build
+      run: cmake --build build -j 4
+
+    - name: Test
+      run: ctest --test-dir build --output-on-failure
+
+  thread-sanitizer:
+    name: ThreadSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-dev libgtest-dev
+
+    # GCC 13's TSan rejects the kernel's high mmap randomization; setarch -R disables it for the
+    # build (test discovery runs the binary) and the test run.
+    - name: Build and test
+      env:
+        TSAN_OPTIONS: halt_on_error=1
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DASTRO_BUILD_EXAMPLES=OFF \
+          -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+        setarch "$(uname -m)" -R cmake --build build -j 4
+        setarch "$(uname -m)" -R ctest --test-dir build --output-on-failure
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Install clang-format
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format-18
+
+    - name: Check formatting
+      run: git ls-files '*.h' '*.cpp' | xargs clang-format-18 --dry-run --Werror
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-dev doxygen graphviz
+
+    - name: Code in the docs matches the examples
+      run: python3 tools/check_doc_snippets.py
+
+    - name: Build the documentation
+      run: |
+        cmake -B build -DASTRO_BUILD_TESTS=OFF -DASTRO_BUILD_EXAMPLES=OFF -DASTRO_DOCS_WARNINGS_AS_ERRORS=ON
+        cmake --build build --target docs

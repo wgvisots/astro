@@ -33,13 +33,15 @@
 /// after Brouwer (1959): first order in J2, plus J2^2 and J4.
 namespace astro {
 
+/// Central-body constants for the secular theory (defaults: Earth, EGM2008).
 struct ZonalParameters {
-    double mu{constants::gmEarth};
-    double re{constants::earthRadiusEgm2008};
-    double J2{constants::J2};
-    double J4{constants::J4};
+    double mu{constants::gmEarth};            ///< gravitational parameter (m^3/s^2)
+    double re{constants::earthRadiusEgm2008}; ///< reference radius of the harmonics (m)
+    double J2{constants::J2};                 ///< unnormalized zonal coefficient J2
+    double J4{constants::J4};                 ///< unnormalized zonal coefficient J4
 };
 
+/// Which zonal terms enter the secular rates.
 enum class SecularOrder {
     J2,         ///< first-order J2 only
     J2SquaredJ4 ///< J2 + J2^2 + J4 (Brouwer)
@@ -52,8 +54,8 @@ std::ostream& operator<<(std::ostream& os, SecularOrder value);
 
 /// Secular rates (rad/s) of the mean elements.
 struct SecularRates {
-    double raanDot{0.0};
-    double argpDot{0.0};
+    double raanDot{0.0};        ///< rate of the right ascension of the ascending node
+    double argpDot{0.0};        ///< rate of the argument of periapsis
     double meanAnomalyDot{0.0}; ///< total rate including the mean motion
 };
 
@@ -131,12 +133,17 @@ public:
 
     /// States at dt = start + k * step for k = 0 .. out.size() - 1, written into `out`.
     void propagateGrid(double start, double step, std::span<StateVector> out) const noexcept;
+    /// As propagateGrid, for 12-component states.
     void propagateGrid12(double start, double step, std::span<StateVector12> out) const noexcept;
-    [[nodiscard]] std::vector<StateVector>   propagateGrid(double start, double step, std::size_t count) const;
+    /// As propagateGrid, returning `count` states.
+    [[nodiscard]] std::vector<StateVector> propagateGrid(double start, double step, std::size_t count) const;
+    /// As propagateGrid12, returning `count` states.
     [[nodiscard]] std::vector<StateVector12> propagateGrid12(double start, double step, std::size_t count) const;
 
+    /// Mean elements at the epoch.
     [[nodiscard]] const KeplerianElements& meanElements() const noexcept { return mean_; }
-    [[nodiscard]] const SecularRates&      rates() const noexcept { return rates_; }
+    /// Secular rates of the mean elements.
+    [[nodiscard]] const SecularRates& rates() const noexcept { return rates_; }
     /// Input acceleration minus the model's at the epoch (zero unless built from a StateVector12).
     [[nodiscard]] const Vec3& accelerationResidual() const noexcept { return da0_; }
     /// Input jerk minus the model's at the epoch (zero unless built from a StateVector12).

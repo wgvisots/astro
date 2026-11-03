@@ -53,14 +53,16 @@ BOOST_DESCRIBE_ENUM(TimeScale, UTC, TAI, TT, TDB, TCG, TCB, UT1, GPS, GST, BDT)
 /// Writes "TimeScale::<enumerator>", or "TimeScale::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, TimeScale value);
 
+/// Short name of a time scale ("UTC", "TT", ...), or "?" for an invalid value.
 [[nodiscard]] std::string_view toString(TimeScale scale) noexcept;
 /// Parse "UTC", "TAI", "TT", ... (case-insensitive). Throws astro::Error.
 [[nodiscard]] TimeScale timeScaleFromString(std::string_view name);
 
+/// Global navigation satellite systems with their own time scale and week count.
 enum class GnssSystem {
-    GPS,
-    Galileo,
-    BeiDou
+    GPS,     ///< GPS (GPS time, weeks from 1980-01-06)
+    Galileo, ///< Galileo (Galileo System Time, GST)
+    BeiDou   ///< BeiDou (BeiDou Time, BDT)
 };
 
 BOOST_DESCRIBE_ENUM(GnssSystem, GPS, Galileo, BeiDou)
@@ -68,6 +70,7 @@ BOOST_DESCRIBE_ENUM(GnssSystem, GPS, Galileo, BeiDou)
 /// Writes "GnssSystem::<enumerator>", or "GnssSystem::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, GnssSystem value);
 
+/// GNSS week number and time of week, in the system's own time scale.
 struct GnssWeekTow {
     int    week{0};  ///< full (non-rolled-over) week number
     double tow{0.0}; ///< seconds of week, [0, 604800)
@@ -86,20 +89,29 @@ class Time {
 public:
     /// J2000.0 TT.
     Time() = default;
+    /// From a two-part Julian Date in `scale` (normalized on construction).
     Time(const JulianDate& jd, TimeScale scale);
 
+    /// From a two-part Julian Date (jd1 + jd2 days) in `scale`.
     [[nodiscard]] static Time fromJd(double jd1, double jd2, TimeScale scale);
+    /// From a Modified Julian Date (JD - 2400000.5) in `scale`.
     [[nodiscard]] static Time fromMjd(double mjd, TimeScale scale);
     /// From calendar fields in the given scale. For UTC, second may be in
-    /// [60, 61) on a day that ends in a leap second.
+    /// [60, 61) on a day that ends in a leap second. Throws astro::Error for an
+    /// invalid date or time of day.
+    /// @{
     [[nodiscard]] static Time
     fromCalendar(TimeScale scale, int year, int month, int day, int hour = 0, int minute = 0, double second = 0.0);
     [[nodiscard]] static Time fromCalendar(TimeScale scale, const CalendarDate& cal);
+    /// @}
     /// From POSIX/Unix time (seconds since 1970-01-01T00:00:00 UTC, leap seconds not counted). Result is UTC.
     [[nodiscard]] static Time fromUnix(double unixSeconds);
     /// From whole + fractional Unix seconds (full precision). Result is UTC.
     [[nodiscard]] static Time fromUnix(long long wholeSeconds, double fraction);
+    /// From a std::chrono::system_clock time point, read as Unix time
+    /// (nanosecond resolution). Result is UTC.
     [[nodiscard]] static Time fromSysTime(std::chrono::system_clock::time_point tp);
+    /// The current system clock time, as UTC.
     [[nodiscard]] static Time now();
     /// From seconds since the GPS epoch (1980-01-06T00:00:00 UTC). Result is GPS.
     [[nodiscard]] static Time fromGpsSeconds(double seconds);
@@ -113,15 +125,21 @@ public:
     ///   Without a zone/scale the `defaultScale` is used.
     [[nodiscard]] static Time fromIso8601(std::string_view text, TimeScale defaultScale = TimeScale::UTC);
 
+    /// Normalized two-part Julian Date in this time's own scale.
     [[nodiscard]] const JulianDate& jd() const noexcept { return jd_; }
-    [[nodiscard]] TimeScale         scale() const noexcept { return scale_; }
-    [[nodiscard]] double            mjd() const noexcept { return jd_.mjd(); }
+    /// The time scale this instant is expressed in.
+    [[nodiscard]] TimeScale scale() const noexcept { return scale_; }
+    /// Modified Julian Date in this time's own scale.
+    [[nodiscard]] double mjd() const noexcept { return jd_.mjd(); }
     /// Julian centuries since J2000.0, in this time's own scale.
     [[nodiscard]] double centuriesSinceJ2000() const noexcept { return jd_.centuriesSinceJ2000(); }
 
-    /// Convert to another scale. `eop` is required for UT1.
+    /// Convert to another scale. `eop` is required for UT1 (to or from); without
+    /// it a UT1 conversion throws astro::Error.
+    /// @{
     [[nodiscard]] Time to(TimeScale target, const EopProvider* eop = nullptr) const;
     [[nodiscard]] Time to(TimeScale target, const EopProvider& eop) const { return to(target, &eop); }
+    /// @}
 
     /// Calendar date in this scale (UTC: leap-second aware, second may be 60.x).
     [[nodiscard]] CalendarDate calendar(int decimals = 9) const;
@@ -131,19 +149,23 @@ public:
 
     /// Unix seconds (converts to UTC). During a leap second, returns the value
     /// of the following second (POSIX time repeats).
-    [[nodiscard]] double                                unixSeconds() const;
+    [[nodiscard]] double unixSeconds() const;
+    /// std::chrono::system_clock time point from the Unix time (converts to
+    /// UTC), rounded to the nearest nanosecond.
     [[nodiscard]] std::chrono::system_clock::time_point toSysTime() const;
     /// Seconds since the GPS epoch (converts to GPS time).
     [[nodiscard]] double gpsSeconds() const;
     /// Week number and time of week in the given GNSS system's scale.
     [[nodiscard]] GnssWeekTow gnssWeekTow(GnssSystem system) const;
 
-    /// Add SI seconds. UTC is advanced through TAI so leap seconds are counted;
-    /// other scales advance their Julian Date directly.
+    /// Add / subtract SI seconds. UTC is advanced through TAI so leap seconds
+    /// are counted; other scales advance their Julian Date directly.
+    /// @{
     [[nodiscard]] Time operator+(double seconds) const;
     [[nodiscard]] Time operator-(double seconds) const { return *this + (-seconds); }
     Time&              operator+=(double seconds) { return *this = *this + seconds; }
     Time&              operator-=(double seconds) { return *this = *this + (-seconds); }
+    /// @}
 
     /// Elapsed seconds a - b, measured in a's scale (b is converted first; UTC
     /// differences are taken in TAI so leap seconds are counted).

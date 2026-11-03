@@ -3,8 +3,8 @@
 ## From two-line elements to positions
 
 `Tle::parse` reads a two-line element set (checksums verified, Alpha-5 catalogue numbers supported);
-`Sgp4` propagates it [[ref:vallado2006|Vallado et al. (2006)]]. SGP4 works in TEME
-[[ref:teme|TEME definition]]: convert before mixing with other data.
+`Sgp4` propagates it [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/). SGP4 works in TEME
+[Seago & Vallado (2000)](https://doi.org/10.2514/6.2000-4025): convert before mixing with other data.
 
 <!-- snippet: examples/sgp4_passes.cpp#sgp4 -->
 ```cpp
@@ -63,7 +63,7 @@ std::cout << "satellite: " << s.state << ", illumination " << s.illumination << 
 ```
 
 `shadow` uses a cylindrical or conical (umbra, penumbra, annular, with the visible fraction of the
-solar disk) model [[ref:montenbruck|Montenbruck & Gill (2000), sec. 3.4]]; `findEclipses` finds the
+solar disk) model [Montenbruck & Gill (2000), sec. 3.4](https://doi.org/10.1007/978-3-642-58351-3); `findEclipses` finds the
 entry and exit times over a span; `betaAngle` is the Sun's elevation above the orbit plane.
 
 ## Ground track, footprint, line of sight
@@ -79,4 +79,4 @@ blocks the line between two points. All are in `satellite/ground.h`.
 `ntwMatrix` rotate inertial vectors into frames attached to a state; `rotateCovariance` rotates a
 6x6 covariance. `relativeStateRic` and `deputyFromRelativeRic` give the relative state of a deputy
 in the chief's rotating RIC frame, the coordinates of the Clohessy-Wiltshire equations
-[[ref:cw1960|Clohessy & Wiltshire (1960)]].
+[Clohessy & Wiltshire (1960)](https://doi.org/10.2514/8.8704).

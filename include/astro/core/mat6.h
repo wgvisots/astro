@@ -33,8 +33,10 @@
 /// be found by argument-dependent lookup outside namespace astro).
 namespace astro {
 
+/// 6x6 matrix, row-major: Mat6[i][j] is row i, column j.
 using Mat6 = std::array<std::array<double, 6>, 6>;
 
+/// 6x6 identity matrix.
 [[nodiscard]] constexpr Mat6 identity6() noexcept {
     Mat6 m{};
     for (std::size_t i = 0; i < 6; ++i) {
@@ -43,6 +45,7 @@ using Mat6 = std::array<std::array<double, 6>, 6>;
     return m;
 }
 
+/// Transpose of a.
 [[nodiscard]] constexpr Mat6 transpose(const Mat6& a) noexcept {
     Mat6 t{};
     for (std::size_t i = 0; i < 6; ++i) {

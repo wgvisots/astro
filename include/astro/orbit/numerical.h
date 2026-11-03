@@ -39,7 +39,9 @@ namespace astro {
 /// r, v are in the propagator's inertial frame.
 class ForceModel {
 public:
-    virtual ~ForceModel()                                                                 = default;
+    virtual ~ForceModel() = default;
+    /// Acceleration (m/s^2) at `t` for position r (m) and velocity v (m/s). Must be safe to call
+    /// concurrently if the propagator using it is shared between threads.
     [[nodiscard]] virtual Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const = 0;
 
     /// Time derivative of acceleration() along the trajectory, d/dt a(t, r(t), v(t)), given the
@@ -66,11 +68,13 @@ public:
                           double              mu          = constants::gmEarth,
                           double              re          = constants::earthRadiusEgm2008,
                           const Mat3&         toBodyFrame = Mat3::identity());
+    /// Point-mass plus zonal acceleration (m/s^2) in the propagation frame; t and v are unused.
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
     /// Exact (point mass and zonal terms).
     [[nodiscard]] Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
     /// Exact gravity gradient; no velocity dependence.
-    Vec3                 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
+    Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
+    /// Gravitational parameter of the field (m^3/s^2).
     [[nodiscard]] double mu() const noexcept { return mu_; }
 
 private:
@@ -85,7 +89,11 @@ private:
 /// The propagation frame is assumed to be the GCRS.
 class ThirdBodyForce final : public ForceModel {
 public:
+    /// Perturbation by `body` with gravitational parameter `muBody` (m^3/s^2); its geocentric
+    /// position comes from `ephemeris` at `epoch` + t.
     ThirdBodyForce(Body body, double muBody, std::shared_ptr<const Ephemeris> ephemeris, const Time& epoch);
+    /// Tidal acceleration (m/s^2) on a satellite at geocentric r: the body's pull on the satellite
+    /// minus its pull on the Earth. v is unused.
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
     /// Exact tidal gradient; no velocity dependence.
     Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
@@ -101,10 +109,13 @@ private:
 /// seconds since the propagator epoch. HigherOrderMode::UnmodeledForce adds one of these.
 class UnmodeledAcceleration final : public ForceModel {
 public:
+    /// `a0` is the acceleration at the epoch (m/s^2), `j0` its constant rate (m/s^3).
     UnmodeledAcceleration(const Vec3& a0, const Vec3& j0) noexcept
         : a0_(a0)
         , j0_(j0) {}
+    /// a0 + j0 t (m/s^2); r and v are unused.
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
+    /// j0 (m/s^3).
     [[nodiscard]] Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
     /// Zero: the unmodeled acceleration depends on time only.
     Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
@@ -116,13 +127,15 @@ private:
 
 /// A state and its 6x6 position/velocity covariance at one time.
 struct StateCovariance {
-    StateVector state;
-    Mat6        covariance;
+    StateVector state;      ///< position (m) and velocity (m/s)
+    Mat6        covariance; ///< covariance of (r, v) in the same frame (m^2, m^2/s, m^2/s^2)
 };
 
 /// Integrates the equations of motion with RKF7(8).
 class NumericalPropagator {
 public:
+    /// Start from position (m) and velocity (m/s) at `epoch`, in the inertial frame the force
+    /// models assume (all outputs are in the same frame). Throws astro::Error if `forces` is empty.
     NumericalPropagator(const Time&                                    epoch,
                         const StateVector&                             initial,
                         std::vector<std::shared_ptr<const ForceModel>> forces,
@@ -177,6 +190,7 @@ public:
 
     /// State dt seconds after the epoch (negative dt propagates backward).
     [[nodiscard]] StateVector propagate(double dt, AdaptiveStats* stats = nullptr) const;
+    /// State at time t (any scale).
     [[nodiscard]] StateVector propagate(const Time& t, AdaptiveStats* stats = nullptr) const {
         return propagate(t - epoch_, stats);
     }
@@ -187,9 +201,11 @@ public:
     /// 12-component state dt seconds after the epoch; acceleration and jerk come from the force
     /// models (including any unmodeled acceleration).
     [[nodiscard]] StateVector12 propagate12(double dt, AdaptiveStats* stats = nullptr) const;
+    /// 12-component state at time t (any scale).
     [[nodiscard]] StateVector12 propagate12(const Time& t, AdaptiveStats* stats = nullptr) const {
         return propagate12(t - epoch_, stats);
     }
+    /// 12-component states at several offsets (any order), integrating once in each direction.
     [[nodiscard]] std::vector<StateVector12> propagate12(const std::vector<double>& dts,
                                                          AdaptiveStats*             stats = nullptr) const;
 
@@ -203,8 +219,10 @@ public:
     void propagateGrid(double start, double step, std::span<StateVector> out, AdaptiveStats* stats = nullptr) const;
     /// As propagateGrid, with acceleration and jerk from the force models at each output.
     void propagateGrid12(double start, double step, std::span<StateVector12> out, AdaptiveStats* stats = nullptr) const;
+    /// As propagateGrid, returning `count` states.
     [[nodiscard]] std::vector<StateVector>
     propagateGrid(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
+    /// As propagateGrid12, returning `count` states.
     [[nodiscard]] std::vector<StateVector12>
     propagateGrid12(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
 
@@ -222,12 +240,13 @@ public:
     /// Q(t) is the process noise from white, isotropic acceleration noise with power spectral
     /// density accelerationNoisePsd (m^2/s^3), standing in for forces the model leaves out (drag,
     /// solar pressure, higher harmonics). 0 gives the purely deterministic propagation.
-    void                                       propagateGridWithCovariance(double                     start,
-                                                                           double                     step,
-                                                                           const Mat6&                P0,
-                                                                           std::span<StateCovariance> out,
-                                                                           double                     accelerationNoisePsd = 0.0,
-                                                                           AdaptiveStats*             stats = nullptr) const;
+    void propagateGridWithCovariance(double                     start,
+                                     double                     step,
+                                     const Mat6&                P0,
+                                     std::span<StateCovariance> out,
+                                     double                     accelerationNoisePsd = 0.0,
+                                     AdaptiveStats*             stats                = nullptr) const;
+    /// As above, returning `count` states and covariances.
     [[nodiscard]] std::vector<StateCovariance> propagateGridWithCovariance(double         start,
                                                                            double         step,
                                                                            std::size_t    count,
@@ -251,6 +270,7 @@ public:
     /// Input jerk minus the force models' at the epoch (zero for a 6-component start).
     [[nodiscard]] const Vec3& jerkResidual() const noexcept { return dj0_; }
 
+    /// Epoch of the initial state; dt arguments are seconds since it.
     [[nodiscard]] const Time& epoch() const noexcept { return epoch_; }
 
 private:

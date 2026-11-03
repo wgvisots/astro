@@ -29,12 +29,12 @@ namespace astro {
 /// Gregorian calendar date and time of day. `second` may reach 60.x on a UTC
 /// leap-second day.
 struct CalendarDate {
-    int    year{2000};
-    int    month{1};
-    int    day{1};
-    int    hour{0};
-    int    minute{0};
-    double second{0.0};
+    int    year{2000};  ///< Gregorian year
+    int    month{1};    ///< month, 1-12
+    int    day{1};      ///< day of month, 1-31
+    int    hour{0};     ///< hour, 0-23
+    int    minute{0};   ///< minute, 0-59
+    double second{0.0}; ///< seconds, [0, 60), or [60, 61) during a UTC leap second
 
     friend constexpr bool operator==(const CalendarDate&, const CalendarDate&) noexcept = default;
 };
@@ -46,10 +46,12 @@ struct CalendarDate {
 /// ~10 picosecond resolution. The scale (UTC, TT, ...) is not stored here; see
 /// astro::Time.
 struct JulianDate {
-    double jd1{constants::jdJ2000};
-    double jd2{0.0};
+    double jd1{constants::jdJ2000}; ///< first part, days (a midnight, integer + 0.5, after normalized())
+    double jd2{0.0};                ///< second part, days (fraction of day in [0, 1) after normalized())
 
+    /// J2000.0 (JD 2451545.0).
     constexpr JulianDate() noexcept = default;
+    /// From the two parts as given (not normalized), in days.
     constexpr JulianDate(double jd1_, double jd2_ = 0.0) noexcept
         : jd1(jd1_)
         , jd2(jd2_) {}
@@ -58,10 +60,12 @@ struct JulianDate {
     /// (i.e. not leap-second aware; use astro::Time for UTC).
     [[nodiscard]] static JulianDate
     fromCalendar(int year, int month, int day, int hour = 0, int minute = 0, double second = 0.0);
+    /// From a Modified Julian Date (JD - 2400000.5), split into whole day and fraction.
     [[nodiscard]] static JulianDate fromMjd(double mjd) noexcept;
 
     /// Single-double JD (loses precision; ~20 microseconds today).
     [[nodiscard]] constexpr double jd() const noexcept { return jd1 + jd2; }
+    /// Modified Julian Date (JD - 2400000.5) as a single double.
     [[nodiscard]] constexpr double mjd() const noexcept { return (jd1 - constants::mjdOffset) + jd2; }
     /// Days since J2000.0 (2451545.0) in this scale.
     [[nodiscard]] constexpr double daysSinceJ2000() const noexcept { return (jd1 - constants::jdJ2000) + jd2; }
@@ -73,15 +77,21 @@ struct JulianDate {
     /// jd1 = midnight (integer + 0.5), jd2 in [0, 1).
     [[nodiscard]] JulianDate normalized() const noexcept;
 
+    /// Shifted by a number of days / seconds (86400-second days); the result
+    /// is normalized.
+    /// @{
     [[nodiscard]] JulianDate addDays(double days) const noexcept;
     [[nodiscard]] JulianDate addSeconds(double seconds) const noexcept;
+    /// @}
     /// (this - other) in days / seconds, computed without cancellation.
+    /// @{
     [[nodiscard]] constexpr double daysSince(const JulianDate& o) const noexcept {
         return (jd1 - o.jd1) + (jd2 - o.jd2);
     }
     [[nodiscard]] constexpr double secondsSince(const JulianDate& o) const noexcept {
         return daysSince(o) * constants::secondsPerDay;
     }
+    /// @}
 
     /// Calendar date assuming 86400-second days. Seconds are rounded to
     /// `decimals` places with carries into minutes/hours/days.
@@ -95,9 +105,12 @@ struct JulianDate {
     }
 };
 
+/// True for a Gregorian leap year.
 [[nodiscard]] constexpr bool isLeapYear(int year) noexcept {
     return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
 }
+/// Number of days in a month (1-12) of a Gregorian year. Throws astro::Error
+/// if `month` is out of range.
 [[nodiscard]] int daysInMonth(int year, int month);
 /// Day of year, 1-based (Jan 1 = 1).
 [[nodiscard]] int dayOfYear(int year, int month, int day);

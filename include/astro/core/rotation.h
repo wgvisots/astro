@@ -56,18 +56,20 @@ namespace astro {
 /// Composition: for passive matrices, toMatrix(p * q) == toMatrix(q) * toMatrix(p),
 /// i.e. `p * q` means "rotate the frame by p, then by q (about the new axes)".
 struct Quat {
-    double w{1.0};
-    double x{0.0};
-    double y{0.0};
-    double z{0.0};
+    double w{1.0}; ///< scalar part
+    double x{0.0}; ///< i component of the vector part
+    double y{0.0}; ///< j component of the vector part
+    double z{0.0}; ///< k component of the vector part
 
     constexpr Quat() noexcept = default;
+    /// Quaternion w + x i + y j + z k, stored as given (not normalized).
     constexpr Quat(double w_, double x_, double y_, double z_) noexcept
         : w(w_)
         , x(x_)
         , y(y_)
         , z(z_) {}
 
+    /// Frame rotation by `theta` (rad) about `axis` (normalized internally; need not be unit).
     [[nodiscard]] static Quat fromAxisAngle(const Vec3& axis, double theta) noexcept;
     /// Quaternion from a passive rotation (direction cosine) matrix. Uses Shepperd's
     /// method; the result has w >= 0.
@@ -76,10 +78,14 @@ struct Quat {
     /// Passive rotation (direction cosine) matrix.
     [[nodiscard]] Mat3 toMatrix() const noexcept;
 
+    /// Vector part (x, y, z).
     [[nodiscard]] constexpr Vec3 vec() const noexcept { return {x, y, z}; }
+    /// Conjugate w - x i - y j - z k (the inverse rotation, for a unit quaternion).
     [[nodiscard]] constexpr Quat conjugate() const noexcept { return {w, -x, -y, -z}; }
-    [[nodiscard]] double         norm() const noexcept;
-    [[nodiscard]] Quat           normalized() const noexcept;
+    /// Euclidean norm sqrt(w^2 + x^2 + y^2 + z^2).
+    [[nodiscard]] double norm() const noexcept;
+    /// Unit quaternion along this one; the identity if the norm is zero.
+    [[nodiscard]] Quat normalized() const noexcept;
 
     /// Coordinates of a fixed vector in the rotated frame: toMatrix() * v.
     [[nodiscard]] Vec3 transform(const Vec3& v) const noexcept;
@@ -128,9 +134,9 @@ std::ostream& operator<<(std::ostream& os, EulerSequence value);
 
 /// Euler angles (radians) for a sequence: first rotation by a, then b, then c.
 struct EulerAngles {
-    double a{0.0};
-    double b{0.0};
-    double c{0.0};
+    double a{0.0}; ///< first rotation angle, rad
+    double b{0.0}; ///< second rotation angle, rad
+    double c{0.0}; ///< third rotation angle, rad
 };
 
 /// Passive DCM for successive frame rotations: R_k(c) * R_j(b) * R_i(a)

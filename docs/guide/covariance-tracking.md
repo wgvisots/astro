@@ -4,7 +4,7 @@
 
 `propagateGridWithCovariance` carries a 6x6 position/velocity covariance along the output grid. The
 state transition matrix Phi is integrated alongside the state from the force models' exact partial
-derivatives (the variational equations [[ref:montenbruck|Montenbruck & Gill (2000), ch. 7]]), and
+derivatives (the variational equations [Montenbruck & Gill (2000), ch. 7](https://doi.org/10.1007/978-3-642-58351-3)), and
 
     P(t) = Phi(t) P0 Phi(t)^T + Q(t)
 
@@ -54,7 +54,7 @@ a tracking system), each delivery already contains everything before it. Success
 correlated, so **do not fuse them** as if they were independent measurements: a Kalman update would
 count the same data again and again, and the covariance would collapse far below the truth. (To
 combine estimates from different sources with unknown correlation, covariance intersection is
-the standard tool [[ref:julier1997|Julier & Uhlmann (1997)]].)
+the standard tool [Julier & Uhlmann (1997)](https://doi.org/10.1109/ACC.1997.609105).)
 
 `EstimateTracker` does what is valid: the newest delivery replaces the current estimate ("latest
 wins"), and each delivery is first checked against the previous one propagated (with its covariance)
@@ -101,7 +101,7 @@ std::cout << "predicted 1 h ahead: " << ahead.back().state.r << " m\n";
 | `consistent` | the selected test's p-value is at least `alarmProbability` (default 1e-3) |
 
 The distances use the predicted covariance, so for a consistent upstream filter the p-values are
-conservative [[ref:barshalom|Bar-Shalom et al. (2001)]]. `TrackerOptions::test` selects the statistic:
+conservative [Bar-Shalom et al. (2001)](https://doi.org/10.1002/0471221279). `TrackerOptions::test` selects the statistic:
 
 | `ConsistencyTest` | False alarms (nominal 1e-3), gaps to 4 h | Sees a burn just before the delivery |
 |---|---|---|
@@ -110,9 +110,9 @@ conservative [[ref:barshalom|Bar-Shalom et al. (2001)]]. `TrackerOptions::test` 
 | `PositionVelocity` (Cartesian) | up to 0.06 (20 m / 2 cm/s priors) and 0.34 (100 m / 0.1 m/s) at 4 h | yes |
 
 Linear covariance propagation in Cartesian coordinates stops describing the error once it stretches
-along the orbit (the "banana" shape [[ref:junkins1996|Junkins et al. (1996)]]); in orbital elements the
+along the orbit (the "banana" shape [Junkins et al. (1996)](../references.md)); in orbital elements the
 error grows mostly in one coordinate, the mean longitude, and stays close to Gaussian much longer
-[[ref:sabol2010|Sabol et al. (2010)]]. The full Monte Carlo tables are in [Accuracy](../accuracy.md).
+[Aristoff, Horwood & Alfriend (2021)](https://doi.org/10.1007/s10569-021-10004-0). The full Monte Carlo tables are in [Accuracy](../accuracy.md).
 
 ## Frames, tolerance and process noise
 

@@ -1,6 +1,6 @@
 # Geodesy
 
-All coordinates are on an `Ellipsoid` (WGS84 by default [[ref:wgs84|NGA WGS 84]]; GRS80 is also
+All coordinates are on an `Ellipsoid` (WGS84 by default [NGA WGS 84](../references.md); GRS80 is also
 provided). Latitudes and longitudes are in radians, heights in metres above the ellipsoid.
 
 ## Latitude, longitude, height <-> ECEF
@@ -15,7 +15,7 @@ std::cout << "ECEF " << ecef << " m\n";
 std::cout << "lat " << rad2deg(back.lat) << " deg, lon " << rad2deg(back.lon) << " deg, h " << back.h << " m\n";
 ```
 
-`ecefToGeodetic` uses Vermeille's closed form [[ref:vermeille2011|Vermeille (2011)]], which is exact
+`ecefToGeodetic` uses Vermeille's closed form [Vermeille (2011)](https://doi.org/10.1007/s00190-010-0419-x), which is exact
 everywhere outside the evolute of the ellipsoid (a small region about 43 km around the centre); inside it a bracketed
 root search takes over, so every point has an answer. Round trips agree to 1e-8 m, and the result
 matches ERFA's `gc2gd` to 2e-12 rad and 10 um near the surface ([Accuracy](../accuracy.md)).
@@ -43,7 +43,7 @@ For a satellite's look angles and range rate from a ground site, see
 
 `geodesicInverse` and `geodesicDirect` solve the inverse (distance and azimuths between two
 points) and direct (destination from a start, azimuth and distance) problems with Vincenty's
-formulae [[ref:vincenty1975|Vincenty (1975)]], accurate to about 0.5 mm:
+formulae [Vincenty (1975)](https://doi.org/10.1179/sre.1975.23.176.88), accurate to about 0.5 mm:
 
 <!-- snippet: examples/geodesy.cpp#geodesic -->
 ```cpp
@@ -60,7 +60,7 @@ approximation.
 
 `helmertTransform` applies the IERS linearised 7-parameter similarity transformation
 (`HelmertParams`: translation, rotation, scale) between terrestrial frames
-[[ref:iers2010|IERS Conventions (2010), ch. 4]]. `HelmertTimeDependent` holds the 14-parameter form (the
+[IERS Conventions (2010), ch. 4](https://www.iers.org/TN36). `HelmertTimeDependent` holds the 14-parameter form (the
 parameters at an epoch plus their rates); its `at(year)` gives the 7 parameters for a date, and a
 `helmertTransform` overload moves a position and velocity. Published parameter sets use either
 the position-vector or the coordinate-frame sign convention for the rotations; set

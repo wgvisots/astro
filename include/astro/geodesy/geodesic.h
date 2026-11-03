@@ -26,15 +26,17 @@
 /// case astro::Error is thrown.
 namespace astro {
 
+/// Solution of the inverse geodesic problem (geodesicInverse()).
 struct GeodesicInverseResult {
     double distance{0.0}; ///< m
     double azimuth1{0.0}; ///< forward azimuth at point 1, rad [0, 2pi)
     double azimuth2{0.0}; ///< forward azimuth at point 2 (direction of travel), rad [0, 2pi)
 };
 
+/// Solution of the direct geodesic problem (geodesicDirect()).
 struct GeodesicDirectResult {
-    double lat{0.0};      ///< rad
-    double lon{0.0};      ///< rad, (-pi, pi]
+    double lat{0.0};      ///< geodetic latitude of the end point, rad
+    double lon{0.0};      ///< longitude of the end point, rad, (-pi, pi]
     double azimuth2{0.0}; ///< forward azimuth at the end point, rad [0, 2pi)
 };
 

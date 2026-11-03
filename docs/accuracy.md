@@ -9,22 +9,22 @@ the end of the page).
 
 | Component | Reference | Test tolerance |
 |---|---|---|
-| Time scales UTC, TAI, TT, TDB, TCG, TCB, UT1, 1960-2035 incl. leap-second days | ERFA [[ref:erfa|ERFA]] | 1 ns |
+| Time scales UTC, TAI, TT, TDB, TCG, TCB, UT1, 1960-2035 incl. leap-second days | ERFA [ERFA](https://github.com/liberfa/erfa) | 1 ns |
 | CIP X, Y (IAU 2006/2000A), 1900-2100 | ERFA `xy06` | 0.5 uas |
 | CIO locator s | ERFA `s06` | 0.05 uas |
 | Nutation dpsi / deps | ERFA `nut06a` | 5 / 1 uas (IERS tables and ERFA differ by a few uas at +-100 yr) |
 | GAST | ERFA `gst06a` | 5 uas |
 | GCRS -> ITRS rotation | ERFA `c2tcio` | 1 uas |
 | IAU 2000B vs 2000A | the full model | 5 mas |
-| ITRF -> GCRF, TEME, PEF | Vallado, Example 3-15 [[ref:vallado-book|Vallado (2013)]] | 5 cm, 0.05 mm/s (the example uses IAU 2000) |
+| ITRF -> GCRF, TEME, PEF | Vallado, Example 3-15 [Vallado (2013)](https://celestrak.org/software/vallado-sw.php) | 5 cm, 0.05 mm/s (the example uses IAU 2000) |
 | Geodetic <-> ECEF | ERFA `gc2gd` near the surface; round trips everywhere | 2e-12 rad and 10 um; round trip 1e-8 m |
 | ICRS <-> galactic | ERFA | 1e-14 rad |
 | Refraction constants A, B | ERFA `refco` | 1e-15 |
 | Observed place of a star (ICRS -> az/el) | ERFA `atco13` | 1 mas (1" below 10 deg elevation with refraction) |
 | JPL SPK reader, both byte orders | `jplephem` on DE440s | 1e-12 relative + 1 mm |
 | Low-precision Sun / Moon | DE440 | tested 0.01 deg / 0.1 deg; measured 1950-2050: Sun < 30", 6e-5 in distance; Moon < 6', 0.14% |
-| SGP4 / SDP4 | Vallado's verification set, all cases [[ref:vallado2006|Vallado et al. (2006)]] | 1 mm, 1 um/s (largest difference measured: 0.12 mm) |
-| Kepler, elements, Lambert | Vallado Examples 2-4, 2-5, 7-5; Curtis Example 5.2 [[ref:curtis|Curtis]] | about the printed precision (Kepler 1 m, 1 mm/s; Lambert 0.1-0.5 m/s) |
+| SGP4 / SDP4 | Vallado's verification set, all cases [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/) | 1 mm, 1 um/s (largest difference measured: 0.12 mm) |
+| Kepler, elements, Lambert | Vallado Examples 2-4, 2-5, 7-5; Curtis Example 5.2 [Curtis](https://shop.elsevier.com/books/orbital-mechanics-for-engineering-students/curtis/978-0-12-824025-0) | about the printed precision (Kepler 1 m, 1 mm/s; Lambert 0.1-0.5 m/s) |
 | Numerical J2/J4 | energy integral; Brouwer secular rates | energy 1e-10 over 10 days; node rate 0.3% |
 | State transition matrix | finite differences of propagations; symplectic identity | 1e-6 relative; 1e-8 |
 | Interpolated STM between steps | integration to the exact time | 2e-8 (default tolerance), 2e-6 (relTol 1e-9) |

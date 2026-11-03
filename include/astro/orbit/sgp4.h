@@ -61,22 +61,31 @@ std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value);
 /// 6 satellite has decayed.
 class Sgp4Error : public Error {
 public:
+    /// `code` is the SGP4 error code, `what` the message.
     Sgp4Error(int code, const std::string& what)
         : Error(what)
         , code_(code) {}
+    /// The SGP4 error code (see the class description).
     [[nodiscard]] int code() const noexcept { return code_; }
 
 private:
     int code_;
 };
 
+/// SGP4/SDP4 propagator for one TLE. The deep-space (SDP4) branch is selected automatically.
 class Sgp4 {
 public:
+    /// Initialize from `tle`. Throws Sgp4Error (an astro::Error) if the elements fail at the epoch (codes 1-4; a
+    /// decayed state, code 6, is accepted).
     explicit Sgp4(const Tle& tle, Sgp4Gravity gravity = Sgp4Gravity::WGS72, Sgp4OpsMode mode = Sgp4OpsMode::Improved);
     ~Sgp4();
+    /// Deep copy.
     Sgp4(const Sgp4&);
+    /// Deep copy.
     Sgp4& operator=(const Sgp4&);
+    /// Move; the moved-from object may only be destroyed or assigned to.
     Sgp4(Sgp4&&) noexcept;
+    /// Move; the moved-from object may only be destroyed or assigned to.
     Sgp4& operator=(Sgp4&&) noexcept;
 
     /// TEME position (m) and velocity (m/s) `minutes` after the TLE epoch.
@@ -88,7 +97,9 @@ public:
     /// code 6 (decayed) the state is still filled in, as in Vallado's code.
     [[nodiscard]] int propagate(double minutesSinceEpoch, StateVector& out) const noexcept;
 
-    [[nodiscard]] const Tle&  tle() const noexcept;
+    /// The element set this propagator was built from.
+    [[nodiscard]] const Tle& tle() const noexcept;
+    /// The TLE epoch (UTC).
     [[nodiscard]] const Time& epoch() const noexcept;
     /// True if the deep-space (SDP4) branch is used (period >= 225 minutes).
     [[nodiscard]] bool isDeepSpace() const noexcept;

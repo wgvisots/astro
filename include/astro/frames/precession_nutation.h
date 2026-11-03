@@ -49,14 +49,15 @@ std::ostream& operator<<(std::ostream& os, PrecessionNutationModel value);
 
 /// Nutation in longitude and obliquity (rad).
 struct Nutation {
-    double dpsi{0.0};
-    double deps{0.0};
+    double dpsi{0.0}; ///< nutation in longitude (rad)
+    double deps{0.0}; ///< nutation in obliquity (rad)
 };
 
 /// IAU 2000A nutation with the IAU 2006 (R06) adjustments: 1358 + 1056 terms.
 [[nodiscard]] Nutation nutationIau2000A(double t) noexcept;
 /// IAU 2000B nutation: 77 luni-solar terms plus fixed planetary offsets.
 [[nodiscard]] Nutation nutationIau2000B(double t) noexcept;
+/// Nutation from the selected model: nutationIau2000A() or nutationIau2000B().
 [[nodiscard]] Nutation nutation(double t, PrecessionNutationModel model) noexcept;
 
 /// IAU 2006 mean obliquity of the ecliptic.
@@ -64,11 +65,12 @@ struct Nutation {
 
 /// IAU 2006 Fukushima-Williams bias-precession angles (rad).
 struct FukushimaWilliams {
-    double gammaBar{0.0};
-    double phiBar{0.0};
-    double psiBar{0.0};
-    double epsA{0.0}; ///< mean obliquity of date
+    double gammaBar{0.0}; ///< gamma-bar (rad)
+    double phiBar{0.0};   ///< phi-bar (rad)
+    double psiBar{0.0};   ///< psi-bar (rad)
+    double epsA{0.0};     ///< mean obliquity of date
 };
+/// IAU 2006 Fukushima-Williams bias-precession angles at `t`.
 [[nodiscard]] FukushimaWilliams fukushimaWilliams06(double t) noexcept;
 /// Rotation matrix from Fukushima-Williams angles: R1(-eps) R3(-psi) R1(phi) R3(gamma).
 [[nodiscard]] Mat3 fwToMatrix(double gamma, double phi, double psi, double eps) noexcept;
@@ -90,13 +92,15 @@ struct FukushimaWilliams {
 
 /// Coordinates of the Celestial Intermediate Pole in the GCRS (rad).
 struct CipXY {
-    double x{0.0};
-    double y{0.0};
+    double x{0.0}; ///< CIP X (rad)
+    double y{0.0}; ///< CIP Y (rad)
 };
 /// CIP X, Y from the IAU 2006/2000A series (IERS Tables 5.2a/b).
 [[nodiscard]] CipXY cipXY06(double t) noexcept;
 /// CIP X, Y extracted from a bias-precession-nutation matrix (used for 2000B).
 [[nodiscard]] CipXY cipXYFromMatrix(const Mat3& npb) noexcept;
+/// CIP X, Y for the selected model: cipXY06() for 2000A, or from the
+/// npbMatrix06() matrix for 2000B.
 [[nodiscard]] CipXY cipXY(double t, PrecessionNutationModel model) noexcept;
 /// CIO locator s, given the CIP X, Y (IERS Table 5.2d).
 [[nodiscard]] double cioLocatorS06(double t, const CipXY& xy) noexcept;

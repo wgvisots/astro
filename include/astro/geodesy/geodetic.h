@@ -27,9 +27,9 @@ namespace astro {
 
 /// Geodetic coordinates: latitude and longitude (rad), height above the ellipsoid (m).
 struct Geodetic {
-    double lat{0.0};
-    double lon{0.0};
-    double h{0.0};
+    double lat{0.0}; ///< geodetic latitude, rad
+    double lon{0.0}; ///< longitude, rad (east positive)
+    double h{0.0};   ///< height above the ellipsoid, m
 };
 
 /// Geodetic (lat, lon, h) to Earth-centered Earth-fixed Cartesian (m).
@@ -49,15 +49,19 @@ struct Geodetic {
                                                   const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// Reduced (parametric) latitude beta: tan(beta) = (1 - f) tan(phi).
 [[nodiscard]] double geodeticToReducedLatitude(double geodeticLat, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+/// Geodetic latitude from the reduced (parametric) latitude; inverse of
+/// geodeticToReducedLatitude().
 [[nodiscard]] double reducedToGeodeticLatitude(double reducedLat, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Spherical (geocentric) coordinates of a vector: latitude, longitude, radius.
 struct Spherical {
-    double lat{0.0};
-    double lon{0.0};
-    double r{0.0};
+    double lat{0.0}; ///< latitude above the xy plane, rad, [-pi/2, pi/2]
+    double lon{0.0}; ///< longitude from +x towards +y, rad, (-pi, pi]
+    double r{0.0};   ///< radius (units of the vector)
 };
+/// Spherical coordinates of a vector; longitude is 0 on the z axis.
 [[nodiscard]] Spherical cartesianToSpherical(const Vec3& v) noexcept;
-[[nodiscard]] Vec3      sphericalToCartesian(const Spherical& s) noexcept;
+/// Cartesian vector from spherical coordinates.
+[[nodiscard]] Vec3 sphericalToCartesian(const Spherical& s) noexcept;
 
 } // namespace astro

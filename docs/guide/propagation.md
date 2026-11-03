@@ -14,10 +14,10 @@ Numbers are from [Accuracy](../accuracy.md) and [Performance](../performance.md)
 ## Numerical J2/J4 on an output grid
 
 For many equally spaced outputs, use `propagateGrid(start, step, count)`. The integrator takes its own
-error-controlled steps (RKF7(8) [[ref:fehlberg1968|Fehlberg (1968)]], about 90-210 s in LEO) instead
+error-controlled steps (RKF7(8) [Fehlberg (1968)](https://ntrs.nasa.gov/citations/19680027281), about 90-210 s in LEO) instead
 of stopping at every output time, and the outputs in between come from a degree-7 Hermite
 polynomial that matches position, velocity, acceleration and jerk at both ends of each step
-[[ref:hairer|Hairer et al. (1993), sec. II.6]]. The cost therefore barely depends on the output spacing,
+[Hairer et al. (1993), sec. II.6](https://doi.org/10.1007/978-3-540-78862-1). The cost therefore barely depends on the output spacing,
 and the interpolation adds no measurable error.
 
 <!-- snippet: examples/propagation.cpp#numerical -->
@@ -62,15 +62,15 @@ std::cout << "two-body differs from J2/J4 by " << norm(kepler.r - grid.back().r)
 ```
 
 `propagateKepler` uses universal variables with the Laguerre-Conway iteration
-[[ref:conway1986|Conway (1986)]], valid for elliptic, parabolic and hyperbolic orbits. `lambertIzzo`
-solves Lambert's problem, including multi-revolution branches [[ref:izzo2015|Izzo (2015)]]. Classical
-and equinoctial elements [[ref:broucke1972|Broucke & Cefola (1972)]] convert to and from states in
+[Conway (1986)](https://doi.org/10.1007/BF01230852), valid for elliptic, parabolic and hyperbolic orbits. `lambertIzzo`
+solves Lambert's problem, including multi-revolution branches [Izzo (2015)](https://doi.org/10.1007/s10569-014-9587-y). Classical
+and equinoctial elements [Broucke & Cefola (1972)](https://doi.org/10.1007/BF01228432) convert to and from states in
 `orbit/elements.h`.
 
 ## Analytic J2/J4 (secular), and its limits
 
 `SecularPropagator` advances mean elements with the J2, J2^2 and J4 secular rates of Brouwer's theory
-[[ref:brouwer1959|Brouwer (1959)]]. It is set up once per orbit and then costs about 40 ns per output.
+[Brouwer (1959)](https://doi.org/10.1086/107958). It is set up once per orbit and then costs about 40 ns per output.
 
 <!-- snippet: examples/propagation.cpp#secular -->
 ```cpp
@@ -127,6 +127,6 @@ outputs carry the model's acceleration and jerk at the new time (the jerk is exa
 
 ## SGP4
 
-`Sgp4` implements SGP4/SDP4 as revised by Vallado et al. [[ref:vallado2006|Vallado et al. (2006)]]
-(after Spacetrack Report #3 [[ref:hoots1980|Hoots & Roehrich (1980)]]) and reproduces their
+`Sgp4` implements SGP4/SDP4 as revised by Vallado et al. [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/)
+(after Spacetrack Report #3 [Hoots & Roehrich (1980)](https://celestrak.org/NORAD/documentation/spacetrk.pdf)) and reproduces their
 verification set to 0.12 mm. It outputs TEME; see [Satellite geometry](satellite-geometry.md).

@@ -28,11 +28,14 @@ namespace astro {
 
 /// Oblate ellipsoid of revolution, defined by equatorial radius a (m) and flattening f.
 struct Ellipsoid {
-    double a{constants::wgs84A};
-    double f{constants::wgs84F};
+    double a{constants::wgs84A}; ///< equatorial radius (semi-major axis), m
+    double f{constants::wgs84F}; ///< flattening (a - b) / a
 
+    /// WGS84 (a = 6378137 m, 1/f = 298.257223563).
     [[nodiscard]] static constexpr Ellipsoid wgs84() noexcept { return {constants::wgs84A, constants::wgs84F}; }
+    /// GRS80 (a = 6378137 m, 1/f = 298.257222101).
     [[nodiscard]] static constexpr Ellipsoid grs80() noexcept { return {constants::grs80A, constants::grs80F}; }
+    /// IERS Conventions 2010 conventional ellipsoid (a = 6378136.6 m, 1/f = 298.25642).
     [[nodiscard]] static constexpr Ellipsoid iers2010() noexcept {
         return {constants::iers2010A, constants::iers2010F};
     }

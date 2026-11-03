@@ -51,7 +51,9 @@ public:
 /// for an approximate UT1 = UTC, no polar motion transformation).
 class ConstantEop final : public EopProvider {
 public:
+    /// All parameters zero (UT1 = UTC, no polar motion, no pole offsets).
     constexpr ConstantEop() noexcept = default;
+    /// Always returns `v`.
     constexpr explicit ConstantEop(const EopValues& v) noexcept
         : v_(v) {}
     [[nodiscard]] EopValues at(double /*mjdUtc*/) const override { return v_; }
@@ -62,12 +64,13 @@ private:
 
 /// EOP at one tabulated epoch (MJD, UTC, normally 0h).
 struct EopRecord {
-    double    mjd{0.0};
-    EopValues values;
+    double    mjd{0.0}; ///< epoch, MJD (UTC)
+    EopValues values;   ///< parameters at that epoch
 };
 
+/// Interpolation between tabulated EOP records.
 enum class EopInterpolation {
-    Linear,
+    Linear,    ///< linear between the two neighbouring records
     Lagrange4, ///< 4-point Lagrange (cubic), recommended for daily data
 };
 
@@ -83,6 +86,8 @@ std::ostream& operator<<(std::ostream& os, EopInterpolation value);
 /// and libration corrections (IERS 2010 Ch. 5/8) are not applied.
 class EopTable final : public EopProvider {
 public:
+    /// From records in any order (sorted here). Throws astro::Error if there
+    /// are fewer than two records.
     explicit EopTable(std::vector<EopRecord> records, EopInterpolation interp = EopInterpolation::Lagrange4);
 
     /// IERS Rapid Service `finals2000A.all` / `finals2000A.data` / `finals2000A.daily`
@@ -90,6 +95,8 @@ public:
     /// polar motion are skipped, missing LOD/dX/dY are taken as zero.
     [[nodiscard]] static EopTable loadFinals2000A(const std::string& path,
                                                   EopInterpolation   interp = EopInterpolation::Lagrange4);
+    /// As loadFinals2000A(), from file contents already in memory. Throws
+    /// astro::Error if no usable rows are found.
     [[nodiscard]] static EopTable parseFinals2000A(std::string_view content,
                                                    EopInterpolation interp = EopInterpolation::Lagrange4);
     /// IERS EOP C04 series, either the classic "14" format
@@ -97,14 +104,20 @@ public:
     /// (YYYY MM DD HH MJD x y UT1-UTC dX dY xrt yrt LOD ...). Angles in arcsec.
     [[nodiscard]] static EopTable loadC04(const std::string& path,
                                           EopInterpolation   interp = EopInterpolation::Lagrange4);
+    /// As loadC04(), from file contents already in memory. Throws astro::Error
+    /// if no usable rows are found.
     [[nodiscard]] static EopTable parseC04(std::string_view content,
                                            EopInterpolation interp = EopInterpolation::Lagrange4);
 
     /// Interpolated EOP. Throws astro::Error outside [firstMjd(), lastMjd()].
     [[nodiscard]] EopValues at(double mjdUtc) const override;
 
-    [[nodiscard]] double                        firstMjd() const noexcept { return records_.front().mjd; }
-    [[nodiscard]] double                        lastMjd() const noexcept { return records_.back().mjd; }
+    /// MJD (UTC) of the first / last record.
+    /// @{
+    [[nodiscard]] double firstMjd() const noexcept { return records_.front().mjd; }
+    [[nodiscard]] double lastMjd() const noexcept { return records_.back().mjd; }
+    /// @}
+    /// The records, sorted by MJD.
     [[nodiscard]] const std::vector<EopRecord>& records() const noexcept { return records_; }
 
 private:

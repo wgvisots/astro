@@ -14,9 +14,9 @@ sub-nanosecond resolution over centuries. Converting with `to(scale)` goes throu
 | `GPS`, `GST` | GPS time, Galileo System Time | TAI - 19 s |
 | `BDT` | BeiDou time | TAI - 33 s |
 
-The definitions follow the IERS Conventions [[ref:iers2010|IERS Conventions (2010), ch. 10]] and the
-IAU resolutions summarised in [[ref:usno179|USNO Circular 179]]; results are validated against
-ERFA [[ref:erfa|ERFA]] to 1 ns over 1960-2035 ([Accuracy](../accuracy.md)).
+The definitions follow the IERS Conventions [IERS Conventions (2010), ch. 10](https://www.iers.org/TN36) and the
+IAU resolutions summarised in [USNO Circular 179](https://aa.usno.navy.mil/publications/Circular_179); results are validated against
+ERFA [ERFA](https://github.com/liberfa/erfa) to 1 ns over 1960-2035 ([Accuracy](../accuracy.md)).
 
 ## Converting
 
@@ -33,7 +33,7 @@ std::cout << utc.iso8601(3) << '\n'                     // 2016-12-31T23:59:60.5
 
 ## Leap seconds
 
-UTC uses the SOFA "quasi-JD" convention [[ref:sofa-time|SOFA Time Scale and Calendar Tools]]: on a
+UTC uses the SOFA "quasi-JD" convention [SOFA Time Scale and Calendar Tools](https://www.iausofa.org/s/sofa_ts_c.pdf): on a
 day with a leap second, the UTC day is stretched, so `23:59:60.5` is a valid, distinct instant.
 Arithmetic is in SI seconds and counts the leap second:
 
@@ -47,8 +47,8 @@ std::cout << (before + 1.0).iso8601(0) << '\n';         // 2016-12-31T23:59:60Z
 ```
 
 The built-in table ends with the 2017 leap second. If the IERS announces a new one
-([[ref:bulletin-c|IERS Bulletin C]]), load an updated `Leap_Second.dat` or `leap-seconds.list`
-[[ref:iana-leap|IANA leap-seconds.list]] once at start-up with `setLeapSecondTable`; the table is
+([IERS Bulletin C](https://datacenter.iers.org/data/latestVersion/bulletinC.txt)), load an updated `Leap_Second.dat` or `leap-seconds.list`
+[IANA leap-seconds.list](https://data.iana.org/time-zones/data/leap-seconds.list) once at start-up with `setLeapSecondTable`; the table is
 swapped atomically, so other threads may keep converting. Before 1972, UTC ran at a different rate
 from TAI ("rubber seconds"); those offsets are built in too.
 
@@ -57,7 +57,7 @@ from TAI ("rubber seconds"); those offsets are built in too.
 Unix time counts days of exactly 86400 s, so it cannot represent a leap second;
 `Time::fromUnix` / `unixSeconds` follow that convention (the instant inside a leap second maps to
 the following second). GNSS week and time of week are available for GPS, Galileo and BeiDou
-[[ref:is-gps-200|IS-GPS-200]]:
+[IS-GPS-200](https://www.gps.gov/interface-control-documents-icds-interface-specifications-iss):
 
 <!-- snippet: examples/time_scales.cpp#unix_gnss -->
 ```cpp
@@ -75,7 +75,7 @@ week from a nearby reference time.
 
 UT1 follows the Earth's actual rotation and needs Earth orientation data. `ConstantEop{}`
 (UT1 = UTC) is within 0.9 s; an IERS `finals2000A.all` file makes it exact to the data's accuracy
-[[ref:iers-eop|IERS Earth orientation data]]:
+[IERS Earth orientation data](https://www.iers.org/iers/en/dataproducts/earthorientationdata/eop):
 
 <!-- snippet: examples/time_scales.cpp#ut1 -->
 ```cpp
