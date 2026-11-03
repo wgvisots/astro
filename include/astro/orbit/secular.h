@@ -99,6 +99,10 @@ struct SecularRates {
 /// few sines and cosines, so use this class instead of the free propagateSecular functions when
 /// propagating the same orbit more than once. Results are the same as the free functions (which use
 /// this class). Instances are immutable and safe to share between threads.
+///
+/// The z axis of the state's frame must be the Earth's pole (TOD, TEME or CIRS). For a GCRS or
+/// J2000 state, rotate it with poleOfDateMatrix (frames/transform.h) first and rotate the results
+/// back.
 class SecularPropagator {
 public:
     /// From mean elements (elliptic: e < 1).

@@ -28,6 +28,7 @@
 #include "astro/core/constants.h"
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
+#include "astro/frames/transform.h"
 #include "astro/orbit/integrators.h"
 #include "astro/orbit/numerical.h"
 #include "astro/time/time.h"
@@ -79,6 +80,13 @@ std::ostream& operator<<(std::ostream& os, ConsistencyTest value);
 
 /// Settings for propagating estimates.
 struct TrackerOptions {
+    /// Celestial frame of the delivered states and covariances: GCRS (default), J2000 (EME2000),
+    /// MOD, TOD, TEME or CIRS; Earth-fixed frames are rejected. Of-date frames are taken at each
+    /// estimate's own epoch, and predictions are expressed in the frame of their own time, so they
+    /// line up with later deliveries. Internally everything is propagated in GCRS with the zonal
+    /// field aligned to the true pole at the estimate's epoch. The frame-rotation velocity of the
+    /// of-date frames (below 0.1 mm/s in LEO) is not applied, as is usual for TOD/TEME states.
+    Frame frame{Frame::GCRS};
     /// Zonal coefficients by degree (J[2] = J2, ...) for the gravity model; point mass included.
     std::vector<double> J{0.0, 0.0, constants::J2, 0.0, constants::J4};
     double              mu{constants::gmEarth};
@@ -130,7 +138,9 @@ struct ConsistencyCheck {
 [[nodiscard]] double chiSquareSurvival3(double x) noexcept;
 [[nodiscard]] double chiSquareSurvival6(double x) noexcept;
 
-/// The numerical propagator TrackerOptions describes, started from `e`.
+/// The numerical propagator TrackerOptions describes, started from `e` (in options.frame): point
+/// mass and zonal field aligned with the true pole at e.epoch, with options.frame treated as
+/// inertial (frozen at e.epoch).
 [[nodiscard]] NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions& options = {});
 
 /// Propagate `prior` to next.epoch and compare it with `next` (see ConsistencyCheck).
@@ -164,8 +174,9 @@ private:
     [[nodiscard]] const NumericalPropagator& propagator() const;
 
     TrackerOptions                     opt_;
-    std::optional<StateEstimate>       current_;
-    std::optional<NumericalPropagator> prop_;
+    std::optional<StateEstimate>       current_;     // as delivered (options.frame)
+    std::optional<StateEstimate>       currentGcrs_; // the same, in GCRS
+    std::optional<NumericalPropagator> prop_;        // propagates currentGcrs_
 };
 
 } // namespace astro

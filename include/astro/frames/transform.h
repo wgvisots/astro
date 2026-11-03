@@ -107,6 +107,18 @@ private:
     Mat3      m_[9];
 };
 
+/// Rotation from GCRS to the celestial (non-rotating) frame f at t: r_f = M r_gcrs. Identity for
+/// GCRS. Uses IAU 2006/2000B precession-nutation (about 1 mas) and no Earth-orientation data, which
+/// suits conversions applied in both directions with the same model. Throws astro::Error for the
+/// Earth-fixed frames (TIRS, PEF, ITRS).
+[[nodiscard]] Mat3 gcrsToCelestialMatrix(Frame f, const Time& t);
+
+/// Rotation from the celestial frame `from` to a frame whose z axis is the Celestial Intermediate
+/// Pole (Earth's true spin axis) at t, for aligning a zonal gravity field (GravityField's
+/// toBodyFrame). Exactly the identity when the z axis of `from` already is the true pole (TOD, TEME,
+/// CIRS). Same model and restrictions as gcrsToCelestialMatrix.
+[[nodiscard]] Mat3 poleOfDateMatrix(Frame from, const Time& t);
+
 /// GCRS -> ITRS rotation matrix ("ECI to ECEF").
 [[nodiscard]] Mat3 gcrsToItrsMatrix(const Time& t, const EopProvider& eop, const FrameOptions& options = {});
 

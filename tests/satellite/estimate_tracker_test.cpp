@@ -24,6 +24,8 @@
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
+#include "astro/frames/eop.h"
+#include "astro/frames/transform.h"
 #include "astro/orbit/elements.h"
 #include "astro/satellite/estimate_tracker.h"
 #include "astro/satellite/orbital_frames.h"
@@ -249,8 +251,8 @@ TEST(EstimateTracker, SemiMajorAxisResidualOfABurn) {
 
 TEST(EstimateTracker, ElementTestIsMirrorInvariant) {
     // Retrograde orbits are mirrored (180 deg about x) before the element conversion. Mirroring the
-    // whole problem by hand gives a prograde orbit with the same zonal dynamics (J2 and J4 are even),
-    // so the distance must agree.
+    // whole problem by hand gives a prograde orbit; with point-mass gravity in GCRS (no pole, no
+    // turning frame) the mirror is an exact symmetry, so the distance must agree.
     const StateVector s0  = elementsToState({7000 * km, 0.002, deg2rad(140.0), 0.5, 1.0, 2.0});
     StateVector       sp  = s0;
     sp.r                 += Vec3{30.0, -10.0, 5.0};
@@ -267,8 +269,10 @@ TEST(EstimateTracker, ElementTestIsMirrorInvariant) {
             rotateCovariance(e.covariance, M)
         };
     };
-    const auto c  = checkConsistency(prior, next);
-    const auto cm = checkConsistency(mirror(prior), mirror(next));
+    TrackerOptions pointMass;
+    pointMass.J   = {};
+    const auto c  = checkConsistency(prior, next, pointMass);
+    const auto cm = checkConsistency(mirror(prior), mirror(next), pointMass);
     ASSERT_TRUE(c.valid);
     ASSERT_TRUE(cm.valid);
     EXPECT_GT(c.elementsMahalanobis2, 1.0);
@@ -315,4 +319,63 @@ TEST(EstimateTracker, InvalidCovarianceIsReported) {
     EXPECT_FALSE(c.valid);
     EXPECT_FALSE(c.consistent);
     EXPECT_TRUE(std::isnan(c.mahalanobis2));
+}
+
+TEST(EstimateTracker, TrueOfDateDeliveries) {
+    // Truth in GCRS; deliveries in TOD of their own epoch, converted with the full IAU 2006/2000A
+    // model. The tracker must reproduce TOD-of-date at each output time (freezing TOD at the
+    // estimate's epoch would be off by ~0.85 m after 4 h).
+    const Time        t0 = Time::fromIso8601("2026-11-02T00:00:00Z");
+    const StateVector sg = leo();
+    TrackerOptions    tight;
+    tight.integrator.relTol = 1e-13;
+    tight.integrator.absTol = 1e-10;
+    const auto truthG       = [&](double dt) { return makePropagator({t0, sg, Mat6{}}, tight).propagate(dt); };
+    const auto toTod        = [&](const StateVector& s, double dt) {
+        const Mat3 B = FrameTransformer(t0 + dt, ConstantEop{}).gcrsTo(Frame::TOD);
+        return StateVector{B * s.r, B * s.v};
+    };
+    const Mat6 P = diagonal(100.0, 1e-4);
+
+    TrackerOptions todOptions;
+    todOptions.frame = Frame::TOD;
+    EstimateTracker tod(todOptions), gcrs;
+    (void)tod.update({t0, toTod(sg, 0.0), P});
+    (void)gcrs.update({t0, sg, P});
+    const auto ct = tod.update({t0 + 3600.0, toTod(truthG(3600.0), 3600.0), P});
+    const auto cg = gcrs.update({t0 + 3600.0, truthG(3600.0), P});
+    ASSERT_TRUE(ct && cg);
+    EXPECT_TRUE(ct->consistent);
+    EXPECT_LT(norm(ct->positionResidualRic), 0.1);
+    // The check does not depend on the delivery frame.
+    astro::test::expectVecNear(ct->positionResidualRic, cg->positionResidualRic, 0.05);
+    EXPECT_NEAR(ct->positionSigmaRic.y / cg->positionSigmaRic.y, 1.0, 1e-9);
+
+    // Predictions over 4 h, in TOD of each output time: the GCRS tracker's predictions converted with
+    // the full model (which isolates the frame handling from the integrator's ~0.2 m at relTol 1e-9).
+    const auto pt     = tod.predictGrid(0.0, 600.0, 25);
+    const auto pg     = gcrs.predictGrid(0.0, 600.0, 25);
+    double     ofDate = 0.0, frozen = 0.0, truth = 0.0;
+    for (std::size_t k = 0; k < pt.size(); ++k) {
+        const double dt = 3600.0 + 600.0 * static_cast<double>(k);
+        ofDate          = std::max(ofDate, norm(pt[k].state.r - toTod(pg[k].state, dt).r));
+        frozen          = std::max(frozen, norm(pt[k].state.r - toTod(pg[k].state, 3600.0).r));
+        truth           = std::max(truth, norm(pt[k].state.r - toTod(truthG(dt), dt).r));
+        // Covariances are the GCRS ones rotated into TOD of date.
+        const Mat6 rot = rotateCovariance(pg[k].covariance, gcrsToCelestialMatrix(Frame::TOD, t0 + dt));
+        EXPECT_NEAR(pt[k].covariance[1][1] / rot[1][1], 1.0, 1e-6);
+    }
+    EXPECT_LT(ofDate, 0.05);
+    EXPECT_GT(frozen, 0.5);
+    EXPECT_LT(truth, 0.5); // integrator error at relTol 1e-9
+    // predict() agrees with the grid.
+    astro::test::expectVecNear(tod.predict(t0 + 3600.0 + 7200.0).state.r, pt[12].state.r, 1e-3);
+}
+
+TEST(EstimateTracker, RejectsEarthFixedFrames) {
+    TrackerOptions itrs;
+    itrs.frame = Frame::ITRS;
+    EXPECT_THROW(EstimateTracker{itrs}, Error);
+    const StateEstimate e{kEpoch, leo(), diagonal(1.0, 1e-6)};
+    EXPECT_THROW((void)checkConsistency(e, e, itrs), Error);
 }

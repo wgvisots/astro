@@ -24,6 +24,7 @@
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
+#include "astro/frames/transform.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/numerical.h"
@@ -187,4 +188,28 @@ TEST(NumericalGrid, TwelveStateAndEdgeCases) {
     EXPECT_TRUE(prop.propagateGrid(0.0, 60.0, 0).empty());
     EXPECT_EQ(prop.propagateGrid(250.0, 60.0, 1).front(), prop.propagate(250.0));
     EXPECT_THROW((void)prop.propagateGrid(0.0, 0.0, 10), Error);
+}
+
+TEST(NumericalGrid, J2J4FrameOverloadAlignsThePole) {
+    // The same orbit given in GCRS and in TOD (frozen at the epoch) must propagate identically once
+    // the zonal field is aligned with the true pole; ignoring the alignment in GCRS costs hundreds of
+    // metres over 4 h.
+    const Time        t0 = Time::fromIso8601("2026-11-02T00:00:00Z");
+    const StateVector sg = elementsToState({6778 * km, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    const Mat3        B  = gcrsToCelestialMatrix(Frame::TOD, t0);
+    const StateVector st{B * sg.r, B * sg.v};
+    const auto        g    = NumericalPropagator::j2j4(t0, sg, Frame::GCRS).propagateGrid(0.0, 600.0, 25);
+    const auto        tod  = NumericalPropagator::j2j4(t0, st, Frame::TOD).propagateGrid(0.0, 600.0, 25);
+    const auto        bare = NumericalPropagator::j2j4(t0, sg).propagateGrid(0.0, 600.0, 25);
+    double            same = 0.0, wrong = 0.0;
+    for (std::size_t k = 0; k < g.size(); ++k) {
+        same  = std::max(same, norm(B.transpose() * tod[k].r - g[k].r));
+        wrong = std::max(wrong, norm(bare[k].r - g[k].r));
+    }
+    EXPECT_LT(same, 1e-3);
+    EXPECT_GT(wrong, 100.0);
+    // The 12-component overload takes the same path.
+    const StateVector12 s12{sg.r, sg.v, {}, {}};
+    EXPECT_EQ(NumericalPropagator::j2j4(t0, s12, Frame::GCRS).propagate12(3600.0).rv(),
+              NumericalPropagator::j2j4(t0, sg, Frame::GCRS).propagate(3600.0));
 }

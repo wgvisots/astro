@@ -20,6 +20,7 @@
 
 #include "../core/enum_io.h"
 #include "astro/core/angle.h"
+#include "astro/core/error.h"
 #include "astro/core/rotation.h"
 #include "astro/frames/earth_rotation.h"
 
@@ -110,6 +111,39 @@ StateVector FrameTransformer::transform(const StateVector& s, Frame from, Frame 
     out.r = M * s.r;
     out.v = M * vInertialFrom - cross(angularVelocity(to), out.r);
     return out;
+}
+
+namespace {
+
+FrameTransformer fastCelestialTransformer(const Time& t) {
+    FrameOptions options;
+    options.model            = PrecessionNutationModel::IAU2006_2000B;
+    options.applyPoleOffsets = false;
+    return FrameTransformer(t, ConstantEop{}, options);
+}
+
+void requireCelestial(Frame f) {
+    if (isEarthFixed(f)) {
+        throw Error("celestial frame required (got an Earth-fixed frame)");
+    }
+}
+
+} // namespace
+
+Mat3 gcrsToCelestialMatrix(Frame f, const Time& t) {
+    requireCelestial(f);
+    if (f == Frame::GCRS) {
+        return Mat3::identity();
+    }
+    return fastCelestialTransformer(t).gcrsTo(f);
+}
+
+Mat3 poleOfDateMatrix(Frame from, const Time& t) {
+    requireCelestial(from);
+    if (from == Frame::TOD || from == Frame::TEME || from == Frame::CIRS) {
+        return Mat3::identity(); // z is already the true pole of date
+    }
+    return fastCelestialTransformer(t).matrix(from, Frame::CIRS);
 }
 
 Mat3 gcrsToItrsMatrix(const Time& t, const EopProvider& eop, const FrameOptions& options) {

@@ -75,7 +75,7 @@ auto passes = findPasses(sgp4ItrsFunction(sgp4, eop), g, utc, utc + 86400.0, deg
 StateVector12 s12{r, v, a, j};
 Propagation12 p = propagateKepler(s12, 600.0, constants::gmEarth, HigherOrderMode::UnmodeledForce);
 Propagation12 q = propagateSecular(s12, 86400.0);                       // J2 + J2² + J4 mean drift
-auto num = NumericalPropagator::j2j4(utc, s12, HigherOrderMode::UnmodeledForce);
+auto num = NumericalPropagator::j2j4(utc, s12, Frame::GCRS, HigherOrderMode::UnmodeledForce);
 StateVector12 later = num.propagate12(3600.0);
 ```
 
@@ -116,7 +116,7 @@ returns Phi itself. Expect about 6x the cost of the states alone (8x with proces
 AdaptiveOptions opt;
 opt.relTol = 1e-9;   // ~0.2 m worst case over 4 h
 opt.absTol = 1e-6;
-NumericalPropagator prop(epoch, state, {std::make_shared<GravityField>(std::vector<double>{0, 0, constants::J2, 0, constants::J4})}, opt);
+auto prop = NumericalPropagator::j2j4(epoch, state, Frame::GCRS, opt);   // or Frame::TOD, ...
 std::vector<StateCovariance> out = prop.propagateGridWithCovariance(0.0, 10.0, 1441, P0, 1e-9);
 ```
 
@@ -127,7 +127,9 @@ covariance, and checks each new delivery against the previous one propagated to 
 outputs of one filter are correlated, so they are not fused; the newest replaces the previous.
 
 ```cpp
-EstimateTracker tracker;                              // J2 + J4, relTol 1e-9
+TrackerOptions options;
+options.frame = Frame::TOD;                           // frame of the deliveries (default GCRS)
+EstimateTracker tracker(options);                     // J2 + J4, relTol 1e-9
 if (auto check = tracker.update({epoch, state, P}); check && !check->consistent) {
     // check->positionResidualRic vs check->positionSigmaRic says where and by how many sigma
 }
@@ -170,6 +172,11 @@ You supply:
   `23:59:60.5` can be represented and arithmetic counts them.
 - Every public enum is reflected with `BOOST_DESCRIBE_ENUM` and has an `operator<<` that writes
   `TimeScale::UTC` (or `TimeScale::INVALID_VALUE` for a value outside the enumeration).
+- Zonal gravity (J2, J4) acts about the Earth's true spin axis. In GCRS/J2000 that axis is about
+  0.15 deg from z (2026), which over 4 h in LEO would cost ~270 m, so say which frame a state is in:
+  `NumericalPropagator::j2j4(epoch, state, Frame::GCRS)`, `TrackerOptions::frame`, or
+  `poleOfDateMatrix` for a hand-built `GravityField`. TOD, TEME and CIRS need no rotation.
+  `EstimateTracker` also expresses predictions in the of-date frame of their own time.
 - Celestial frames use the IERS 2010 CIO-based chain. The equinox-based frames are also available
   for interoperability.
 

@@ -64,27 +64,18 @@ StateVector deputyFromRelativeRic(const StateVector& chief, const StateVector& r
 }
 
 Mat6 rotateCovariance(const Mat6& P, const Mat3& R) noexcept {
-    // T = diag(R, R); P' = T P T^T.
-    Mat6 T{};
+    // P' = diag(R, R) P diag(R, R)^T, block by block: P'_ij = R P_ij R^T (the lower-left block is the
+    // transpose of the upper-right one).
+    const Mat3 rr = R * block(P, 0, 0) * R.transpose();
+    const Mat3 rv = R * block(P, 0, 1) * R.transpose();
+    const Mat3 vv = R * block(P, 1, 1) * R.transpose();
+    Mat6       out{};
     for (std::size_t i = 0; i < 3; ++i) {
         for (std::size_t j = 0; j < 3; ++j) {
-            T[i][j]         = R(i, j);
-            T[i + 3][j + 3] = R(i, j);
-        }
-    }
-    Mat6 tmp{}, out{};
-    for (std::size_t i = 0; i < 6; ++i) {
-        for (std::size_t j = 0; j < 6; ++j) {
-            for (std::size_t k = 0; k < 6; ++k) {
-                tmp[i][j] += T[i][k] * P[k][j];
-            }
-        }
-    }
-    for (std::size_t i = 0; i < 6; ++i) {
-        for (std::size_t j = 0; j < 6; ++j) {
-            for (std::size_t k = 0; k < 6; ++k) {
-                out[i][j] += tmp[i][k] * T[j][k];
-            }
+            out[i][j]         = rr(i, j);
+            out[i][j + 3]     = rv(i, j);
+            out[i + 3][j]     = rv(j, i);
+            out[i + 3][j + 3] = vv(i, j);
         }
     }
     return out;

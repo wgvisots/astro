@@ -18,6 +18,7 @@
 
 #include "astro/satellite/estimate_tracker.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -50,9 +51,10 @@ double chiSquareSurvival6(double x) noexcept {
 }
 
 NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions& options) {
+    const Mat3 pole = poleOfDateMatrix(options.frame, e.epoch);
     return NumericalPropagator(e.epoch,
                                e.state,
-                               {std::make_shared<GravityField>(options.J, options.mu, options.re)},
+                               {std::make_shared<GravityField>(options.J, options.mu, options.re, pole)},
                                options.integrator);
 }
 
@@ -131,6 +133,62 @@ ConsistencyCheck compare(const StateCovariance& pred, const StateEstimate& next,
     return c;
 }
 
+/// `e` (in frame f) expressed in GCRS.
+StateEstimate toGcrs(const StateEstimate& e, Frame f) {
+    if (f == Frame::GCRS) {
+        return e;
+    }
+    const Mat3 Mt = gcrsToCelestialMatrix(f, e.epoch).transpose();
+    return {
+        e.epoch,
+        StateVector{Mt * e.state.r, Mt * e.state.v},
+        rotateCovariance(e.covariance, Mt)
+    };
+}
+
+/// A GCRS state and covariance expressed in the frame with GCRS -> frame rotation M.
+StateCovariance rotated(const StateCovariance& s, const Mat3& M) {
+    return {
+        StateVector{M * s.state.r, M * s.state.v},
+        rotateCovariance(s.covariance, M)
+    };
+}
+
+/// GCRS -> frame rotations over [t0, t1] seconds after `epoch`: exact at nodes at most an hour
+/// apart, linear in between. The of-date frames turn by under 1e-7 rad per hour, so the blend stays
+/// orthonormal to ~1e-14 and accurate to well under a millimetre in LEO.
+class FrameSeries {
+public:
+    FrameSeries(Frame f, const Time& epoch, double t0, double t1)
+        : t0_(t0) {
+        const double span = std::max(t1 - t0, 1.0);
+        const int    n    = static_cast<int>(std::ceil(span / 3600.0));
+        h_                = span / n;
+        for (int k = 0; k <= n; ++k) {
+            nodes_.push_back(gcrsToCelestialMatrix(f, epoch + (t0 + h_ * k)));
+        }
+    }
+
+    [[nodiscard]] Mat3 at(double t) const {
+        const double      u    = (t - t0_) / h_;
+        const double      last = static_cast<double>(nodes_.size() - 2);
+        const std::size_t k    = static_cast<std::size_t>(std::clamp(std::floor(u), 0.0, last));
+        const double      w    = u - static_cast<double>(k);
+        return nodes_[k] * (1.0 - w) + nodes_[k + 1] * w;
+    }
+
+private:
+    double            t0_;
+    double            h_{1.0};
+    std::vector<Mat3> nodes_;
+};
+
+void requireCelestial(Frame f) {
+    if (isEarthFixed(f)) {
+        throw Error("EstimateTracker: TrackerOptions::frame must be a celestial frame (not TIRS, PEF or ITRS)");
+    }
+}
+
 StateCovariance propagateTo(const NumericalPropagator& prop, const Mat6& P0, double dt, double q) {
     std::vector<StateCovariance> out(1);
     prop.propagateGridWithCovariance(dt, 1.0, P0, out, q); // a single output: integrates exactly to dt
@@ -141,29 +199,46 @@ StateCovariance propagateTo(const NumericalPropagator& prop, const Mat6& P0, dou
 
 ConsistencyCheck
 checkConsistency(const StateEstimate& prior, const StateEstimate& next, const TrackerOptions& options) {
-    const double     dt   = next.epoch - prior.epoch;
-    const auto       prop = makePropagator(prior, options);
-    ConsistencyCheck c =
-        compare(propagateTo(prop, prior.covariance, dt, options.accelerationNoisePsd), next, dt, options);
-    c.replaced = dt >= 0.0;
+    requireCelestial(options.frame);
+    TrackerOptions gcrs          = options;
+    gcrs.frame                   = Frame::GCRS;
+    const StateEstimate   priorG = toGcrs(prior, options.frame);
+    const double          dt     = next.epoch - prior.epoch;
+    const StateCovariance pred =
+        propagateTo(makePropagator(priorG, gcrs), priorG.covariance, dt, options.accelerationNoisePsd);
+    // Compare in the delivery frame at the new epoch.
+    const StateCovariance predF =
+        options.frame == Frame::GCRS ? pred : rotated(pred, gcrsToCelestialMatrix(options.frame, next.epoch));
+    ConsistencyCheck c = compare(predF, next, dt, options);
+    c.replaced         = dt >= 0.0;
     return c;
 }
 
 EstimateTracker::EstimateTracker(TrackerOptions options)
-    : opt_(std::move(options)) {}
+    : opt_(std::move(options)) {
+    requireCelestial(opt_.frame);
+}
 
 std::optional<ConsistencyCheck> EstimateTracker::update(const StateEstimate& next) {
+    TrackerOptions gcrs                   = opt_;
+    gcrs.frame                            = Frame::GCRS;
+    const StateEstimate             nextG = toGcrs(next, opt_.frame);
     std::optional<ConsistencyCheck> check;
     if (current_) {
-        const double dt = next.epoch - current_->epoch;
-        check = compare(propagateTo(*prop_, current_->covariance, dt, opt_.accelerationNoisePsd), next, dt, opt_);
+        const double          dt   = next.epoch - current_->epoch;
+        const StateCovariance pred = propagateTo(*prop_, currentGcrs_->covariance, dt, opt_.accelerationNoisePsd);
+        // Compare in the delivery frame at the new epoch.
+        const StateCovariance predF =
+            opt_.frame == Frame::GCRS ? pred : rotated(pred, gcrsToCelestialMatrix(opt_.frame, next.epoch));
+        check           = compare(predF, next, dt, opt_);
         check->replaced = dt >= 0.0;
         if (!check->replaced) {
             return check;
         }
     }
-    current_ = next;
-    prop_    = makePropagator(next, opt_);
+    current_     = next;
+    currentGcrs_ = nextG;
+    prop_        = makePropagator(nextG, gcrs);
     return check;
 }
 
@@ -182,11 +257,21 @@ const NumericalPropagator& EstimateTracker::propagator() const {
 }
 
 StateCovariance EstimateTracker::predict(const Time& t) const {
-    return propagateTo(propagator(), current().covariance, t - current().epoch, opt_.accelerationNoisePsd);
+    const StateCovariance g =
+        propagateTo(propagator(), currentGcrs_->covariance, t - current().epoch, opt_.accelerationNoisePsd);
+    return opt_.frame == Frame::GCRS ? g : rotated(g, gcrsToCelestialMatrix(opt_.frame, t));
 }
 
 void EstimateTracker::predictGrid(double start, double step, std::span<StateCovariance> out) const {
-    propagator().propagateGridWithCovariance(start, step, current().covariance, out, opt_.accelerationNoisePsd);
+    propagator().propagateGridWithCovariance(start, step, currentGcrs_->covariance, out, opt_.accelerationNoisePsd);
+    if (opt_.frame == Frame::GCRS || out.empty()) {
+        return;
+    }
+    const double      end = start + step * static_cast<double>(out.size() - 1);
+    const FrameSeries series(opt_.frame, current().epoch, std::min(start, end), std::max(start, end));
+    for (std::size_t k = 0; k < out.size(); ++k) {
+        out[k] = rotated(out[k], series.at(start + step * static_cast<double>(k)));
+    }
 }
 
 std::vector<StateCovariance> EstimateTracker::predictGrid(double start, double step, std::size_t count) const {

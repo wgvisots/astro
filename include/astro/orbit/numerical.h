@@ -26,6 +26,7 @@
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 #include "astro/ephemeris/ephemeris.h"
+#include "astro/frames/transform.h"
 #include "astro/orbit/integrators.h"
 #include "astro/orbit/state12.h"
 #include "astro/time/time.h"
@@ -136,7 +137,23 @@ public:
                         HigherOrderMode                                mode    = HigherOrderMode::ModelOnly,
                         const AdaptiveOptions&                         options = {});
 
-    /// Convenience: point mass + J2 + J4 (the zonal J3 is omitted), in a frame with z along the pole.
+    /// Point mass + J2 + J4 for a state in the celestial frame `frame` (GCRS, J2000, MOD, TOD, TEME
+    /// or CIRS) at `epoch`: the zonal field is aligned with the true pole at the epoch (in GCRS the
+    /// pole is ~0.15 deg off z in 2026, which would cost ~270 m over 4 h in LEO). The frame itself
+    /// is treated as inertial, frozen at the epoch; for of-date frames (MOD, TOD, TEME, CIRS) that
+    /// drifts from the frame of each output time by ~0.2 m/h in LEO. EstimateTracker converts
+    /// outputs to the frame of their own time.
+    [[nodiscard]] static NumericalPropagator
+    j2j4(const Time& epoch, const StateVector& initial, Frame frame, const AdaptiveOptions& options = {});
+    /// As above, from a 12-component state.
+    [[nodiscard]] static NumericalPropagator j2j4(const Time&            epoch,
+                                                  const StateVector12&   initial,
+                                                  Frame                  frame,
+                                                  HigherOrderMode        mode    = HigherOrderMode::ModelOnly,
+                                                  const AdaptiveOptions& options = {});
+
+    /// Point mass + J2 + J4 (the zonal J3 is omitted) in a frame whose z axis is the true pole
+    /// (TOD, TEME, CIRS). For GCRS or J2000 states use the overload taking a Frame.
     [[nodiscard]] static NumericalPropagator j2j4(const Time&        epoch,
                                                   const StateVector& initial,
                                                   double             mu = constants::gmEarth,

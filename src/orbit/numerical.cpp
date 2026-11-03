@@ -178,6 +178,30 @@ NumericalPropagator::NumericalPropagator(const Time&                            
     }
 }
 
+namespace {
+
+std::shared_ptr<const ForceModel> j2j4Field(Frame frame, const Time& epoch) {
+    return std::make_shared<GravityField>(std::vector<double>{0.0, 0.0, constants::J2, 0.0, constants::J4},
+                                          constants::gmEarth,
+                                          constants::earthRadiusEgm2008,
+                                          poleOfDateMatrix(frame, epoch));
+}
+
+} // namespace
+
+NumericalPropagator
+NumericalPropagator::j2j4(const Time& epoch, const StateVector& initial, Frame frame, const AdaptiveOptions& options) {
+    return NumericalPropagator(epoch, initial, {j2j4Field(frame, epoch)}, options);
+}
+
+NumericalPropagator NumericalPropagator::j2j4(const Time&            epoch,
+                                              const StateVector12&   initial,
+                                              Frame                  frame,
+                                              HigherOrderMode        mode,
+                                              const AdaptiveOptions& options) {
+    return NumericalPropagator(epoch, initial, {j2j4Field(frame, epoch)}, mode, options);
+}
+
 NumericalPropagator NumericalPropagator::j2j4(const Time&          epoch,
                                               const StateVector12& initial,
                                               HigherOrderMode      mode,
