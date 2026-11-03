@@ -88,7 +88,7 @@ struct VerRow {
 TEST(Sgp4, VerificationAgainstVallado) {
     // SGP4-VER.TLE and tcppver.out from Vallado et al. (2006), as distributed with python-sgp4.
     std::ifstream tf(dataPath("SGP4-VER.TLE"));
-    ASSERT_TRUE(tf);
+    ASSERT_TRUE(tf) << "cannot open " << dataPath("SGP4-VER.TLE");
     std::vector<VerCase> cases;
     std::string          line, pending;
     while (std::getline(tf, line)) {
@@ -107,7 +107,7 @@ TEST(Sgp4, VerificationAgainstVallado) {
     ASSERT_GE(cases.size(), 30u);
 
     std::ifstream of(dataPath("tcppver.out"));
-    ASSERT_TRUE(of);
+    ASSERT_TRUE(of) << "cannot open " << dataPath("tcppver.out");
     std::vector<std::pair<int, std::vector<VerRow>>> expected;
     while (std::getline(of, line)) {
         if (line.find("xx") != std::string::npos) {
