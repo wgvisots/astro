@@ -26,6 +26,8 @@
 #include "astro/core/vec.h"
 #include "astro/time/time.h"
 
+/// \file
+/// The Ephemeris interface and the Body identifiers (NAIF ids).
 namespace astro {
 
 /// Solar-system bodies, numbered with their NAIF integer IDs.

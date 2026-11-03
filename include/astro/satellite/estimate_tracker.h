@@ -33,6 +33,7 @@
 #include "astro/orbit/numerical.h"
 #include "astro/time/time.h"
 
+/// \file
 /// Following a stream of state estimates from an upstream filter.
 ///
 /// Each delivery from a filter already contains everything before it, so successive deliveries are

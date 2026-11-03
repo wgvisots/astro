@@ -18,6 +18,7 @@
 
 #pragma once
 
+/// \file
 /// Anomaly conversions and Kepler's equation for elliptic (e < 1), parabolic
 /// (e = 1) and hyperbolic (e > 1) orbits. Angles in radians.
 namespace astro {

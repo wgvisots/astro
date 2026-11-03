@@ -119,6 +119,21 @@ int main(int argc, char** argv) {
                    sink += out12.back().r.x;
                }
            }));
+    AdaptiveOptions loose; // the 4 h / few-metre setting from docs/performance.md
+    loose.relTol = 1e-9;
+    loose.absTol = 1e-6;
+    report("numerical: propagateGrid, relTol 1e-9", secondsPerRun([&] {
+               for (const auto& s : states) {
+                   NumericalPropagator::j2j4(Time(), s, Frame::TOD, loose).propagateGrid(0.0, Y, out);
+                   sink += out.back().r.x;
+               }
+           }));
+    report("numerical: propagateGrid12, relTol 1e-9", secondsPerRun([&] {
+               for (const auto& s : states) {
+                   NumericalPropagator::j2j4(Time(), s, Frame::TOD, loose).propagateGrid12(0.0, Y, out12);
+                   sink += out12.back().r.x;
+               }
+           }));
     std::printf("\n(checksum %g)\n", sink);
     return 0;
 }

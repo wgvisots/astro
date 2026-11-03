@@ -24,6 +24,7 @@
 
 #include "astro/core/error.h"
 
+/// \file
 /// Scalar root finding and minimization (header-only templates).
 namespace astro {
 

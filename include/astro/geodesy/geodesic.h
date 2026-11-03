@@ -20,6 +20,7 @@
 
 #include "astro/geodesy/ellipsoid.h"
 
+/// \file
 /// Geodesics on the ellipsoid (Vincenty 1975). Sub-millimeter accurate; the
 /// inverse problem may fail to converge for nearly antipodal points, in which
 /// case astro::Error is thrown.

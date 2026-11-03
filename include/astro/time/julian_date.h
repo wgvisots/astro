@@ -22,6 +22,8 @@
 
 #include "astro/core/constants.h"
 
+/// \file
+/// Two-part Julian dates and calendar conversions.
 namespace astro {
 
 /// Gregorian calendar date and time of day. `second` may reach 60.x on a UTC

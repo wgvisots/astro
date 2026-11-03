@@ -28,6 +28,8 @@
 
 #include "astro/time/julian_date.h"
 
+/// \file
+/// astro::Time, an instant in a stated time scale, and conversions between UTC, TAI, TT, TDB, TCG, TCB, UT1, GPS, Galileo and BeiDou time, Unix time and GNSS weeks.
 namespace astro {
 
 class EopProvider;

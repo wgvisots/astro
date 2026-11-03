@@ -23,8 +23,10 @@
 #include "astro/core/constants.h"
 #include "astro/core/vec.h"
 
+/// \file
 /// Gravitational accelerations. Positions are in a frame whose z axis is the
-/// body's rotation axis (for the Earth, e.g. CIRS/TOD/ITRS, or GCRS as an approximation).
+/// body's rotation axis (for the Earth: CIRS, TOD, TEME or ITRS; rotate GCRS or J2000 vectors with
+/// poleOfDateMatrix first: GCRS z is ~0.15 deg from the true pole).
 namespace astro {
 
 /// Point-mass acceleration -mu r / |r|^3.

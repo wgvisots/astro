@@ -24,6 +24,7 @@
 
 #include "astro/core/vec.h"
 
+/// \file
 /// Options and results shared by the propagators that take a 12-component state
 /// (position, velocity, acceleration, jerk).
 namespace astro {

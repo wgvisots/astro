@@ -21,6 +21,8 @@
 #include <numbers>
 
 /// Physical, astronomical and geodetic constants. SI units throughout.
+/// \file
+/// Physical, geodetic and astronomical constants (WGS84, GRS80, IERS 2010, EGM2008, DE440). SI units.
 namespace astro::constants {
 
 // ------------------------------------------------------------ math

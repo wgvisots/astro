@@ -24,6 +24,7 @@
 
 #include "astro/core/vec.h"
 
+/// \file
 /// Seven- and fourteen-parameter Helmert (similarity) transformations between
 /// terrestrial reference frames, in the linearized IERS form
 ///     X2 = X1 + T + s X1 + R X1,

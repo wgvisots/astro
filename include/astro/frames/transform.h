@@ -28,6 +28,7 @@
 #include "astro/frames/precession_nutation.h"
 #include "astro/time/time.h"
 
+/// \file
 /// Celestial <-> terrestrial reference frame transformations.
 ///
 /// The primary chain is the IERS 2010 CIO-based transformation

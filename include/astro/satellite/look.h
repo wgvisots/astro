@@ -27,6 +27,7 @@
 #include "astro/orbit/sgp4.h"
 #include "astro/time/time.h"
 
+/// \file
 /// Ground-station geometry: look angles, range rate, Doppler, and pass prediction.
 namespace astro {
 

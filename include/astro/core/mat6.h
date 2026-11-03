@@ -25,6 +25,7 @@
 
 #include "astro/core/vec.h"
 
+/// \file
 /// 6x6 matrices for position/velocity covariances and state transition matrices. Element [i][j]
 /// is row i, column j; rows and columns 0-2 are position, 3-5 velocity.
 ///

@@ -28,6 +28,7 @@
 #include "astro/orbit/elements.h"
 #include "astro/orbit/state12.h"
 
+/// \file
 /// Analytic secular (mean-element) drift due to the Earth's zonal harmonics,
 /// after Brouwer (1959): first order in J2, plus J2^2 and J4.
 namespace astro {

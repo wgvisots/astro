@@ -25,6 +25,7 @@
 
 #include "astro/core/vec.h"
 
+/// \file
 /// Rotation conventions
 /// --------------------
 /// All matrices produced here are *passive* (frame / coordinate) rotations,

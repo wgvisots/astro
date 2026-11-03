@@ -25,6 +25,7 @@
 #include "astro/geodesy/geodetic.h"
 #include "astro/time/time.h"
 
+/// \file
 /// Ground track, sub-satellite point, coverage footprint and line of sight.
 namespace astro {
 

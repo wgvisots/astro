@@ -31,6 +31,7 @@
 #include "astro/orbit/state12.h"
 #include "astro/time/time.h"
 
+/// \file
 /// Numerical orbit propagation with pluggable force models.
 namespace astro {
 

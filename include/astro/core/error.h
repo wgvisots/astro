@@ -21,6 +21,8 @@
 #include <stdexcept>
 #include <string>
 
+/// \file
+/// astro::Error, the exception thrown for bad input and missing data.
 namespace astro {
 
 /// Base exception for all errors raised by the astro library: invalid input,

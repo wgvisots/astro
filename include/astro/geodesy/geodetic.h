@@ -21,6 +21,8 @@
 #include "astro/core/vec.h"
 #include "astro/geodesy/ellipsoid.h"
 
+/// \file
+/// Geodetic latitude/longitude/height <-> Earth-centred Earth-fixed coordinates, and auxiliary latitudes.
 namespace astro {
 
 /// Geodetic coordinates: latitude and longitude (rad), height above the ellipsoid (m).

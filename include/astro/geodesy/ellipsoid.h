@@ -22,6 +22,8 @@
 
 #include "astro/core/constants.h"
 
+/// \file
+/// Reference ellipsoids (WGS84, GRS80) and their radii of curvature.
 namespace astro {
 
 /// Oblate ellipsoid of revolution, defined by equatorial radius a (m) and flattening f.

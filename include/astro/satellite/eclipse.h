@@ -28,6 +28,7 @@
 #include "astro/core/vec.h"
 #include "astro/time/time.h"
 
+/// \file
 /// Earth shadow (eclipse) geometry and the solar beta angle. Positions are
 /// geocentric, in any common frame, in meters.
 namespace astro {

@@ -18,6 +18,7 @@
 
 #pragma once
 
+/// \file
 /// Atmospheric refraction. Elevations in radians; refraction is the amount by
 /// which the observed (apparent) elevation exceeds the true (geometric) one.
 namespace astro {

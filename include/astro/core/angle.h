@@ -23,6 +23,8 @@
 
 #include "astro/core/constants.h"
 
+/// \file
+/// Angle units and wrapping, and sexagesimal (HMS/DMS) parsing and formatting.
 namespace astro {
 
 [[nodiscard]] constexpr double deg2rad(double deg) noexcept {

@@ -1,0 +1,75 @@
+# Doxygen configuration for astro, configured by CMake into the build tree (target `docs`).
+# Builds the API reference plus every Markdown page under docs/ into one HTML site.
+
+PROJECT_NAME           = "astro"
+PROJECT_NUMBER         = @PROJECT_VERSION@
+PROJECT_BRIEF          = "Time scales, geodesy, reference frames, ephemerides and orbit propagation in C++20"
+OUTPUT_DIRECTORY       = @ASTRO_DOCS_OUTPUT@
+CREATE_SUBDIRS         = NO
+
+INPUT                  = @PROJECT_SOURCE_DIR@/docs @PROJECT_SOURCE_DIR@/include
+FILE_PATTERNS          = *.h *.md *.dox
+RECURSIVE              = YES
+EXCLUDE_SYMBOLS        = astro::detail astro::detail::* astro::*::detail
+EXAMPLE_PATH           = @PROJECT_SOURCE_DIR@/examples
+USE_MDFILE_AS_MAINPAGE = @PROJECT_SOURCE_DIR@/docs/index.md
+FULL_PATH_NAMES        = YES
+STRIP_FROM_PATH        = @PROJECT_SOURCE_DIR@/include @PROJECT_SOURCE_DIR@
+STRIP_FROM_INC_PATH    = @PROJECT_SOURCE_DIR@/include
+
+MARKDOWN_SUPPORT       = YES
+TOC_INCLUDE_HEADINGS   = 3
+AUTOLINK_SUPPORT       = YES
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+BUILTIN_STL_SUPPORT    = YES
+DISTRIBUTE_GROUP_DOC   = YES
+INLINE_SIMPLE_STRUCTS  = NO
+TYPEDEF_HIDES_STRUCT   = NO
+
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = NO
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+HIDE_FRIEND_COMPOUNDS  = YES
+SORT_MEMBER_DOCS       = NO
+SHOW_USED_FILES        = YES
+SHOW_INCLUDE_FILES     = YES
+
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = "BOOST_DESCRIBE_ENUM(...)="
+
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_IF_INCOMPLETE_DOC = NO
+WARN_NO_PARAMDOC       = NO
+WARN_AS_ERROR          = @ASTRO_DOCS_WARN_AS_ERROR@
+WARN_LOGFILE           = @ASTRO_DOCS_OUTPUT@/warnings.log
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_COLORSTYLE        = AUTO_LIGHT
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = NO
+DISABLE_INDEX          = NO
+SEARCHENGINE           = YES
+SOURCE_BROWSER         = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = NO
+
+HAVE_DOT               = @ASTRO_DOCS_HAVE_DOT@
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = NO
+INCLUDE_GRAPH          = NO
+INCLUDED_BY_GRAPH      = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+DIRECTORY_GRAPH        = YES

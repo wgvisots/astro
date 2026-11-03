@@ -21,6 +21,7 @@
 #include "astro/core/vec.h"
 #include "astro/geodesy/geodetic.h"
 
+/// \file
 /// Local topocentric frames: East-North-Up (ENU), North-East-Down (NED), and
 /// azimuth / elevation / range (AER). Azimuth is measured clockwise from north.
 namespace astro {

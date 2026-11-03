@@ -16,6 +16,8 @@
 # limitations under the License.
 ###########################################################################
 
-add_executable(astro_propagation_bench propagation_bench.cpp)
-target_link_libraries(astro_propagation_bench PRIVATE astro::astro)
-target_compile_options(astro_propagation_bench PRIVATE ${ASTRO_WARNING_FLAGS})
+foreach(name propagation covariance)
+    add_executable(astro_${name}_bench ${name}_bench.cpp)
+    target_link_libraries(astro_${name}_bench PRIVATE astro::astro)
+    target_compile_options(astro_${name}_bench PRIVATE ${ASTRO_WARNING_FLAGS})
+endforeach()

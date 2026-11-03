@@ -22,6 +22,7 @@
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 
+/// \file
 /// Classical and equinoctial orbital elements. SI units, radians.
 namespace astro {
 

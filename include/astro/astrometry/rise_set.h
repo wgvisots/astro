@@ -26,6 +26,7 @@
 
 #include "astro/astrometry/apparent.h"
 
+/// \file
 /// Rise, set, transit and twilight times, and lunar phase.
 namespace astro {
 

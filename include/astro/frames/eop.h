@@ -25,6 +25,8 @@
 
 #include <boost/describe/enum.hpp>
 
+/// \file
+/// Earth orientation parameters (UT1 - UTC, polar motion, celestial pole offsets): providers and IERS file readers.
 namespace astro {
 
 /// Earth orientation parameters at one epoch. Angles in radians, times in seconds.

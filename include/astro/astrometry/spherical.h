@@ -20,6 +20,7 @@
 
 #include "astro/core/vec.h"
 
+/// \file
 /// Celestial spherical coordinates and the classical coordinate systems.
 namespace astro {
 

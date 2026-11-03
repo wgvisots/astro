@@ -20,6 +20,7 @@
 
 #include "astro/ephemeris/ephemeris.h"
 
+/// \file
 /// Analytical low-precision Sun and Moon positions; no data files needed.
 namespace astro {
 

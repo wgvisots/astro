@@ -30,6 +30,9 @@ endif()
 option(ASTRO_BUILD_TESTS "Build the astro unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(ASTRO_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(ASTRO_BUILD_BENCHMARKS "Build the astro benchmarks" OFF)
+option(ASTRO_BUILD_STUDIES "Build the accuracy studies behind docs/accuracy.md" OFF)
+option(ASTRO_DOCS_WARNINGS_AS_ERRORS "Fail the docs target on Doxygen warnings" OFF)
+option(ASTRO_BUILD_EXAMPLES "Build (and test) the astro examples" ${PROJECT_IS_TOP_LEVEL})
 
 include(GNUInstallDirs)
 
@@ -94,11 +97,47 @@ install(FILES ${PROJECT_BINARY_DIR}/astroConfig.cmake ${PROJECT_BINARY_DIR}/astr
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/astro)
 
 # ---------------------------------------------------------------- tests
-if(ASTRO_BUILD_TESTS)
+if(ASTRO_BUILD_TESTS OR ASTRO_BUILD_EXAMPLES)
     enable_testing()
+endif()
+if(ASTRO_BUILD_TESTS)
     add_subdirectory(tests)
+endif()
+if(ASTRO_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
 
 if(ASTRO_BUILD_BENCHMARKS)
     add_subdirectory(bench)
+endif()
+if(ASTRO_BUILD_STUDIES)
+    add_subdirectory(studies)
+endif()
+
+# ---------------------------------------------------------------- docs
+# `cmake --build build --target docs` builds the API reference and the Markdown pages into
+# build/docs/html. The code in the Markdown pages must match the examples (test docs.snippets).
+find_package(Doxygen 1.9 OPTIONAL_COMPONENTS dot)
+if(DOXYGEN_FOUND)
+    set(ASTRO_DOCS_OUTPUT ${PROJECT_BINARY_DIR}/docs)
+    if(DOXYGEN_DOT_FOUND)
+        set(ASTRO_DOCS_HAVE_DOT YES)
+    else()
+        set(ASTRO_DOCS_HAVE_DOT NO)
+    endif()
+    if(ASTRO_DOCS_WARNINGS_AS_ERRORS)
+        set(ASTRO_DOCS_WARN_AS_ERROR FAIL_ON_WARNINGS)
+    else()
+        set(ASTRO_DOCS_WARN_AS_ERROR NO)
+    endif()
+    configure_file(docs/Doxyfile.in ${ASTRO_DOCS_OUTPUT}/Doxyfile @ONLY)
+    add_custom_target(docs
+            COMMAND Doxygen::doxygen ${ASTRO_DOCS_OUTPUT}/Doxyfile
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+            COMMENT "Building HTML documentation in ${ASTRO_DOCS_OUTPUT}/html"
+            VERBATIM)
+endif()
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND AND (ASTRO_BUILD_TESTS OR ASTRO_BUILD_EXAMPLES))
+    add_test(NAME docs.snippets COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_doc_snippets.py ${PROJECT_SOURCE_DIR})
 endif()

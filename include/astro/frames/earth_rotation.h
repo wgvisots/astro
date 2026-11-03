@@ -22,6 +22,7 @@
 #include "astro/frames/precession_nutation.h"
 #include "astro/time/julian_date.h"
 
+/// \file
 /// Earth rotation angle, sidereal time and polar motion. Angles in radians [0, 2pi).
 namespace astro {
 

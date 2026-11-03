@@ -24,6 +24,8 @@
 
 #include "astro/time/time.h"
 
+/// \file
+/// Two-line element sets: parsing, formatting, checksums and Alpha-5 catalogue numbers.
 namespace astro {
 
 /// NORAD two-line element set. Angles in radians; mean motion in revolutions/day

@@ -24,6 +24,7 @@
 #include "astro/core/vec.h"
 #include "astro/orbit/state12.h"
 
+/// \file
 /// Two-body (Keplerian) propagation and Lambert's problem.
 namespace astro {
 

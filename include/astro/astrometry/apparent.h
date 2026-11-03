@@ -25,6 +25,7 @@
 #include "astro/frames/transform.h"
 #include "astro/geodesy/local.h"
 
+/// \file
 /// Apparent and observed places of stars and solar-system bodies.
 ///
 /// Pipeline (as in SOFA/ERFA): catalog ICRS place -> space motion -> parallax

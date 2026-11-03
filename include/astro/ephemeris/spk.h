@@ -24,6 +24,8 @@
 
 #include "astro/ephemeris/ephemeris.h"
 
+/// \file
+/// Reader for JPL SPK ephemeris kernels (.bsp; DAF segment types 2 and 3).
 namespace astro {
 
 /// Description of one SPK segment.

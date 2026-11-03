@@ -26,6 +26,7 @@
 
 #include "astro/core/error.h"
 
+/// \file
 /// Explicit Runge-Kutta ODE integrators (header-only) for y' = f(t, y),
 /// y an std::array<double, N>.
 namespace astro {

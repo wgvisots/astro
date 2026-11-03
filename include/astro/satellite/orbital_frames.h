@@ -21,6 +21,7 @@
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 
+/// \file
 /// Satellite-centered orbital frames. Each function returns the rotation from
 /// the inertial frame of `s` into the orbital frame: v_frame = M * v_inertial
 /// (the rows of M are the frame's unit vectors).

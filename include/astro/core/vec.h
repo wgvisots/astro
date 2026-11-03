@@ -23,6 +23,8 @@
 #include <cstddef>
 #include <ostream>
 
+/// \file
+/// Vec3, Mat3 and the position/velocity state vectors StateVector and StateVector12.
 namespace astro {
 
 /// Three-component Cartesian vector (double precision).

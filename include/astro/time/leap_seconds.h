@@ -24,6 +24,8 @@
 #include <string_view>
 #include <vector>
 
+/// \file
+/// The UTC leap-second table: built in, or loaded from IERS / IANA files.
 namespace astro {
 
 /// One step of the TAI-UTC history. From the given UTC date (0h) onward,

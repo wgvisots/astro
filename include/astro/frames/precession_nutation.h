@@ -25,6 +25,7 @@
 
 #include "astro/core/vec.h"
 
+/// \file
 /// IAU 2006 precession and IAU 2000A/2000B nutation (IERS Conventions 2010, Ch. 5).
 ///
 /// All functions take `t`, Julian centuries of TT since J2000.0
