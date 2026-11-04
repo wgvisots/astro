@@ -18,9 +18,14 @@
 
 #pragma once
 
+#include <functional>
+#include <iosfwd>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
+
+#include <boost/describe/enum.hpp>
 
 #include "astro/core/constants.h"
 #include "astro/core/mat6.h"
@@ -129,6 +134,28 @@ private:
 struct StateCovariance {
     StateVector state;      ///< position (m) and velocity (m/s)
     Mat6        covariance; ///< covariance of (r, v) in the same frame (m^2, m^2/s, m^2/s^2)
+};
+
+/// Which zero crossings of an event function count as events (see propagateToEvent).
+enum class Crossing {
+    Any,     ///< either direction
+    Rising,  ///< the function goes from negative to positive as time increases
+    Falling, ///< the function goes from positive to negative as time increases (e.g. height at impact)
+};
+
+BOOST_DESCRIBE_ENUM(Crossing, Any, Rising, Falling)
+
+/// Writes "Crossing::<enumerator>", or "Crossing::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, Crossing value);
+
+/// Event function for propagateToEvent: a value at dt seconds after the epoch for the state there.
+/// Events are its zero crossings (e.g. height above the ellipsoid, or the z coordinate for nodes).
+using EventFunction = std::function<double(double dt, const StateVector& state)>;
+
+/// An event found by NumericalPropagator::propagateToEvent.
+struct PropagationEvent {
+    double      dt{0.0}; ///< seconds after the epoch
+    StateVector state;   ///< position (m) and velocity (m/s) at dt
 };
 
 /// Integrates the equations of motion with RKF7(8).
@@ -263,6 +290,21 @@ public:
                           std::span<StateVector> states,
                           std::span<Mat6>        stm,
                           AdaptiveStats*         stats = nullptr) const;
+
+    /// First zero crossing of the event function g, in the given direction, between the epoch and
+    /// maxDt (negative: search backward in time). nullopt if there is none.
+    ///
+    /// The integrator takes its usual error-controlled steps. g is sampled at the end and at three
+    /// interior points of each step (from the degree-7 Hermite interpolant used by propagateGrid),
+    /// and a sign change is refined with Brent's method on the interpolant to `timeTolerance`
+    /// seconds; the integration then stops. A zero of g at the epoch itself is not an event, so a
+    /// trajectory that starts on the surface finds the impact, not the launch. Crossings that
+    /// enter and leave within a quarter step can be missed (steps are ~100 s in LEO).
+    [[nodiscard]] std::optional<PropagationEvent> propagateToEvent(const EventFunction& g,
+                                                                   double               maxDt,
+                                                                   Crossing             crossing      = Crossing::Any,
+                                                                   double               timeTolerance = 1e-6,
+                                                                   AdaptiveStats*       stats         = nullptr) const;
 
     /// Acceleration and jerk of the force models at state s, t seconds after the epoch.
     [[nodiscard]] StateVector12 withDerivatives(double t, const StateVector& s) const;

@@ -23,7 +23,9 @@
 #include <numeric>
 #include <utility>
 
+#include "../core/enum_io.h"
 #include "astro/core/error.h"
+#include "astro/core/rootfind.h"
 #include "astro/orbit/gravity.h"
 #include "gravity_detail.h"
 
@@ -333,6 +335,92 @@ void NumericalPropagator::grid(double start, double step, std::size_t count, Ada
     if (stats) {
         *stats = total;
     }
+}
+
+// ------------------------------------------------------------ events
+
+std::ostream& operator<<(std::ostream& os, Crossing value) {
+    return detail::writeEnum(os, "Crossing", value);
+}
+
+std::optional<PropagationEvent> NumericalPropagator::propagateToEvent(const EventFunction& g,
+                                                                      double               maxDt,
+                                                                      Crossing             crossing,
+                                                                      double               timeTolerance,
+                                                                      AdaptiveStats*       stats) const {
+    if (stats) {
+        *stats = {};
+    }
+    if (!g) {
+        throw Error("NumericalPropagator::propagateToEvent: empty event function");
+    }
+    if (!std::isfinite(maxDt)) {
+        throw Error("NumericalPropagator::propagateToEvent: maxDt must be finite");
+    }
+    if (!(timeTolerance > 0.0) || !std::isfinite(timeTolerance)) {
+        throw Error("NumericalPropagator::propagateToEvent: time tolerance must be finite and positive");
+    }
+    if (maxDt == 0.0) {
+        return std::nullopt;
+    }
+    // Crossing directions refer to increasing time; searching backward meets them reversed.
+    Crossing searchCrossing = crossing;
+    if (maxDt < 0.0 && crossing != Crossing::Any) {
+        searchCrossing = crossing == Crossing::Rising ? Crossing::Falling : Crossing::Rising;
+    }
+    // ga at the earlier sample in search order. A zero at the previous sample does not count, so
+    // the epoch itself is never an event.
+    const auto isEvent = [searchCrossing](double ga, double gb) {
+        const bool rising  = ga < 0.0 && gb >= 0.0;
+        const bool falling = ga > 0.0 && gb <= 0.0;
+        switch (searchCrossing) {
+        case Crossing::Rising:  return rising;
+        case Crossing::Falling: return falling;
+        default:                return rising || falling;
+        }
+    };
+    const auto value = [&g](double t, const StateVector& s) {
+        const double v = g(t, s);
+        if (!std::isfinite(v)) {
+            throw Error("NumericalPropagator::propagateToEvent: event function is not finite");
+        }
+        return v;
+    };
+
+    double                          tPrev = 0.0;
+    double                          gPrev = value(0.0, s0_);
+    StateVector12                   A     = withDerivatives(0.0, s0_);
+    std::optional<PropagationEvent> found;
+    auto onStep = [&](double ta, const OdeState<6>& /*ya*/, double tb, const OdeState<6>& yb) {
+        const StateVector12 B = withDerivatives(tb, toStateVector(yb));
+        const double        h = tb - ta;
+        const SepticHermite poly(A, B, h);
+        A                      = B;
+        const auto    stateAt  = [&](double t) { return t == tb ? B.rv() : poly.at((t - ta) / h); };
+        constexpr int kSamples = 4; // per step: three interior points and the end
+        for (int i = 1; i <= kSamples; ++i) {
+            const double t  = i == kSamples ? tb : ta + h * (static_cast<double>(i) / kSamples);
+            const double gt = value(t, stateAt(t));
+            if (isEvent(gPrev, gt)) {
+                const double tEvent =
+                    gt == 0.0 ? t : brentRoot([&](double x) { return value(x, stateAt(x)); }, tPrev, t, timeTolerance);
+                found = PropagationEvent{tEvent, stateAt(tEvent)};
+                return false; // stop the integration
+            }
+            tPrev = t;
+            gPrev = gt;
+        }
+        return true;
+    };
+    const OdeState<6> y0{s0_.r.x, s0_.r.y, s0_.r.z, s0_.v.x, s0_.v.y, s0_.v.z};
+    (void)integrateRkf78Steps<6>([this](double t, const OdeState<6>& y) { return derivative(t, y); },
+                                 0.0,
+                                 y0,
+                                 maxDt,
+                                 onStep,
+                                 opt_,
+                                 stats);
+    return found;
 }
 
 // ------------------------------------------------------------ variational equations

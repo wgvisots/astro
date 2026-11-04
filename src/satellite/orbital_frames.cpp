@@ -63,22 +63,4 @@ StateVector deputyFromRelativeRic(const StateVector& chief, const StateVector& r
     return {chief.r + dr, chief.v + Mt * rel.v + cross(omega, dr)};
 }
 
-Mat6 rotateCovariance(const Mat6& P, const Mat3& R) noexcept {
-    // P' = diag(R, R) P diag(R, R)^T, block by block: P'_ij = R P_ij R^T (the lower-left block is the
-    // transpose of the upper-right one).
-    const Mat3 rr = R * block(P, 0, 0) * R.transpose();
-    const Mat3 rv = R * block(P, 0, 1) * R.transpose();
-    const Mat3 vv = R * block(P, 1, 1) * R.transpose();
-    Mat6       out{};
-    for (std::size_t i = 0; i < 3; ++i) {
-        for (std::size_t j = 0; j < 3; ++j) {
-            out[i][j]         = rr(i, j);
-            out[i][j + 3]     = rv(i, j);
-            out[i + 3][j]     = rv(j, i);
-            out[i + 3][j + 3] = vv(i, j);
-        }
-    }
-    return out;
-}
-
 } // namespace astro
