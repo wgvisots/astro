@@ -1,0 +1,3 @@
+# Generated coefficient tables (tools/gen_tdb_table.py, tools/gen_iau_tables.py); keep generator output as is.
+src/data/fairhead_tdb.cpp
+src/data/iau2006_series.cpp

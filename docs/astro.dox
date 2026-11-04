@@ -1,0 +1,11 @@
+/**
+\namespace astro
+\brief Everything in the library.
+
+The headers are grouped by module under `include/astro/`: `core` (vectors, rotations, angles,
+constants), `time`, `geodesy`, `frames`, `ephemeris`, `astrometry`, `orbit` and `satellite`. The
+[user guide](index.md) explains how they fit together. SI units and radians throughout.
+
+\namespace astro::constants
+\brief Physical, geodetic and astronomical constants, in SI units and radians.
+*/

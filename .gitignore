@@ -29,4 +29,13 @@
 # Executables
 *.exe
 *.out
+# ...but not the SGP4 verification output used by the tests.
+!tests/data/tcppver.out
 *.app
+
+# Build directories and IDE files
+build/
+build-*/
+cmake-build-*/
+.idea/
+.vscode/
