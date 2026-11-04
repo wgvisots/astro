@@ -111,6 +111,40 @@ The element test has the sensitivity of the Cartesian 6-D test without its false
 why it is the default (at 4 h, part of the Cartesian test's extra detections are its own false
 alarms).
 
+## Impact prediction
+
+From `astro_study_impact`. Launches from the WGS84 ellipsoid at 30 N, 100 W, heading north-east,
+with constant non-zero EOP.
+
+Impact point from `predictImpact` with its defaults (IAU 2006/2000B, interpolated Earth rotation,
+relTol 1e-9), against a brute-force reference (relTol 1e-13, the full IAU 2006/2000A
+transformation at every evaluation, Brent's method on the propagated height):
+
+| Shot | Flight | Range | Error |
+|---|---|---|---|
+| 3 km/s, 35 deg | 413 s | 975 km | 5 mm |
+| 5 km/s, 35 deg | 936 s | 3335 km | 1 mm |
+| 7 km/s, 35 deg | 2353 s | 8787 km | 5 mm |
+| 7 km/s, 15 deg | 1638 s | 9483 km | 5 mm |
+
+Linear 1-sigma impact ellipse against a Monte Carlo of the initial covariance (4000 samples per
+row; the same 1-sigma on every position axis and every velocity axis). "In 95 %" is the fraction of
+sampled impacts inside the linear 95 % ellipse; the sampling error of each Monte Carlo axis is
+about 1 %:
+
+| Shot | 1-sigma r, v | Semi-major, linear / MC | Semi-minor, linear / MC | Rotation, linear / MC | In 95 % |
+|---|---|---|---|---|---|
+| 3 km/s, 35 deg | 10 m, 0.01 m/s | 20.7 / 20.8 m | 9.6 / 9.5 m | 50.9 / 50.5 deg | 94.7 % |
+| 3 km/s, 35 deg | 1 km, 1 m/s | 2069 / 2082 m | 963 / 961 m | 50.9 / 50.8 deg | 95.0 % |
+| 5 km/s, 35 deg | 100 m, 0.1 m/s | 295.7 / 294.8 m | 92.2 / 91.9 m | 69.9 / 69.9 deg | 94.8 % |
+| 5 km/s, 35 deg | 1 km, 1 m/s | 2957 / 3053 m | 922 / 931 m | 69.9 / 70.0 deg | 94.0 % |
+| 7 km/s, 35 deg | 100 m, 0.1 m/s | 523.2 / 521.3 m | 120.9 / 118.3 m | 129.5 / 129.4 deg | 95.2 % |
+| 7 km/s, 15 deg | 100 m, 0.1 m/s | 1190 / 1170 m | 93.9 / 93.2 m | 130.4 / 130.4 deg | 94.5 % |
+| 7 km/s, 15 deg | 1 km, 1 m/s | 11897 / 11940 m | 939 / 944 m | 130.4 / 130.5 deg | 95.2 % |
+
+(The study prints all 12 combinations; the rows not shown agree as closely.) The unit tests also
+check the ellipse against central differences of the impact point, to 1e-4.
+
 ## Reproducing
 
 ```sh
@@ -119,6 +153,7 @@ cmake --build build -j
 ctest --test-dir build                       # the validation tests
 build/studies/astro_study_propagation        # < 1 s
 build/studies/astro_study_consistency        # ~1 min; optional argument: samples per row
+build/studies/astro_study_impact             # ~2 s; optional argument: Monte Carlo samples
 ```
 
 Regenerating the ERFA and JPL reference data needs Python with `numpy`, `pyerfa`, `sgp4` and

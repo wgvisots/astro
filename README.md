@@ -18,20 +18,22 @@ radians everywhere. Validated against ERFA/SOFA, JPL DE440 and Vallado's SGP4 ve
 | `core` | `Vec3`/`Mat3`/`Quat`, passive `R1/R2/R3`, all 12 Euler sequences, angle wrapping, HMS/DMS parse/format, root finders, constants (WGS84, GRS80, IERS 2010, EGM2008 zonals, DE440 GMs) |
 | `time` | Two-part Julian dates; `Time` over UTC, TAI, TT, TDB, TCG, TCB, UT1, GPS, Galileo, BeiDou; leap seconds (built in, or loaded from `Leap_Second.dat` / `leap-seconds.list` / `tai-utc.dat`); Unix and `std::chrono`; GNSS week/TOW with rollover; ISO-8601 |
 | `geodesy` | Geodetic <-> ECEF (closed form, exact everywhere), ENU/NED/AER, geocentric/reduced latitude, Vincenty geodesics, 7/14-parameter Helmert |
-| `frames` | IAU 2006/2000A (and 2000B) precession-nutation, ERA/GMST/GAST, polar motion; GCRS, J2000, MOD, TOD, TEME, CIRS, TIRS, PEF, ITRS with position+velocity; IERS EOP from `finals2000A` or C04 |
+| `frames` | IAU 2006/2000A (and 2000B) precession-nutation, ERA/GMST/GAST, polar motion; GCRS, J2000, MOD, TOD, TEME, CIRS, TIRS, PEF, ITRS with position+velocity; fast GCRS <-> ITRS over a time window; IERS EOP from `finals2000A` or C04 |
 | `ephemeris` | Low-precision Sun/Moon (no data files); JPL SPK (`.bsp`, e.g. DE440) reader |
 | `astrometry` | RA/Dec, ecliptic, galactic; apparent/observed places (space motion, parallax, light deflection, aberration, refraction); sidereal time; rise/set/transit, twilight, Moon phase |
-| `orbit` | Keplerian and equinoctial elements; Kepler's equation; universal-variable propagation; Lambert (Izzo, multi-rev); J2/J2²/J4 secular rates, sun-synchronous and repeat-track design; zonal gravity, RK4/RKF7(8), numerical propagator; 12-component (position, velocity, acceleration, jerk) propagation with optional unmodeled force; TLE parse/format and SGP4/SDP4 |
+| `orbit` | Keplerian and equinoctial elements; Kepler's equation; universal-variable propagation; Lambert (Izzo, multi-rev); J2/J2²/J4 secular rates, sun-synchronous and repeat-track design; zonal gravity, RK4/RKF7(8), numerical propagator with event detection; 12-component (position, velocity, acceleration, jerk) propagation with optional unmodeled force; ballistic impact on the WGS84 ellipsoid with impact error ellipse; TLE parse/format and SGP4/SDP4 |
 | `satellite` | Look angles, range rate, Doppler; pass prediction; estimate tracking with consistency checks; eclipses (cylindrical/conical) and beta angle; sub-satellite point, ground track, footprint, line of sight; RIC/LVLH/VNC/NTW frames, relative motion, covariance rotation |
 
 ## Documentation
 
 - **[User guide](docs/index.md)**: getting started, time scales, geodesy, reference frames,
-  ephemerides and astrometry, propagation, covariance and tracking, satellite geometry, conventions.
+  ephemerides and astrometry, propagation, covariance and tracking, impact prediction, satellite
+  geometry, conventions.
 - **[Accuracy](docs/accuracy.md)** and **[Performance](docs/performance.md)**: what is validated
   against what, measured propagation and consistency-check accuracy, timings, and the programs
   that reproduce them.
 - **[References](docs/references.md)**: the standards, papers and books the code follows.
+- **[Glossary](docs/glossary.md)**: every acronym and term used in the docs, spelled out.
 - **API reference**: `cmake --build build --target docs` builds it (with the pages above) into
   `build/docs/html`; it is also published at <https://wgvisots.github.io/astro/>.
 - **[Examples](examples)**: small complete programs, built and run as tests.

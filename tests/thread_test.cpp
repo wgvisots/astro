@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -29,6 +30,7 @@
 #include "astro/ephemeris/spk.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/gravity.h"
+#include "astro/orbit/impact.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
 #include "astro/satellite/estimate_tracker.h"
@@ -122,5 +124,36 @@ TEST(ThreadSafety, SharedSecularPropagatorAndTracker) {
             EXPECT_EQ(tracks[i][k].state, refTrack[k].state);
             EXPECT_EQ(tracks[i][k].covariance, refTrack[k].covariance);
         }
+    }
+}
+
+TEST(ThreadSafety, SharedRotationSeriesForImpacts) {
+    // Many impact predictions in one window, sharing one ItrsRotationSeries across threads.
+    const ConstantEop        eop;
+    const ItrsRotationSeries rotations(kEpoch, 3 * 3600.0, eop, ImpactOptions{}.frameOptions);
+    ImpactOptions            options;
+    options.rotations = &rotations;
+    Mat6 P{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        P[i][i]         = 1e4;
+        P[i + 3][i + 3] = 1e-2;
+    }
+    // Suborbital: a LEO-like state slowed to 80 % of circular speed comes down within an orbit.
+    const StateVector s0  = leo();
+    const StateVector sub = {s0.r, s0.v * 0.8};
+    const auto        ref = predictImpact(kEpoch, sub, P, Frame::GCRS, eop, options);
+    ASSERT_TRUE(ref && ref->uncertainty);
+
+    std::vector<std::optional<Impact>> got(kThreads);
+    concurrently([&](int i) {
+        for (int rep = 0; rep < 20; ++rep) {
+            got[i] = predictImpact(kEpoch, sub, P, Frame::GCRS, eop, options);
+        }
+    });
+    for (int i = 0; i < kThreads; ++i) {
+        ASSERT_TRUE(got[i] && got[i]->uncertainty);
+        EXPECT_EQ(got[i]->flightTime, ref->flightTime);
+        EXPECT_EQ(got[i]->itrs, ref->itrs);
+        EXPECT_EQ(got[i]->uncertainty->ellipse.semiMajor, ref->uncertainty->ellipse.semiMajor);
     }
 }
