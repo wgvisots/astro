@@ -17,6 +17,7 @@ jobs:
     name: Analyze (C++)
     runs-on: ubuntu-24.04
     permissions:
+      actions: read          # the analyze step reads this workflow run's details
       contents: read
       security-events: write
     steps:
