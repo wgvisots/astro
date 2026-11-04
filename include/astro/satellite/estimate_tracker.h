@@ -138,6 +138,7 @@ struct ConsistencyCheck {
 /// @{
 
 /// Survival function of the chi-square distribution with 3 and 6 degrees of freedom, P(X >= x).
+/// NaN for NaN, so a NaN statistic never passes a p-value test.
 [[nodiscard]] double chiSquareSurvival3(double x) noexcept;
 [[nodiscard]] double chiSquareSurvival6(double x) noexcept;
 /// @}
@@ -147,7 +148,8 @@ struct ConsistencyCheck {
 /// inertial (frozen at e.epoch).
 [[nodiscard]] NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions& options = {});
 
-/// Propagate `prior` to next.epoch and compare it with `next` (see ConsistencyCheck).
+/// Propagate `prior` to next.epoch and compare it with `next` (see ConsistencyCheck). Throws
+/// astro::Error if either estimate has a non-finite state, covariance or epoch.
 [[nodiscard]] ConsistencyCheck
 checkConsistency(const StateEstimate& prior, const StateEstimate& next, const TrackerOptions& options = {});
 
@@ -162,6 +164,8 @@ public:
     /// Take a new estimate. If there is a current one, `next` is first checked against it; the
     /// result is returned (nullopt for the first estimate). `next` then replaces the current
     /// estimate, consistent or not, unless it is older than the current one (check.replaced).
+    /// Throws astro::Error, keeping the current estimate, if `next` has a non-finite state,
+    /// covariance or epoch.
     std::optional<ConsistencyCheck> update(const StateEstimate& next);
 
     /// Whether an estimate has been taken yet.

@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <exception>
 #include <fstream>
 #include <sstream>
 
@@ -80,8 +81,17 @@ const std::vector<LeapSecondEntry>& builtinEntries() {
     return e;
 }
 
-constexpr int monthKey(int y, int m) noexcept {
-    return y * 12 + (m - 1);
+constexpr long long monthKey(int y, int m) noexcept {
+    return static_cast<long long>(y) * 12 + (m - 1);
+}
+
+/// std::stod that throws astro::Error (not std::invalid_argument / std::out_of_range).
+double toDouble(const std::string& text, const char* file) {
+    try {
+        return std::stod(text);
+    } catch (const std::exception&) {
+        throw Error(std::string(file) + ": malformed number in: " + text);
+    }
 }
 
 double mjdOfDate(int y, int m, int d) {
@@ -133,9 +143,9 @@ LeapSecondTable parseTaiUtcDat(std::string_view content) {
         }
         LeapSecondEntry e{year,
                           month,
-                          std::stod(line.substr(pOff + 8)),
-                          std::stod(line.substr(pRef + 5)),
-                          std::stod(line.substr(pRate + 3))};
+                          toDouble(line.substr(pOff + 8), "tai-utc.dat"),
+                          toDouble(line.substr(pRef + 5), "tai-utc.dat"),
+                          toDouble(line.substr(pRate + 3), "tai-utc.dat")};
         entries.push_back(e);
     }
     if (entries.empty()) {
@@ -194,6 +204,8 @@ LeapSecondTable parseLeapSecondDat(std::string_view content) {
     return LeapSecondTable(withPre1972(std::move(entries)), expires);
 }
 
+constexpr double kMaxNtpSeconds = 1.0e11; // ~3000 years after 1900
+
 LeapSecondTable parseLeapSecondsList(std::string_view content) {
     // IETF leap-seconds.list: "<NTP seconds> <TAI-UTC> # comment", "#@ <NTP expiry>".
     constexpr double             ntpEpochMjd = 15020.0; // 1900-01-01
@@ -203,7 +215,7 @@ LeapSecondTable parseLeapSecondsList(std::string_view content) {
     std::string                  line;
     while (std::getline(in, line)) {
         if (line.rfind("#@", 0) == 0) {
-            expires = ntpEpochMjd + std::stod(line.substr(2)) / 86400.0;
+            expires = ntpEpochMjd + toDouble(line.substr(2), "leap-seconds.list") / 86400.0;
             continue;
         }
         if (line.empty() || line[0] == '#') {
@@ -213,6 +225,9 @@ LeapSecondTable parseLeapSecondsList(std::string_view content) {
         double             ntp = 0.0, offset = 0.0;
         if (!(ls >> ntp >> offset)) {
             continue;
+        }
+        if (!(ntp >= 0.0 && ntp < kMaxNtpSeconds)) {
+            throw Error("leap-seconds.list: NTP time out of range in: " + line);
         }
         const long long mjd = static_cast<long long>(std::llround(ntpEpochMjd + ntp / 86400.0));
         int             y = 0, m = 0, d = 0;
@@ -240,6 +255,15 @@ LeapSecondTable::LeapSecondTable(std::vector<LeapSecondEntry> entries, std::opti
     , expiresMjd_(expiresMjd) {
     if (entries_.empty()) {
         throw Error("LeapSecondTable: empty table");
+    }
+    for (const auto& e : entries_) {
+        if (e.year < 1960 || e.year > 9999 || e.month < 1 || e.month > 12 || !std::isfinite(e.offset)
+            || !std::isfinite(e.mjdRef) || !std::isfinite(e.rate)) {
+            throw Error("LeapSecondTable: invalid entry for " + std::to_string(e.year) + "-" + std::to_string(e.month));
+        }
+    }
+    if (expiresMjd_ && !std::isfinite(*expiresMjd_)) {
+        throw Error("LeapSecondTable: invalid expiration date");
     }
     std::stable_sort(entries_.begin(), entries_.end(), [](const LeapSecondEntry& a, const LeapSecondEntry& b) {
         return monthKey(a.year, a.month) < monthKey(b.year, b.month);
@@ -271,12 +295,12 @@ LeapSecondTable LeapSecondTable::load(const std::string& path) {
 }
 
 double LeapSecondTable::taiMinusUtc(int year, int month, int day, double fractionOfDay) const {
-    const int key = monthKey(year, month);
+    const long long key = monthKey(year, month);
     if (key < monthKey(entries_.front().year, entries_.front().month)) {
         throw Error("TAI-UTC undefined before " + std::to_string(entries_.front().year) + " (UTC did not exist)");
     }
     // Last entry whose start month <= requested month.
-    auto it = std::upper_bound(entries_.begin(), entries_.end(), key, [](int k, const LeapSecondEntry& e) {
+    auto it = std::upper_bound(entries_.begin(), entries_.end(), key, [](long long k, const LeapSecondEntry& e) {
         return k < monthKey(e.year, e.month);
     });
     const LeapSecondEntry& e = *(it - 1);
@@ -288,6 +312,9 @@ double LeapSecondTable::taiMinusUtc(int year, int month, int day, double fractio
 }
 
 double LeapSecondTable::taiMinusUtc(double mjdUtc) const {
+    if (!(std::abs(mjdUtc) < 1.0e9)) {
+        throw Error("TAI-UTC: MJD out of range");
+    }
     const double whole = std::floor(mjdUtc);
     int          y = 0, m = 0, d = 0;
     dateFromJulianDayNumber(static_cast<long long>(whole) + 2400001, y, m, d);

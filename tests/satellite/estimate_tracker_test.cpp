@@ -18,12 +18,15 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
+#include <limits>
 #include <random>
 #include <vector>
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
+#include "astro/core/mat6.h"
 #include "astro/frames/eop.h"
 #include "astro/frames/transform.h"
 #include "astro/orbit/elements.h"
@@ -319,6 +322,28 @@ TEST(EstimateTracker, InvalidCovarianceIsReported) {
     EXPECT_FALSE(c.valid);
     EXPECT_FALSE(c.consistent);
     EXPECT_TRUE(std::isnan(c.mahalanobis2));
+}
+
+TEST(EstimateTracker, NonFiniteDeliveryIsRejected) {
+    // Bad data upstream must not pass the check or replace the estimate.
+    EstimateTracker   tracker;
+    const StateVector s0 = leo();
+    (void)tracker.update({kEpoch, s0, diagonal(100.0, 1e-4)});
+    const double  nan = std::nan("");
+    StateEstimate bad{kEpoch + 60.0, truthAt(s0, 60.0), diagonal(100.0, 1e-4)};
+    bad.state.r.y = nan;
+    EXPECT_THROW((void)tracker.update(bad), Error);
+    bad                  = {kEpoch + 60.0, truthAt(s0, 60.0), diagonal(100.0, 1e-4)};
+    bad.covariance[4][4] = std::numeric_limits<double>::infinity();
+    EXPECT_THROW((void)tracker.update(bad), Error);
+    EXPECT_THROW((void)checkConsistency({kEpoch, s0, diagonal(100.0, 1e-4)}, bad), Error);
+    EXPECT_EQ(tracker.current().epoch, kEpoch);
+    EXPECT_EQ(tracker.current().state, s0);
+
+    EXPECT_TRUE(std::isnan(chiSquareSurvival3(nan)));
+    EXPECT_TRUE(std::isnan(chiSquareSurvival6(nan)));
+    const std::array<double, 6> d{1.0, nan, 0.0, 0.0, 0.0, 0.0};
+    EXPECT_FALSE(mahalanobis2(d, diagonal(1.0, 1.0)).has_value());
 }
 
 TEST(EstimateTracker, TrueOfDateDeliveries) {

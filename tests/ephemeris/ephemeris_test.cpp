@@ -16,6 +16,13 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
+
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
 #include "astro/ephemeris/low_precision.h"
@@ -74,6 +81,53 @@ TEST(Spk, ChainingAndErrors) {
     EXPECT_THROW((void)spk.state(Body::Venus, Body::Earth, t), Error);             // not in file
     EXPECT_THROW((void)spk.state(Body::Moon, Body::Earth, tdb(2460500.5)), Error); // out of range
     EXPECT_THROW(SpkEphemeris(dataPath("spk_reference.csv")), Error);
+}
+
+TEST(Spk, CorruptFilesThrow) {
+    // Malformed kernels must fail with astro::Error, never read out of bounds or hang.
+    std::string bytes;
+    {
+        std::ifstream in(dataPath("de440s_2024q1_le.bsp"), std::ios::binary);
+        bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    ASSERT_GT(bytes.size(), 3 * 1024u);
+    std::int32_t fward = 0;
+    std::memcpy(&fward, bytes.data() + 76, 4);
+    const std::size_t summary = static_cast<std::size_t>(fward - 1) * 1024;
+    const std::string path =
+        (std::filesystem::temp_directory_path()
+         / ("astro_corrupt_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + ".bsp"))
+            .string();
+    auto expectThrows = [&](std::string b, const char* what) {
+        {
+            std::ofstream out(path, std::ios::binary);
+            out.write(b.data(), static_cast<std::streamsize>(b.size()));
+        }
+        EXPECT_THROW(
+            {
+                const SpkEphemeris spk(path);
+                for (const auto& s : spk.segments()) {
+                    (void)spk.stateById(s.target, s.center, 0.5 * (s.startEt + s.endEt));
+                }
+            },
+            Error)
+            << what;
+    };
+    auto withDouble = [&](std::size_t offset, double v) {
+        std::string b = bytes;
+        std::memcpy(b.data() + offset, &v, 8);
+        return b;
+    };
+    expectThrows(withDouble(summary + 16, 1e6), "summary count too large");
+    expectThrows(withDouble(summary + 16, std::nan("")), "summary count NaN");
+    expectThrows(withDouble(summary, static_cast<double>(fward)), "summary chain loops");
+    expectThrows(withDouble(summary + 24, std::nan("")), "segment start NaN");
+    expectThrows(bytes.substr(0, bytes.size() / 2), "truncated");
+    // Segment 0's directory: RSIZE = 0.
+    std::int32_t ints[6];
+    std::memcpy(ints, bytes.data() + summary + 24 + 16, sizeof(ints));
+    expectThrows(withDouble(static_cast<std::size_t>(ints[5] - 2) * 8, 0.0), "RSIZE zero");
+    std::filesystem::remove(path);
 }
 
 TEST(LowPrecision, SunAndMoonAgainstDe440) {

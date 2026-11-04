@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <span>
 #include <tuple>
 #include <vector>
 
@@ -115,6 +116,24 @@ TEST(SecularPropagator, GridMatchesDirectEvaluation) {
     }
 }
 
+TEST(SecularPropagator, GridSolvesKeplerNearPerigee) {
+    // Regression: on very eccentric orbits the grid's starting guess for E (previous E plus the
+    // mean-anomaly step) is far from the root near perigee, where the unguarded Chebyshev
+    // iteration used to stall and return a state thousands of km off.
+    for (double e : {0.75, 0.8, 0.86, 0.9, 0.95, 0.99}) {
+        const SecularPropagator prop({26600 * km, e, 1.1, 0.4, 1.3, 0.0});
+        for (double dM = 0.15; dM < 0.96; dM += 0.05) {
+            const double step  = dM / prop.rates().meanAnomalyDot;
+            const auto   grid  = prop.propagateGrid(0.0, step, 400);
+            double       worst = 0.0;
+            for (std::size_t k = 0; k < grid.size(); ++k) {
+                worst = std::max(worst, norm(grid[k].r - prop.propagate(step * static_cast<double>(k)).r));
+            }
+            EXPECT_LT(worst, 1e-4) << "e = " << e << ", dM = " << dM; // metres; rounding near perigee
+        }
+    }
+}
+
 TEST(SecularPropagator, Grid12AddsModelDerivatives) {
     const StateVector       s0 = elementsToState({7000 * km, 0.001, deg2rad(97.0), 0.1, 0.2, 0.3});
     const SecularPropagator prop(s0);
@@ -178,6 +197,17 @@ TEST(NumericalGrid, DefaultToleranceInterpolationAddsLittleError) {
 }
 
 TEST(NumericalGrid, TwelveStateAndEdgeCases) {
+    {
+        // An empty grid reports zero work rather than leaving the caller's counts in place.
+        const NumericalPropagator p =
+            NumericalPropagator::j2j4(Time(), elementsToState({7000 * km, 0.001, 1.0, 0.0, 0.0, 0.0}));
+        AdaptiveStats st{7, 7, 7};
+        p.propagateGrid(0.0, 10.0, std::span<StateVector>{}, &st);
+        EXPECT_EQ(st.evaluations, 0);
+        st = {7, 7, 7};
+        p.propagateGridWithCovariance(0.0, 10.0, Mat6{}, std::span<StateCovariance>{}, 1e-9, &st);
+        EXPECT_EQ(st.accepted, 0);
+    }
     const StateVector         s0   = elementsToState({7000 * km, 0.01, deg2rad(28.5), 0.0, 1.0, 2.0});
     const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0);
     const auto                g    = prop.propagateGrid12(0.0, 60.0, 100);

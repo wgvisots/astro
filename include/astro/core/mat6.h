@@ -112,7 +112,7 @@ using Mat6 = std::array<std::array<double, 6>, 6>;
 /// Squared Mahalanobis distance d^T S^-1 d of the first n components (n = 3 or 6) of d, for
 /// symmetric positive-definite S (its leading n x n block). Uses a Cholesky factorization of S
 /// scaled to unit diagonal, so mixed units (m^2 and m^2/s^2) do not hurt the conditioning.
-/// nullopt if S is not positive definite.
+/// nullopt if S is not positive definite or the distance is not finite (d holds NaN or inf).
 [[nodiscard]] inline std::optional<double>
 mahalanobis2(const std::array<double, 6>& d, const Mat6& S, std::size_t n = 6) noexcept {
     if (n == 0 || n > 6) {
@@ -152,6 +152,9 @@ mahalanobis2(const std::array<double, 6>& d, const Mat6& S, std::size_t n = 6) n
         }
         y[i]  = sum / Lm[i][i];
         d2   += y[i] * y[i];
+    }
+    if (!std::isfinite(d2)) {
+        return std::nullopt;
     }
     return d2;
 }

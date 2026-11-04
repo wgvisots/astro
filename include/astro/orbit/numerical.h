@@ -239,7 +239,9 @@ public:
     ///
     /// Q(t) is the process noise from white, isotropic acceleration noise with power spectral
     /// density accelerationNoisePsd (m^2/s^3), standing in for forces the model leaves out (drag,
-    /// solar pressure, higher harmonics). 0 gives the purely deterministic propagation.
+    /// solar pressure, higher harmonics). 0 gives the purely deterministic propagation. Q is the
+    /// noise accumulated between the epoch and t, so it adds uncertainty in both directions:
+    /// propagating backward does not shrink the covariance.
     void propagateGridWithCovariance(double                     start,
                                      double                     step,
                                      const Mat6&                P0,

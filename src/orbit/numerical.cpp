@@ -280,6 +280,9 @@ struct SepticHermite {
 template <class Emit>
 void NumericalPropagator::grid(double start, double step, std::size_t count, AdaptiveStats* stats, Emit&& emit) const {
     if (count == 0) {
+        if (stats) {
+            *stats = {};
+        }
         return;
     }
     if (!(std::abs(step) > 0.0) || !std::isfinite(step) || !std::isfinite(start)) {
@@ -336,7 +339,11 @@ void NumericalPropagator::grid(double start, double step, std::size_t count, Ada
 //
 // The extended state y holds r, v (0-5), Phi row-major (6-41) and, with process noise, Q row-major
 // (42-77). With A = [[0, I], [G, D]], G = da/dr and D = da/dv:
-//     Phi' = A Phi,     Q' = A Q + Q A^T + diag(0, 0, 0, q, q, q).
+//     Phi' = A Phi,     Q' = A Q + Q A^T + sign(t) diag(0, 0, 0, q, q, q).
+// Q(t) is the noise accumulated between the epoch and t, in either direction: before the epoch,
+// Q(t) = integral from t to 0 of Phi(t, s) B q B^T Phi(t, s)^T ds, whose derivative has -q. So Q
+// is positive semi-definite on both sides, and a grid that crosses the epoch is integrated in two
+// pieces that meet at t = 0, where the derivative of Q jumps.
 
 namespace {
 
@@ -393,6 +400,9 @@ void NumericalPropagator::variationalGrid(double         start,
     static_assert(N == 42 || N == 78);
     constexpr bool withNoise = N == 78;
     if (count == 0) {
+        if (stats) {
+            *stats = {};
+        }
         return;
     }
     if (!(std::abs(step) > 0.0) || !std::isfinite(step) || !std::isfinite(start)) {
@@ -417,7 +427,8 @@ void NumericalPropagator::variationalGrid(double         start,
         }
         return a;
     };
-    auto f = [&](double t, const OdeState<N>& y) {
+    double qs = 1.0; // sign of t on the side of the epoch being integrated: the noise term is qs * q
+    auto   f  = [&](double t, const OdeState<N>& y) {
         const Vec3  r{y[0], y[1], y[2]}, v{y[3], y[4], y[5]};
         Mat3        G, D;
         const Vec3  a = partialsAt(t, r, v, G, D);
@@ -434,7 +445,7 @@ void NumericalPropagator::variationalGrid(double         start,
             applyA(y.data() + kQ, m, G, D);
             for (std::size_t i = 0; i < 6; ++i) {
                 for (std::size_t j = 0; j < 6; ++j) {
-                    d[kQ + 6 * i + j] = m[6 * i + j] + m[6 * j + i] + (i == j && i >= 3 ? q : 0.0);
+                    d[kQ + 6 * i + j] = m[6 * i + j] + m[6 * j + i] + (i == j && i >= 3 ? qs * q : 0.0);
                 }
             }
         }
@@ -501,6 +512,9 @@ void NumericalPropagator::variationalGrid(double         start,
     for (std::size_t i = 0; i < 6; ++i) {
         y[kPhi + 7 * i] = 1.0;
     }
+    const double dir  = step > 0.0 ? 1.0 : -1.0;
+    const double tEnd = start + step * static_cast<double>(count - 1);
+    qs                = start != 0.0 ? (start > 0.0 ? 1.0 : -1.0) : dir;
     if (start != 0.0) {
         y = integrateRkf78<N>(f, 0.0, y, start, opt, &st);
         add();
@@ -508,8 +522,6 @@ void NumericalPropagator::variationalGrid(double         start,
     emit(std::size_t{0}, stateOf(y), unpack(y.data() + kPhi), noiseOf(y));
 
     if (count > 1) {
-        const double  dir    = step > 0.0 ? 1.0 : -1.0;
-        const double  tEnd   = start + step * static_cast<double>(count - 1);
         std::size_t   k      = 1;
         StateVector12 A      = withDerivatives(start, stateOf(y));
         OdeState<N>   dA     = f(start, y);
@@ -550,7 +562,18 @@ void NumericalPropagator::variationalGrid(double         start,
             dA  = dB;
             ddA = ddB;
         };
-        (void)integrateRkf78Steps<N>(f, start, y, tEnd, onStep, opt, &st);
+        if (start * tEnd < 0.0) {
+            // The grid crosses the epoch: integrate to t = 0, then switch the sign of the noise term
+            // and restart the derivatives from the other side.
+            y = integrateRkf78Steps<N>(f, start, y, 0.0, onStep, opt, &st);
+            add();
+            qs  = -qs;
+            dA  = f(0.0, y);
+            ddA = second(0.0, y, dA);
+            (void)integrateRkf78Steps<N>(f, 0.0, y, tEnd, onStep, opt, &st);
+        } else {
+            (void)integrateRkf78Steps<N>(f, start, y, tEnd, onStep, opt, &st);
+        }
         add();
     }
     if (stats) {

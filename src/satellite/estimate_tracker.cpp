@@ -36,6 +36,9 @@ std::ostream& operator<<(std::ostream& os, ConsistencyTest value) {
 }
 
 double chiSquareSurvival3(double x) noexcept {
+    if (std::isnan(x)) {
+        return x;
+    }
     if (!(x > 0.0)) {
         return 1.0;
     }
@@ -43,6 +46,9 @@ double chiSquareSurvival3(double x) noexcept {
 }
 
 double chiSquareSurvival6(double x) noexcept {
+    if (std::isnan(x)) {
+        return x;
+    }
     if (!(x > 0.0)) {
         return 1.0;
     }
@@ -183,6 +189,22 @@ private:
     std::vector<Mat3> nodes_;
 };
 
+/// Throws astro::Error unless the estimate's state, covariance and epoch are all finite.
+void requireFinite(const StateEstimate& e) {
+    bool ok = std::isfinite(e.epoch.jd().jd1) && std::isfinite(e.epoch.jd().jd2);
+    for (std::size_t i = 0; i < 3; ++i) {
+        ok = ok && std::isfinite(e.state.r[i]) && std::isfinite(e.state.v[i]);
+    }
+    for (const auto& row : e.covariance) {
+        for (double x : row) {
+            ok = ok && std::isfinite(x);
+        }
+    }
+    if (!ok) {
+        throw Error("EstimateTracker: the estimate has a non-finite state, covariance or epoch");
+    }
+}
+
 void requireCelestial(Frame f) {
     if (isEarthFixed(f)) {
         throw Error("EstimateTracker: TrackerOptions::frame must be a celestial frame (not TIRS, PEF or ITRS)");
@@ -200,6 +222,8 @@ StateCovariance propagateTo(const NumericalPropagator& prop, const Mat6& P0, dou
 ConsistencyCheck
 checkConsistency(const StateEstimate& prior, const StateEstimate& next, const TrackerOptions& options) {
     requireCelestial(options.frame);
+    requireFinite(prior);
+    requireFinite(next);
     TrackerOptions gcrs          = options;
     gcrs.frame                   = Frame::GCRS;
     const StateEstimate   priorG = toGcrs(prior, options.frame);
@@ -220,6 +244,7 @@ EstimateTracker::EstimateTracker(TrackerOptions options)
 }
 
 std::optional<ConsistencyCheck> EstimateTracker::update(const StateEstimate& next) {
+    requireFinite(next);
     TrackerOptions gcrs                   = opt_;
     gcrs.frame                            = Frame::GCRS;
     const StateEstimate             nextG = toGcrs(next, opt_.frame);

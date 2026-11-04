@@ -53,7 +53,8 @@ public:
     /// The built-in table.
     LeapSecondTable();
     /// From explicit entries (sorted by date here) and an optional expiration
-    /// MJD. Throws astro::Error if `entries` is empty.
+    /// MJD. Throws astro::Error if `entries` is empty or an entry is invalid (year outside
+    /// 1960-9999, month outside 1-12, non-finite values).
     explicit LeapSecondTable(std::vector<LeapSecondEntry> entries, std::optional<double> expiresMjd = std::nullopt);
 
     /// The built-in table (same as the default constructor).

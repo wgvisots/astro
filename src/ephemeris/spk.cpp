@@ -33,6 +33,7 @@ namespace astro {
 namespace {
 
 constexpr std::size_t kRecordBytes = 1024;
+constexpr std::size_t kMaxChain    = 32; // longest center chain followed (real kernels need 2-3 hops)
 
 template <class T>
 T swapBytes(T v) {
@@ -90,6 +91,29 @@ struct SpkEphemeris::Impl {
         }
     }
 
+    /// Read and check the type 2/3 directory (INIT, INTLEN, RSIZE, N) at the end of a segment:
+    /// the N records of RSIZE doubles must exactly fill the segment and lie inside the file.
+    void readDirectory(Segment& seg, std::int64_t fileDoubles) const {
+        const std::string where = " in segment '" + seg.info.name + "' of " + path;
+        if (seg.startAddr < 1 || seg.endAddr < seg.startAddr + 4 || seg.endAddr > fileDoubles) {
+            throw Error("SPK: segment addresses out of range" + where);
+        }
+        double dir[4];
+        readDoubles(seg.endAddr - 3, 4, dir);
+        const double span  = static_cast<double>(seg.endAddr - seg.startAddr - 3); // doubles before dir
+        const int    ncomp = seg.info.type == 2 ? 3 : 6;
+        const auto   isInt = [](double x) { return std::isfinite(x) && x == std::floor(x); };
+        if (!(std::isfinite(dir[0]) && std::isfinite(dir[1]) && dir[1] > 0.0)
+            || !(isInt(dir[2]) && dir[2] >= 2.0 + ncomp && dir[2] <= span)
+            || !(isInt(dir[3]) && dir[3] >= 1.0 && dir[2] * dir[3] == span) || std::fmod(dir[2] - 2.0, ncomp) != 0.0) {
+            throw Error("SPK: corrupt segment directory" + where);
+        }
+        seg.init   = dir[0];
+        seg.intlen = dir[1];
+        seg.rsize  = static_cast<std::int64_t>(dir[2]);
+        seg.nrec   = static_cast<std::int64_t>(dir[3]);
+    }
+
     void open() {
         file.open(path, std::ios::binary);
         if (!file) {
@@ -120,15 +144,30 @@ struct SpkEphemeris::Impl {
             throw Error("SPK: unexpected ND/NI in " + path);
         }
         const int ss = nd + (ni + 1) / 2; // summary size in doubles
+        // A summary record holds 3 control words and then the summaries.
+        const int maxSummaries = static_cast<int>(kRecordBytes / 8 - 3) / ss;
+
+        file.seekg(0, std::ios::end);
+        const std::int64_t fileRecords = static_cast<std::int64_t>(file.tellg()) / kRecordBytes;
+        const std::int64_t fileDoubles = fileRecords * static_cast<std::int64_t>(kRecordBytes / 8);
 
         std::int64_t recno = fward;
+        std::int64_t hops  = 0;
         while (recno > 0) {
+            if (recno >= fileRecords || ++hops > fileRecords) {
+                throw Error("SPK: corrupt summary record chain in " + path);
+            }
             double summary[kRecordBytes / 8];
             readBytes((recno - 1) * static_cast<std::int64_t>(kRecordBytes), summary, kRecordBytes);
             char names[kRecordBytes];
             readBytes(recno * static_cast<std::int64_t>(kRecordBytes), names, kRecordBytes);
-            const double next = fix(summary[0]);
-            const int    nsum = static_cast<int>(fix(summary[2]));
+            const double next  = fix(summary[0]);
+            const double nsumD = fix(summary[2]);
+            if (!(next >= 0.0 && next < static_cast<double>(fileRecords) && next == std::floor(next))
+                || !(nsumD >= 0.0 && nsumD <= maxSummaries && nsumD == std::floor(nsumD))) {
+                throw Error("SPK: corrupt summary record in " + path);
+            }
+            const int nsum = static_cast<int>(nsumD);
             for (int i = 0; i < nsum; ++i) {
                 const double* s = summary + 3 + i * ss;
                 Segment       seg;
@@ -149,13 +188,12 @@ struct SpkEphemeris::Impl {
                 const auto  last = name.find_last_not_of(std::string(" \0", 2));
                 name.erase(last == std::string::npos ? 0 : last + 1);
                 seg.info.name = name;
+                if (!(std::isfinite(seg.info.startEt) && std::isfinite(seg.info.endEt)
+                      && seg.info.startEt <= seg.info.endEt)) {
+                    throw Error("SPK: corrupt coverage interval in segment '" + name + "' of " + path);
+                }
                 if (seg.info.type == 2 || seg.info.type == 3) {
-                    double dir[4];
-                    readDoubles(seg.endAddr - 3, 4, dir);
-                    seg.init   = dir[0];
-                    seg.intlen = dir[1];
-                    seg.rsize  = static_cast<std::int64_t>(dir[2]);
-                    seg.nrec   = static_cast<std::int64_t>(dir[3]);
+                    readDirectory(seg, fileDoubles);
                 }
                 infos.push_back(seg.info);
                 segs.push_back(std::move(seg));
@@ -182,15 +220,19 @@ struct SpkEphemeris::Impl {
 
     // Segment state (km, km/s) of seg.target relative to seg.center.
     StateVector evaluate(const Segment& seg, double et) const {
-        auto idx = static_cast<std::int64_t>(std::floor((et - seg.init) / seg.intlen));
-        idx      = std::clamp<std::int64_t>(idx, 0, seg.nrec - 1);
+        // Clamp in floating point: casting an out-of-range double to an integer is undefined.
+        const double u   = std::floor((et - seg.init) / seg.intlen);
+        const auto   idx = static_cast<std::int64_t>(std::clamp(u, 0.0, static_cast<double>(seg.nrec - 1)));
         if (seg.cachedIndex != idx) {
             seg.cache.resize(static_cast<std::size_t>(seg.rsize));
             readDoubles(seg.startAddr + idx * seg.rsize, seg.cache.size(), seg.cache.data());
             seg.cachedIndex = idx;
         }
-        const double*     r   = seg.cache.data();
-        const double      mid = r[0], radius = r[1];
+        const double* r   = seg.cache.data();
+        const double  mid = r[0], radius = r[1];
+        if (!(std::isfinite(mid) && std::isfinite(radius) && radius > 0.0)) {
+            throw Error("SPK: corrupt record in segment '" + seg.info.name + "' of " + path);
+        }
         const std::size_t ncomp = seg.info.type == 2 ? 3 : 6;
         const auto        n     = static_cast<std::size_t>((seg.rsize - 2) / static_cast<std::int64_t>(ncomp));
         const double      s     = (et - mid) / radius;
@@ -231,7 +273,10 @@ struct SpkEphemeris::Impl {
     // Path from body to the root (SSB) as the list of bodies.
     std::vector<int> chain(int body, double et) const {
         std::vector<int> p{body};
-        while (body != 0 && p.size() < 32) {
+        while (body != 0) {
+            if (p.size() > kMaxChain) {
+                throw Error("SPK: center chain of body " + std::to_string(p.front()) + " does not reach the SSB");
+            }
             body = find(body, et).info.center;
             p.push_back(body);
         }
@@ -240,7 +285,10 @@ struct SpkEphemeris::Impl {
 
     StateVector sumTo(int body, int stop, double et) const {
         StateVector acc;
-        while (body != stop) {
+        for (std::size_t hops = 0; body != stop; ++hops) {
+            if (hops > kMaxChain) {
+                throw Error("SPK: center chain of body " + std::to_string(body) + " does not reach the SSB");
+            }
             const Segment&    seg  = find(body, et);
             const StateVector s    = evaluate(seg, et);
             acc.r                 += s.r;

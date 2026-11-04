@@ -110,6 +110,15 @@ TEST(LeapSeconds, ParseFileFormats) {
     EXPECT_DOUBLE_EQ(c.taiMinusUtc(1980, 1, 1), 10.0);
 }
 
+TEST(LeapSeconds, MalformedFilesThrow) {
+    EXPECT_THROW((void)LeapSecondTable::parse("    41317.0    1 13 1972       10\n"), Error); // month 13
+    EXPECT_THROW((void)LeapSecondTable::parse("    41317.0    1  1 99999  10\n"), Error);     // year > 9999
+    EXPECT_THROW((void)LeapSecondTable::parse(" 1972 JAN  1 =JD 2441317.5  TAI-UTC= abc S + (MJD - 41317.) X 0.0 S\n"),
+                 Error);
+    EXPECT_THROW((void)LeapSecondTable::parse("#@ 3960057600\n1e300\t10\n"), Error);
+    EXPECT_THROW((void)LeapSecondTable::builtin().taiMinusUtc(std::nan("")), Error);
+}
+
 TEST(TimeScales, MatchesErfa) {
     const auto csv = readCsv(dataPath("time_scales.csv"));
     ASSERT_GT(csv.rows.size(), 300u);

@@ -120,16 +120,32 @@ inline void rotate(double& s, double& c, double sd, double cd) noexcept {
 /// Chebyshev's method (third order, one division per correction): d = d1 - f'' d1^2 / (2 f') with
 /// d1 = -f / f'. Small corrections update sin E and cos E with rotateSmall instead of new library
 /// calls, so a good starting E costs only a few multiplies.
+///
+/// Safeguarded: the root lies in [M - e, M + e] (f is increasing there), and the bracket shrinks
+/// with every iterate. A step that leaves the bracket is replaced by bisection, so the method
+/// converges from any start, including a poor grid guess near perigee of a very eccentric orbit.
 inline void refineKepler(double M, double e, double& E, double& sinE, double& cosE) noexcept {
-    for (int it = 0; it < 40; ++it) {
+    double lo = M - e, hi = M + e;
+    for (int it = 0; it < 80; ++it) {
         const double f = E - e * sinE - M;
         if (std::abs(f) <= 2e-15) {
             return;
         }
-        const double g   = 1.0 / (1.0 - e * cosE);
-        const double d1  = -f * g;
-        const double d   = d1 * (1.0 - 0.5 * d1 * e * sinE * g);
-        E               += d;
+        if (f < 0.0) {
+            lo = std::max(lo, E);
+        } else {
+            hi = std::min(hi, E);
+        }
+        if (hi - lo <= 4e-16 * (1.0 + std::abs(E))) {
+            return; // bracket at rounding level
+        }
+        const double g  = 1.0 / (1.0 - e * cosE);
+        const double d1 = -f * g;
+        double       d  = d1 * (1.0 - 0.5 * d1 * e * sinE * g);
+        if (!(E + d > lo && E + d < hi)) {
+            d = 0.5 * (lo + hi) - E;
+        }
+        E += d;
         if (std::abs(d) <= 0.1) {
             rotateSmall(sinE, cosE, d);
         } else {

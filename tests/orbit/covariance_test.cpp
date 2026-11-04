@@ -286,3 +286,44 @@ TEST(Covariance, ProcessNoiseMatchesWhiteAccelerationModel) {
     std::vector<Mat6>        phi(3);
     EXPECT_THROW(prop.propagateGridStm(0.0, 1.0, st, phi), Error);
 }
+
+TEST(Covariance, ProcessNoiseGrowsInBothDirections) {
+    // Before the epoch Q is the noise accumulated over [t, 0]: the same variances as after it, with
+    // the position-velocity correlation reversed. It must never shrink the covariance.
+    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), leo());
+    const double              q    = 1e-9;
+    const double              t    = 20.0;
+    const Mat6                Q    = prop.propagateGridWithCovariance(-t, 1.0, 1, Mat6{}, q)[0].covariance;
+    for (std::size_t i = 0; i < 3; ++i) {
+        EXPECT_NEAR(Q[i][i] / (q * t * t * t / 3.0), 1.0, 1e-3);
+        EXPECT_NEAR(Q[i][i + 3] / (-q * t * t / 2.0), 1.0, 1e-3);
+        EXPECT_NEAR(Q[i + 3][i + 3] / (q * t), 1.0, 1e-3);
+    }
+
+    // A grid that crosses the epoch matches propagating to each of its times directly.
+    Mat6 P0{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        P0[i][i]         = 100.0;
+        P0[i + 3][i + 3] = 1e-4;
+    }
+    const double qLeo = 1e-8;
+    const auto   grid = prop.propagateGridWithCovariance(-3600.0, 600.0, 13, P0, qLeo);
+    for (std::size_t k = 0; k < grid.size(); ++k) {
+        const double tk     = -3600.0 + 600.0 * static_cast<double>(k);
+        const Mat6   direct = prop.propagateGridWithCovariance(tk, 1.0, 1, P0, qLeo)[0].covariance;
+        // Differences in units of the standard deviations: |dP_ij| / sqrt(P_ii P_jj).
+        double worst = 0.0;
+        for (std::size_t i = 0; i < 6; ++i) {
+            for (std::size_t j = 0; j < 6; ++j) {
+                worst = std::max(worst,
+                                 std::abs(grid[k].covariance[i][j] - direct[i][j])
+                                     / std::sqrt(direct[i][i] * direct[j][j]));
+            }
+        }
+        EXPECT_LT(worst, 1e-7) << "t = " << tk;
+        const Mat6 noNoise = prop.propagateGridWithCovariance(tk, 1.0, 1, P0, 0.0)[0].covariance;
+        for (std::size_t i = 0; i < 6; ++i) {
+            EXPECT_GE(direct[i][i], noNoise[i][i]) << "t = " << tk << ", i = " << i;
+        }
+    }
+}
