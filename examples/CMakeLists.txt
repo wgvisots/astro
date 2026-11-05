@@ -18,7 +18,7 @@
 
 # Each example is a small program that the user guide quotes (between //! [tag] markers). They are
 # built and run as tests so the documented code keeps working.
-set(ASTRO_EXAMPLES time_scales geodesy frames sgp4_passes propagation covariance tracker sun_moon conventions)
+set(ASTRO_EXAMPLES time_scales geodesy frames sgp4_passes propagation covariance tracker impact sun_moon conventions)
 foreach(name IN LISTS ASTRO_EXAMPLES)
     add_executable(astro_example_${name} ${name}.cpp)
     target_link_libraries(astro_example_${name} PRIVATE astro::astro)

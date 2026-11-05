@@ -48,13 +48,30 @@ What makes the grids fast:
 | `FrameTransformer`, IAU 2006/2000B | 6 us |
 | `poleOfDateMatrix(Frame::GCRS, t)` | 6 us |
 
+## Impact prediction
+
+From `bench/impact_bench.cpp`: `predictImpact` for launches from the ellipsoid (35 degrees above
+the horizon), with the Earth rotations built per call or shared between calls:
+
+| Shot | Flight | Per call | Shared rotations | Shared, with covariance |
+|---|---|---|---|---|
+| 3 km/s | 413 s | 32 us | 12 us | 18 us |
+| 5 km/s | 936 s | 31 us | 15 us | 29 us |
+| 7 km/s | 2353 s | 41 us | 24 us | 50 us |
+
+| Operation | Time |
+|---|---|
+| `ItrsRotationSeries`, 2 h window (3 nodes), IAU 2006/2000B | 17 us |
+| `ItrsRotationSeries`, 2 h window (3 nodes), IAU 2006/2000A | 400 us |
+
 ## Getting the most out of it
 
 - Choose the integrator tolerance from your error budget: relTol 1e-9 (0.2 m over 4 h in LEO) is
   twice as fast as the default; see [Accuracy](accuracy.md).
 - Use the grid calls for equally spaced outputs, and the span overloads (`propagateGrid(start, step,
   std::span<StateVector>)`) to reuse your output buffers.
-- Construct a `FrameTransformer` once per epoch, not per vector.
+- Construct a `FrameTransformer` once per epoch, not per vector; for many times in a window, use
+  an `ItrsRotationSeries` (GCRS <-> ITRS) and share it, e.g. through `ImpactOptions::rotations`.
 - Propagate many orbits in parallel: the propagators are immutable, so threads can share them, and
   separate orbits scale with the number of cores.
 

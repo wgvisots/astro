@@ -19,7 +19,8 @@
 # Accuracy studies behind docs/accuracy.md. They take seconds to minutes, so they are not tests.
 add_executable(astro_study_propagation propagation_accuracy.cpp)
 add_executable(astro_study_consistency consistency_monte_carlo.cpp)
-foreach(t astro_study_propagation astro_study_consistency)
+add_executable(astro_study_impact impact_monte_carlo.cpp)
+foreach(t astro_study_propagation astro_study_consistency astro_study_impact)
     target_link_libraries(${t} PRIVATE astro::astro)
     target_compile_options(${t} PRIVATE ${ASTRO_WARNING_FLAGS})
 endforeach()

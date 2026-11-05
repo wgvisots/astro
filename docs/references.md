@@ -112,6 +112,11 @@ included in the repository are credited in
 - **Hairer, E., Norsett, S. P. & Wanner, G. (1993).** *Solving Ordinary Differential Equations I:
   Nonstiff Problems*, 2nd ed. Springer. <https://doi.org/10.1007/978-3-540-78862-1>. Dense output
   and Hermite interpolation.
+- **Shampine, L. F. & Thompson, S. (2000).** Event location for ordinary differential equations.
+  *Computers & Mathematics with Applications* 39(5-6), 43-54.
+  <https://doi.org/10.1016/S0898-1221%2800%2900045-6>. Locating events (impact) on the dense output.
+- **Brent, R. P. (1973).** *Algorithms for Minimization without Derivatives*. Prentice-Hall
+  (Dover reprint, 2002). Brent's method for event times (impacts, passes, rise and set).
 - **Shepperd, S. W. (1978).** Quaternion from rotation matrix. *J. Guidance and Control* 1(3),
   223-224. <https://doi.org/10.2514/3.55767b>.
 - **Clohessy, W. H. & Wiltshire, R. S. (1960).** Terminal guidance system for satellite

@@ -109,6 +109,26 @@ using Mat6 = std::array<std::array<double, 6>, 6>;
     return m;
 }
 
+/// Rotate a symmetric 6x6 position/velocity covariance by a (static) 3x3 frame rotation:
+/// P' = diag(R, R) P diag(R, R)^T. Only the upper-right velocity block of P is read (P must be
+/// symmetric).
+[[nodiscard]] inline Mat6 rotateCovariance(const Mat6& P, const Mat3& R) noexcept {
+    // Block by block: P'_ij = R P_ij R^T (the lower-left block is the transpose of the upper-right).
+    const Mat3 rr = R * block(P, 0, 0) * R.transpose();
+    const Mat3 rv = R * block(P, 0, 1) * R.transpose();
+    const Mat3 vv = R * block(P, 1, 1) * R.transpose();
+    Mat6       out{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            out[i][j]         = rr(i, j);
+            out[i][j + 3]     = rv(i, j);
+            out[i + 3][j]     = rv(j, i);
+            out[i + 3][j + 3] = vv(i, j);
+        }
+    }
+    return out;
+}
+
 /// Squared Mahalanobis distance d^T S^-1 d of the first n components (n = 3 or 6) of d, for
 /// symmetric positive-definite S (its leading n x n block). Uses a Cholesky factorization of S
 /// scaled to unit diagonal, so mixed units (m^2 and m^2/s^2) do not hurt the conditioning.

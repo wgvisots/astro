@@ -22,6 +22,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <type_traits>
 #include <utility>
 
 #include "astro/core/error.h"
@@ -118,7 +119,8 @@ struct AdaptiveStats {
 
 /// Runge-Kutta-Fehlberg 7(8) adaptive integration from t0 to t1 (see integrateRkf78), calling
 /// onStep(tPrev, yPrev, t, y) after every accepted step. Use it for dense output: let the
-/// integrator choose its own steps and interpolate between them.
+/// integrator choose its own steps and interpolate between them. If onStep returns bool, false
+/// stops the integration after that step (e.g. once an event is found) and returns its end state.
 template <std::size_t N, class F, class OnStep>
 OdeState<N> integrateRkf78Steps(F&&                    f,
                                 double                 t0,
@@ -192,11 +194,18 @@ OdeState<N> integrateRkf78Steps(F&&                    f,
             }
         }
         if (errNorm <= 1.0) {
-            onStep(t, static_cast<const OdeState<N>&>(y), t + h, static_cast<const OdeState<N>&>(yn));
+            bool more = true;
+            if constexpr (std::is_same_v<
+                              std::invoke_result_t<OnStep&, double, const OdeState<N>&, double, const OdeState<N>&>,
+                              bool>) {
+                more = onStep(t, static_cast<const OdeState<N>&>(y), t + h, static_cast<const OdeState<N>&>(yn));
+            } else {
+                onStep(t, static_cast<const OdeState<N>&>(y), t + h, static_cast<const OdeState<N>&>(yn));
+            }
             t += h;
             y  = yn;
             ++st.accepted;
-            if (dir * (t1 - t) <= 0.0) {
+            if (!more || dir * (t1 - t) <= 0.0) {
                 if (stats) {
                     *stats = st;
                 }
