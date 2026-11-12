@@ -72,6 +72,134 @@ A state's osculating elements are not mean elements, and the wrong mean motion m
 every orbit. Fitting removes that, but the short-period J2 terms a mean-element theory omits remain
 at the kilometre level.
 
+Velocity, `SecularPropagator` (the two-body velocity of the mean elements) against
+`SecularPropagatorCorrected` (the time derivative of the same positions). Worst error over 4 h
+against the numerical trajectory, and worst disagreement with dr/dt of the secular positions
+themselves (central differences on a 1 s grid, which alone contribute ~0.002 m/s):
+
+| Orbit | From the state: original / corrected | Fitted: original / corrected | \|v - dr/dt\|, fitted: original / corrected |
+|---|---|---|---|
+| LEO 400 km | 130.1 / 130.2 m/s | 6.25 / 3.59 m/s | 5.64 / 0.002 m/s |
+| SSO 800 km, e = 0.01 | 136.6 / 136.6 m/s | 8.25 / 8.40 m/s | 9.03 / 0.001 m/s |
+| 1000 x 20000 km | 39.5 / 39.3 m/s | 3.94 / 3.96 m/s | 1.15 / 0.001 m/s |
+
+The correction makes velocity and position agree; it does not make the velocity much closer to the
+truth, which the short-period terms dominate.
+
+Starting `SecularPropagatorCorrected` from mean elements whose corrected velocity reproduces the
+state's velocity at the epoch, instead of from the state's osculating elements (worst position
+error over 4 h):
+
+| Orbit | Osculating elements as mean | Velocity-matched mean elements |
+|---|---|---|
+| LEO 400 km | 117.0 km | 195.4 km |
+| SSO 800 km, e = 0.01 | 136.1 km | 494.8 km |
+| 1000 x 20000 km | 219.2 km | 153.8 km |
+| near-equatorial, i = 0.5 deg | 21.9 km | 896.3 km |
+| polar | 143.4 km | 570.9 km |
+| retrograde, i = 140 deg | 87.4 km | 247.8 km |
+
+The velocity-matched start is worse in five of six orbits, so the library does not offer it.
+
+## Analytic state transition matrices and covariances
+
+From `astro_study_propagation`. Differences of Phi are relative to the largest element of each 3x3
+block.
+
+Two-body, closed form (`propagateKeplerStm`):
+
+| Orbit | dt | vs differences | vs point-mass variational equations | max abs(Phi^T J Phi - J) |
+|---|---|---|---|---|
+| LEO 400 km | 1 day | 2.5e-10 | 2.3e-12 | 5.6e-9 |
+| LEO 400 km | 1 week | 2.5e-10 | 8.1e-11 | 1.2e-7 |
+| HEO 1000 x 20000 km | 1 day | 1.1e-10 | 8.4e-12 | 5.6e-9 |
+| e = 0.9 | 2.5 days | 1.4e-10 | 6.9e-11 | 1.4e-9 |
+| hyperbola, e = 1.5 | 5.6 h | 4.4e-10 | 1.1e-13 | 2.9e-11 |
+
+The differences are limited by their own truncation and rounding; the integrated variational
+equations agree to 1e-11. The symplectic residual grows with |Phi_rv| (3e5 s after a week).
+
+Secular, differenced (`SecularPropagatorCorrected::propagateStm`), with J2 = J4 = 0 so that the exact
+answer is the two-body Phi:
+
+| Orbit | 4 h | 1 day | 1 week |
+|---|---|---|---|
+| LEO 400 km i=51.6 | 1.6e-11 | 1.5e-11 | 5.3e-9 |
+| SSO 800 km e=0.01 | 1.3e-11 | 9.3e-12 | 4.0e-9 |
+| HEO 1000 x 20000 km | 2.4e-7 | 4.5e-8 | 1.9e-8 |
+| near-equatorial i=0.5 | 5.7e-10 | 8.6e-11 | 2.7e-9 |
+| polar i=90 | 1.6e-11 | 1.5e-11 | 3.9e-9 |
+| retrograde i=140 | 9.9e-12 | 1.1e-11 | 2.4e-9 |
+| e = 0.74 | 1.6e-11 | 1.0e-7 | 1.6e-5 |
+
+The step (1e-5 of |r0| and |v0|, fourth-order stencil) balances the truncation error, which grows
+with the number of revolutions and the eccentricity (e = 0.74 over a week), against the ~1e-8 rad
+noise of the element conversion near e = 0 and i = 0 (smaller steps cost three orders of magnitude
+on a near-circular, near-equatorial orbit). The tests also check the linearization against two
+propagations with J2/J4 on, to the expected second-order 3e-4 over a day.
+
+Covariances (100 m and 0.1 m/s per axis at the epoch, no process noise): radial / in-track /
+cross-track sigmas of the analytic covariances over those of the numerical J2/J4 covariance:
+
+| Orbit | dt | numerical sigma R / I / C (m) | secular / numerical | two-body / numerical |
+|---|---|---|---|---|
+| LEO 400 km i=51.6 | 4 h | 444 / 6743 / 97 | 0.992 / 1.002 / 0.998 | 0.992 / 1.001 / 0.996 |
+| LEO 400 km i=51.6 | 24 h | 487 / 39235 / 99 | 0.965 / 1.002 / 1.000 | 0.966 / 1.001 / 1.000 |
+| SSO 800 km e=0.01 | 24 h | 135 / 37327 / 93 | 1.080 / 0.999 / 0.987 | 1.037 / 1.001 / 1.028 |
+| HEO 1000 x 20000 km | 4 h | 5487 / 6711 / 323 | 1.003 / 1.004 / 0.994 | 1.003 / 1.005 / 0.993 |
+| HEO 1000 x 20000 km | 24 h | 40583 / 90256 / 110 | 0.871 / 1.103 / 0.944 | 0.867 / 1.105 / 0.948 |
+| near-equatorial i=0.5 | 24 h | 168 / 38672 / 97 | 1.197 / 1.004 / 1.001 | 1.372 / 0.998 / 0.973 |
+| retrograde i=140 | 24 h | 152 / 38466 / 100 | 1.248 / 1.002 / 0.989 | 1.306 / 1.000 / 0.945 |
+
+(The study prints all twelve rows; at 4 h every ratio is within 0.992-1.005.) The in-track sigma,
+which dominates, is Keplerian shear, so the two-body covariance is as good as the secular one. The
+small radial sigma oscillates through the orbit, and over a day the analytic trajectories reach a
+different phase of it.
+
+## Closest-approach search
+
+From `astro_study_conjunctions`: 300 random pairs of two-body orbits (perigee at least 6600 km,
+semi-major axis up to 66 700 km, e up to 0.9), each searched over 1 day with `closeApproaches`, against
+a scan of the distance every 0.5 s:
+
+| `stepFraction` | Minima missed | Extra minima | Time per search |
+|---|---|---|---|
+| 0.05 (default) | 0 of 1245 | 0 | 0.21 ms |
+| 0.1 | 0 of 1245 | 0 | 0.11 ms |
+| 0.2 | 2 of 1245 | 0 | 0.07 ms |
+| 0.4 | 3 of 1245 | 0 | 0.04 ms |
+
+The tests also check `closestApproach` against brute force on random pairs, a constructed 100 m
+conjunction, a wrapped `NumericalPropagator` and the secular models.
+
+## Collision probability
+
+Measured by `astro_study_conjunctions` (relative difference = `collisionProbability` / reference - 1):
+
+| Reference | Relative difference |
+|---|---|
+| [NASA CARA](https://github.com/nasa/CARA_Analysis_Tools) `PcCircle` highest-accuracy values (Omitron cases 1 and 2, 20 m radius) | 2.7e-14, 4.4e-16 |
+| CARA default-mode values on one geometry (123 km x 19 m covariance), radii 10 m and 100 m | 4.2e-14, 1.4e-14 |
+| the same, radii 1, 3, 10 and 30 km | -1.1e-4, -2.8e-4, 1.1e-4, 1.8e-4: CARA's 64-point Gauss-Chebyshev quadrature cannot resolve the 19 m axis there |
+| brute-force polar grid (4000 x 80000 points) on that geometry, radii 1-30 km | 1.6e-13 or less; CARA's values differ from the grid by the same 1-3e-4 |
+| [Alfano (2009)](references.md#conjunctions-and-collision-probability) cases 5-7, his linear Pc | 1.1e-4, -2.4e-7, -3.3e-6 |
+| Alfano (2009) cases 5-7, his 1e8-sample Monte Carlo | -1.5e-4, 8.1e-3, -2.1e-2 (the linear model's own error on these slow encounters, and Monte Carlo noise) |
+
+CARA's cases are compared in CARA's miss-distance convention (see the
+[guide](guide/propagation.md#collision-probability)).
+
+Asserted by `tests/orbit/collision_probability_test.cpp`:
+
+| Reference | Tolerance (relative unless stated) |
+|---|---|
+| closed form 1 - exp(-R^2 / 2 sigma^2) (isotropic, centred) | 1e-11 |
+| Rice distribution (isotropic, offset; [Rice 1945](references.md#conjunctions-and-collision-probability)), by Simpson's rule | 1e-10 |
+| brute-force polar grid: anisotropic, 1000:1 aspect ratio, R >> sigma, correlated, Pc ~ 1e-14 | 1e-8 |
+| 3-D Monte Carlo of straight-line encounters (400 000 draws) | 5 binomial standard deviations |
+| CARA Omitron cases, and the multiple-radius geometry at 10 m and 100 m | 1e-12 |
+| CARA multiple-radius geometry at 1-30 km, and Alfano's linear Pc | 1e-3 (CARA's own test tolerance) |
+| singular covariances (zero width), head-on encounter | 1e-14 and 1e-12 absolute |
+
 ## Consistency checks
 
 From `astro_study_consistency`: priors drawn from their covariance (1500 samples per row), compared
@@ -154,6 +282,7 @@ ctest --test-dir build                       # the validation tests
 build/studies/astro_study_propagation        # < 1 s
 build/studies/astro_study_consistency        # ~1 min; optional argument: samples per row
 build/studies/astro_study_impact             # ~2 s; optional argument: Monte Carlo samples
+build/studies/astro_study_conjunctions       # ~45 s; optional argument: orbit pairs
 ```
 
 Regenerating the ERFA and JPL reference data needs Python with `numpy`, `pyerfa`, `sgp4` and

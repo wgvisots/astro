@@ -147,6 +147,85 @@ TEST(SecularPropagator, Grid12AddsModelDerivatives) {
     EXPECT_TRUE(prop.propagateGrid(0.0, 1.0, 0).empty());
 }
 
+TEST(SecularPropagatorCorrected, SamePositionsAndVelocityIsTheirDerivative) {
+    // Near-circular, eccentric, near-equatorial and retrograde orbits, both secular orders.
+    const KeplerianElements orbits[] = {
+        {7000 * km,  0.0,   deg2rad(51.6),  0.3, 0.0, 0.7},
+        {7178 * km,  0.01,  deg2rad(98.6),  1.3, 2.5, 0.2},
+        {16878 * km, 0.56,  deg2rad(63.4),  0.1, 4.7, 0.0},
+        {7000 * km,  0.002, deg2rad(0.5),   0.0, 0.0, 1.0},
+        {7000 * km,  0.001, deg2rad(140.0), 0.5, 1.0, 2.0},
+    };
+    for (const KeplerianElements& el : orbits) {
+        for (SecularOrder order : {SecularOrder::J2, SecularOrder::J2SquaredJ4}) {
+            const SecularPropagator          base(el, {}, order);
+            const SecularPropagatorCorrected corrected(el, {}, order);
+            EXPECT_FALSE(base.velocityIsPositionRate());
+            EXPECT_TRUE(corrected.velocityIsPositionRate());
+            double worstRate = 0.0, worstBase = 0.0, minBase = 1e30;
+            for (double dt : {0.0, 1234.5, -5000.0, 86400.0}) {
+                const StateVector s = corrected.propagate(dt);
+                EXPECT_EQ(s.r, base.propagate(dt).r) << order << " dt " << dt;
+                // Central difference: truncation ~|d3r/dt3| h^2 / 6 ~ 1e-4 m/s at h = 0.25 s.
+                const double h  = 0.25;
+                const Vec3   dr = (corrected.propagate(dt + h).r - corrected.propagate(dt - h).r) / (2.0 * h);
+                worstRate       = std::max(worstRate, norm(s.v - dr));
+                worstBase       = std::max(worstBase, norm(base.propagate(dt).v - dr));
+                minBase         = std::min(minBase, norm(base.propagate(dt).v - dr));
+            }
+            EXPECT_LT(worstRate, 1e-3) << order << " a = " << el.a;
+            // The original velocity misses the drift by ~1e-3 relative (metres per second).
+            EXPECT_GT(minBase, 0.1) << order << " a = " << el.a;
+            EXPECT_LT(worstBase, 30.0) << order << " a = " << el.a;
+        }
+    }
+}
+
+TEST(SecularPropagatorCorrected, EpochGridTwelveComponentsAndBaseClass) {
+    const StateVector s0 = elementsToState({7000 * km, 0.001, deg2rad(97.0), 0.1, 0.2, 0.3});
+
+    // From a state: the input position is reproduced, the velocity is not (SecularPropagator
+    // reproduces both).
+    const SecularPropagatorCorrected corrected(s0);
+    const StateVector                atEpoch = corrected.propagate(0.0);
+    expectVecNear(atEpoch.r, s0.r, 1e-6);
+    EXPECT_GT(norm(atEpoch.v - s0.v), 1.0);
+    EXPECT_LT(norm(atEpoch.v - s0.v), 20.0);
+    expectVecNear(SecularPropagator(s0).propagate(0.0).v, s0.v, 1e-9);
+
+    // The grid gives the corrected velocity too.
+    const auto grid = corrected.propagateGrid(-300.0, 17.0, 2000);
+    for (std::size_t k = 0; k < grid.size(); k += 97) {
+        const StateVector direct = corrected.propagate(-300.0 + 17.0 * static_cast<double>(k));
+        expectVecNear(grid[k].r, direct.r, 1e-6);
+        expectVecNear(grid[k].v, direct.v, 1e-9);
+    }
+
+    // 12 components: the field's acceleration and jerk at the corrected velocity; an unmodeled
+    // start reproduces the input acceleration and jerk at the epoch.
+    const auto g12 = corrected.propagateGrid12(0.0, 60.0, 50);
+    for (std::size_t k = 0; k < g12.size(); k += 7) {
+        expectVecNear(g12[k].v, corrected.propagate(60.0 * static_cast<double>(k)).v, 1e-9);
+        expectVecNear(g12[k].j, pointMassJerk(g12[k].r, g12[k].v) + zonalJerk(g12[k].r, g12[k].v, kJ2J4), 1e-15);
+    }
+    StateVector12 s12  = SecularPropagator(s0).propagate12(0.0);
+    s12.a             += Vec3{1e-4, -2e-4, 3e-4};
+    s12.j             += Vec3{1e-6, 0.0, -1e-6};
+    const SecularPropagatorCorrected thrusting(s12, {}, SecularOrder::J2SquaredJ4, HigherOrderMode::UnmodeledForce);
+    const StateVector12              t0 = thrusting.propagate12(0.0);
+    expectVecNear(t0.a, s12.a, 1e-13);
+    expectVecNear(t0.j, s12.j, 1e-15);
+    expectVecNear(thrusting.accelerationResidual(), Vec3{1e-4, -2e-4, 3e-4}, 1e-15);
+
+    // Through a base-class reference or a copy it is still corrected.
+    const SecularPropagator& ref  = corrected;
+    const SecularPropagator  copy = corrected;
+    EXPECT_EQ(ref.propagate(500.0), corrected.propagate(500.0));
+    EXPECT_EQ(copy.propagate(500.0), corrected.propagate(500.0));
+    EXPECT_TRUE(copy.velocityIsPositionRate());
+    EXPECT_THROW(SecularPropagatorCorrected(KeplerianElements{7000 * km, 1.2, 0.5, 0, 0, 0}), Error);
+}
+
 TEST(NumericalGrid, MatchesStoppingAtEachOutput) {
     // With a tight tolerance the integrator error is far below the interpolation error being tested.
     const StateVector s0 = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});

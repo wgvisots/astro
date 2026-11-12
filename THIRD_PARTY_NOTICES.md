@@ -88,6 +88,15 @@ R. Hujsak and T.S. Kelso, "Revisiting Spacetrack Report #3", AIAA 2006-6753
 They are used only as test data. The SGP4 implementation in `src/orbit/sgp4.cpp`
 is written from the published algorithm.
 
+## NASA CARA collision probability test cases
+
+`tests/orbit/collision_probability_test.cpp` uses, as reference values only, the inputs and expected
+probabilities of the NASA Conjunction Assessment Risk Analysis (CARA) Analysis Tools
+(<https://github.com/nasa/CARA_Analysis_Tools>, commit 43f0160): the cases of
+`PcCircle_UnitTest.m`, and Alfano's (2009) test cases 5-7 with their published linear and Monte
+Carlo probabilities. No CARA code is included; `collisionProbability` is written from the
+published method (Foster & Estes 1992; Alfano 2005).
+
 ## JPL planetary ephemeris
 
 `tests/data/de440s_2024q1_*.bsp` are small subsets of the JPL DE440s

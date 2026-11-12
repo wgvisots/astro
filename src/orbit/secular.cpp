@@ -178,33 +178,98 @@ SecularPropagator::SecularPropagator(const KeplerianElements& mean, const ZonalP
 }
 
 SecularPropagator::SecularPropagator(const StateVector& s0, const ZonalParameters& zp, SecularOrder order)
-    : SecularPropagator(stateToElements(s0, zp.mu), zp, order) {}
+    : SecularPropagator(stateToElements(s0, zp.mu), zp, order) {
+    input_.r = s0.r;
+    input_.v = s0.v;
+}
 
 SecularPropagator::SecularPropagator(const StateVector12&   s0,
                                      const ZonalParameters& zp,
                                      SecularOrder           order,
                                      HigherOrderMode        mode)
     : SecularPropagator(s0.rv(), zp, order) {
+    input_       = s0;
+    mode_        = mode;
+    fromState12_ = true;
+    initResiduals(s0, mode);
+}
+
+SecularPropagator::SecularPropagator(RateVelocity,
+                                     const KeplerianElements& mean,
+                                     const ZonalParameters&   zp,
+                                     SecularOrder             order)
+    : mean_(mean)
+    , zp_(zp)
+    , order_(order)
+    , rateVelocity_(true) {
+    init();
+}
+
+SecularPropagator::SecularPropagator(RateVelocity           tag,
+                                     const StateVector&     s0,
+                                     const ZonalParameters& zp,
+                                     SecularOrder           order)
+    : SecularPropagator(tag, stateToElements(s0, zp.mu), zp, order) {
+    input_.r = s0.r;
+    input_.v = s0.v;
+}
+
+SecularPropagator::SecularPropagator(RateVelocity           tag,
+                                     const StateVector12&   s0,
+                                     const ZonalParameters& zp,
+                                     SecularOrder           order,
+                                     HigherOrderMode        mode)
+    : SecularPropagator(tag, s0.rv(), zp, order) {
+    input_       = s0;
+    mode_        = mode;
+    fromState12_ = true;
+    initResiduals(s0, mode);
+}
+
+void SecularPropagator::initResiduals(const StateVector12& s0, HigherOrderMode mode) {
     unmodeled_ = mode == HigherOrderMode::UnmodeledForce;
-    Vec3 a, j;
-    fieldDerivatives(s0.r, s0.v, a, j); // point mass + zonal jerk does not depend on the acceleration
+    // The model's velocity at the epoch: the input one, or its corrected form.
+    const Vec3 v0 = rateVelocity_ ? propagate(0.0).v : s0.v;
+    Vec3       a, j;
+    fieldDerivatives(s0.r, v0, a, j); // point mass + zonal jerk does not depend on the acceleration
     da0_ = s0.a - a;
     dj0_ = s0.j - j;
 }
+
+SecularPropagatorCorrected::SecularPropagatorCorrected(const KeplerianElements& mean,
+                                                       const ZonalParameters&   zp,
+                                                       SecularOrder             order)
+    : SecularPropagator(RateVelocity{}, mean, zp, order) {}
+
+SecularPropagatorCorrected::SecularPropagatorCorrected(const StateVector&     s0,
+                                                       const ZonalParameters& zp,
+                                                       SecularOrder           order)
+    : SecularPropagator(RateVelocity{}, s0, zp, order) {}
+
+SecularPropagatorCorrected::SecularPropagatorCorrected(const StateVector12&   s0,
+                                                       const ZonalParameters& zp,
+                                                       SecularOrder           order,
+                                                       HigherOrderMode        mode)
+    : SecularPropagator(RateVelocity{}, s0, zp, order, mode) {}
 
 void SecularPropagator::init() {
     if (!(mean_.e >= 0.0 && mean_.e < 1.0) || !(mean_.a > 0.0)) {
         throw Error("SecularPropagator: requires an elliptic orbit (a > 0, 0 <= e < 1)");
     }
-    rates_   = secularRates(mean_.a, mean_.e, mean_.i, zp_, order_);
-    J_       = order_ == SecularOrder::J2 ? std::vector<double>{0.0, 0.0, zp_.J2}
-                                          : std::vector<double>{0.0, 0.0, zp_.J2, 0.0, zp_.J4};
-    M0_      = mean_.meanAnomaly();
-    b_       = mean_.a * std::sqrt(1.0 - mean_.e * mean_.e);
-    sqrtMuA_ = std::sqrt(zp_.mu * mean_.a);
-    bOverA_  = b_ / mean_.a;
-    cosI_    = std::cos(mean_.i);
-    sinI_    = std::sin(mean_.i);
+    rates_     = secularRates(mean_.a, mean_.e, mean_.i, zp_, order_);
+    J_         = order_ == SecularOrder::J2 ? std::vector<double>{0.0, 0.0, zp_.J2}
+                                            : std::vector<double>{0.0, 0.0, zp_.J2, 0.0, zp_.J4};
+    M0_        = mean_.meanAnomaly();
+    b_         = mean_.a * std::sqrt(1.0 - mean_.e * mean_.e);
+    sqrtMuA_   = std::sqrt(zp_.mu * mean_.a);
+    bOverA_    = b_ / mean_.a;
+    cosI_      = std::cos(mean_.i);
+    sinI_      = std::sin(mean_.i);
+    mDotOverN_ = rates_.meanAnomalyDot / std::sqrt(zp_.mu / (mean_.a * mean_.a * mean_.a));
+    // The epoch state the covariance methods differentiate with respect to; the state constructors
+    // replace it with their input.
+    const StateVector s0 = elementsToState(mean_, zp_.mu);
+    input_               = StateVector12(s0.r, s0.v, Vec3{}, Vec3{});
 }
 
 void SecularPropagator::fieldDerivatives(const Vec3& r, const Vec3& v, Vec3& a, Vec3& j) const noexcept {
@@ -230,7 +295,16 @@ StateVector SecularPropagator::state(const Angles& x) const noexcept {
     const double cO = x.cosRaan, sO = x.sinRaan, cw = x.cosArgp, sw = x.sinArgp;
     const Vec3   P{cO * cw - sO * sw * cosI_, sO * cw + cO * sw * cosI_, sw * sinI_};
     const Vec3   Q{-cO * sw - sO * cw * cosI_, -sO * sw + cO * cw * cosI_, cw * sinI_};
-    return {P * xp + Q * yp, P * vx + Q * vy};
+    const Vec3   r = P * xp + Q * yp;
+    const Vec3   v = P * vx + Q * vy;
+    if (!rateVelocity_) {
+        return {r, v};
+    }
+    // d r / dt: each angle's partial times its rate. dr/dM = v / n; the node turns the orbit about
+    // z and the perigee about the orbit normal W = P x Q.
+    const Vec3 W{sO * sinI_, -cO * sinI_, cosI_};
+    const Vec3 zxr{-r.y, r.x, 0.0};
+    return {r, mDotOverN_ * v + rates_.raanDot * zxr + rates_.argpDot * cross(W, r)};
 }
 
 SecularPropagator::Angles SecularPropagator::angles(double dt) const noexcept {
@@ -322,6 +396,94 @@ std::vector<StateVector> SecularPropagator::propagateGrid(double start, double s
 std::vector<StateVector12> SecularPropagator::propagateGrid12(double start, double step, std::size_t count) const {
     std::vector<StateVector12> out(count);
     propagateGrid12(start, step, out);
+    return out;
+}
+
+namespace {
+
+// Relative step of the state transition matrix's differences, |r0| and |v0| times this. The
+// fourth-order stencil makes the truncation error ~(n dt * step)^4: 1e-5 keeps it below ~1e-5 over
+// a week, and above the ~1e-8 rad noise of the element conversion near e = 0 and i = 0.
+constexpr double kStmStep = 1e-5;
+
+// Offsets of the stencil, in steps, and their weights times 12 (f' = sum w f(x + o h) / (12 h)).
+constexpr double kStencilOffset[4] = {1.0, -1.0, 2.0, -2.0};
+constexpr double kStencilWeight[4] = {8.0, -8.0, -1.0, 1.0};
+
+} // namespace
+
+SecularPropagator SecularPropagator::rebuilt(const StateVector& s) const {
+    StateVector12 x = input_;
+    x.r             = s.r;
+    x.v             = s.v;
+    if (fromState12_) {
+        return rateVelocity_ ? SecularPropagator(RateVelocity{}, x, zp_, order_, mode_)
+                             : SecularPropagator(x, zp_, order_, mode_);
+    }
+    return rateVelocity_ ? SecularPropagator(RateVelocity{}, x.rv(), zp_, order_)
+                         : SecularPropagator(x.rv(), zp_, order_);
+}
+
+void SecularPropagator::trajectoryGrid(double start, double step, std::span<StateVector> out) const {
+    if (!unmodeled_) {
+        propagateGrid(start, step, out);
+        return;
+    }
+    grid(start, step, out.size(), [&](std::size_t k, double dt, const StateVector& s) {
+        out[k] = complete(dt, s).rv();
+    });
+}
+
+void SecularPropagator::stmGrid(double start, double step, std::span<StateVector> states, std::span<Mat6> stm) const {
+    trajectoryGrid(start, step, states);
+    for (Mat6& m : stm) {
+        m = Mat6{};
+    }
+    std::vector<StateVector> buf(states.size());
+    for (std::size_t j = 0; j < 6; ++j) {
+        const double h = kStmStep * (j < 3 ? norm(input_.r) : norm(input_.v));
+        for (std::size_t p = 0; p < 4; ++p) {
+            StateVector s0                      = input_.rv();
+            (j < 3 ? &s0.r.x : &s0.v.x)[j % 3] += kStencilOffset[p] * h;
+            rebuilt(s0).trajectoryGrid(start, step, buf);
+            const double w = kStencilWeight[p] / (12.0 * h);
+            for (std::size_t k = 0; k < buf.size(); ++k) {
+                const double c[6] = {buf[k].r.x, buf[k].r.y, buf[k].r.z, buf[k].v.x, buf[k].v.y, buf[k].v.z};
+                for (std::size_t i = 0; i < 6; ++i) {
+                    stm[k][i][j] += w * c[i];
+                }
+            }
+        }
+    }
+}
+
+StateTransition SecularPropagator::propagateStm(double dt) const {
+    StateTransition out;
+    stmGrid(dt, 1.0, std::span<StateVector>(&out.state, 1), std::span<Mat6>(&out.stm, 1));
+    return out;
+}
+
+StateCovariance SecularPropagator::propagateWithCovariance(double dt, const Mat6& P0) const {
+    const StateTransition t = propagateStm(dt);
+    return {t.state, congruence(t.stm, P0)};
+}
+
+void SecularPropagator::propagateGridWithCovariance(double                     start,
+                                                    double                     step,
+                                                    const Mat6&                P0,
+                                                    std::span<StateCovariance> out) const {
+    std::vector<StateVector> states(out.size());
+    std::vector<Mat6>        stm(out.size());
+    stmGrid(start, step, states, stm);
+    for (std::size_t k = 0; k < out.size(); ++k) {
+        out[k] = {states[k], congruence(stm[k], P0)};
+    }
+}
+
+std::vector<StateCovariance>
+SecularPropagator::propagateGridWithCovariance(double start, double step, std::size_t count, const Mat6& P0) const {
+    std::vector<StateCovariance> out(count);
+    propagateGridWithCovariance(start, step, P0, out);
     return out;
 }
 

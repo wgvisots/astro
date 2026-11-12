@@ -27,6 +27,7 @@
 #include "astro/core/constants.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/state12.h"
+#include "astro/orbit/state_covariance.h"
 
 /// \file
 /// Analytic secular (mean-element) drift due to the Earth's zonal harmonics,
@@ -106,6 +107,13 @@ struct SecularRates {
 /// The z axis of the state's frame must be the Earth's pole (TOD, TEME or CIRS). For a GCRS or
 /// J2000 state, rotate it with poleOfDateMatrix (frames/transform.h) first and rotate the results
 /// back.
+///
+/// The velocity is the two-body velocity of the mean elements at each time (as in Vallado's
+/// PKEPLER), so a state converts back to exactly the propagated mean elements and the input state
+/// is reproduced at the epoch. It is not the time derivative of the position, which also carries
+/// the node and perigee drift and the J2/J4 part of the mean-anomaly rate (1e-3 relative, ~6-10 m/s
+/// in LEO). SecularPropagatorCorrected returns that derivative instead; see the propagation guide
+/// for when each fits.
 class SecularPropagator {
 public:
     /// From mean elements (elliptic: e < 1).
@@ -140,6 +148,37 @@ public:
     /// As propagateGrid12, returning `count` states.
     [[nodiscard]] std::vector<StateVector12> propagateGrid12(double start, double step, std::size_t count) const;
 
+    /// State dt seconds after the epoch and the state transition matrix Phi(dt) = d(state at dt) /
+    /// d(epochState()), for the covariance of the input state.
+    ///
+    /// Phi is the derivative of the whole map from the input state to the propagated one (input
+    /// state -> mean elements -> secular drift -> state), by fourth-order central differences of
+    /// propagations from perturbed input states, with steps of 1e-5 |r0| and 1e-5 |v0|. Relative
+    /// accuracy 2e-5 or better: against the closed-form two-body Phi (propagateKeplerStm) with
+    /// J2 = J4 = 0, 1e-11 to 5e-9 for the LEO test orbits over up to a week, and 1.6e-5 for e = 0.74
+    /// over a week (astro_study_propagation).
+    /// For SecularPropagatorCorrected Phi(0) is not the identity: its velocity at the epoch is not
+    /// the input velocity. Costs 24 extra propagations (and constructions); for many times use
+    /// propagateGridWithCovariance, which builds the perturbed propagators once. The state is
+    /// propagate(dt), or propagate12(dt) for HigherOrderMode::UnmodeledForce, whose input
+    /// acceleration and jerk are held fixed.
+    [[nodiscard]] StateTransition propagateStm(double dt) const;
+    /// State and covariance dt seconds after the epoch: P = Phi P0 Phi^T, Phi from propagateStm. P0 is
+    /// the covariance of epochState() (m^2, m^2/s, m^2/s^2) in its frame. There is no process noise:
+    /// the covariance shows only how the model maps the initial uncertainty (see
+    /// NumericalPropagator::propagateGridWithCovariance for process noise).
+    [[nodiscard]] StateCovariance propagateWithCovariance(double dt, const Mat6& P0) const;
+    /// States and covariances at dt = start + k * step for k = 0 .. out.size() - 1, written into
+    /// `out`: the grid form of propagateWithCovariance, 25 grid propagations in all (1.2 us per
+    /// output; NumericalPropagator::propagateGridWithCovariance is faster on long grids).
+    void propagateGridWithCovariance(double start, double step, const Mat6& P0, std::span<StateCovariance> out) const;
+    /// As above, returning `count` states and covariances.
+    [[nodiscard]] std::vector<StateCovariance>
+    propagateGridWithCovariance(double start, double step, std::size_t count, const Mat6& P0) const;
+    /// The input state the covariance methods refer to: the state given to the constructor, or for
+    /// mean elements elementsToState(mean, zp.mu).
+    [[nodiscard]] StateVector epochState() const noexcept { return input_.rv(); }
+
     /// Mean elements at the epoch.
     [[nodiscard]] const KeplerianElements& meanElements() const noexcept { return mean_; }
     /// Secular rates of the mean elements.
@@ -148,6 +187,23 @@ public:
     [[nodiscard]] const Vec3& accelerationResidual() const noexcept { return da0_; }
     /// Input jerk minus the model's at the epoch (zero unless built from a StateVector12).
     [[nodiscard]] const Vec3& jerkResidual() const noexcept { return dj0_; }
+    /// True if velocities are the time derivative of the positions (SecularPropagatorCorrected),
+    /// false if they are the two-body velocity of the mean elements (SecularPropagator).
+    [[nodiscard]] bool velocityIsPositionRate() const noexcept { return rateVelocity_; }
+
+protected:
+    /// Selects the velocity of SecularPropagatorCorrected in the constructors below.
+    struct RateVelocity {};
+    /// As the public constructors, with velocities that are the time derivative of the positions.
+    SecularPropagator(RateVelocity, const KeplerianElements& mean, const ZonalParameters& zp, SecularOrder order);
+    /// As above, from an inertial state whose osculating elements are taken as mean elements.
+    SecularPropagator(RateVelocity, const StateVector& s0, const ZonalParameters& zp, SecularOrder order);
+    /// As above, from a 12-component state.
+    SecularPropagator(RateVelocity,
+                      const StateVector12&   s0,
+                      const ZonalParameters& zp,
+                      SecularOrder           order,
+                      HigherOrderMode        mode);
 
 private:
     /// Time-dependent angles of one state: reduced mean anomaly, eccentric anomaly and the sines
@@ -158,12 +214,19 @@ private:
     };
 
     void                        init();
+    void                        initResiduals(const StateVector12& s0, HigherOrderMode mode);
     void                        fieldDerivatives(const Vec3& r, const Vec3& v, Vec3& a, Vec3& j) const noexcept;
     [[nodiscard]] Angles        angles(double dt) const noexcept;
     [[nodiscard]] StateVector   state(const Angles& x) const noexcept;
     [[nodiscard]] StateVector12 complete(double dt, StateVector s) const noexcept;
     template <class Emit>
     void grid(double start, double step, std::size_t count, Emit&& emit) const noexcept;
+    /// The same kind of propagator from another input state (keeping acceleration, jerk and mode).
+    [[nodiscard]] SecularPropagator rebuilt(const StateVector& s) const;
+    /// States of the trajectory (including an unmodeled force) on a grid.
+    void trajectoryGrid(double start, double step, std::span<StateVector> out) const;
+    /// States and state transition matrices on a grid.
+    void stmGrid(double start, double step, std::span<StateVector> states, std::span<Mat6> stm) const;
 
     KeplerianElements   mean_;
     ZonalParameters     zp_;
@@ -177,8 +240,47 @@ private:
     double              cosI_{1.0};
     double              sinI_{0.0};
     bool                unmodeled_{false};
+    bool                rateVelocity_{false}; // velocity = d(position)/dt (SecularPropagatorCorrected)
+    double              mDotOverN_{1.0};      // mean-anomaly rate over the two-body mean motion
     Vec3                da0_;
     Vec3                dj0_;
+    StateVector12       input_;                            // epoch state for the covariance methods
+    HigherOrderMode     mode_{HigherOrderMode::ModelOnly}; // mode of a StateVector12 start
+    bool                fromState12_{false};               // built from a StateVector12
+};
+
+/// SecularPropagator whose velocity is the time derivative of its position.
+///
+/// Positions are identical to SecularPropagator's. The velocity adds what the two-body velocity of
+/// the mean elements leaves out, the drift of the angles:
+///
+///     v = (Mdot / n) v_mean + raanDot (z x r) + argpDot (w x r)
+///
+/// with n the two-body mean motion and w the orbit normal. Use it wherever velocity and position
+/// must agree: range rate and Doppler, closest-approach searches (Trajectory uses it), Hermite
+/// interpolation or differencing of outputs. The price: the velocity at the epoch is not the input
+/// velocity (it differs by the same ~1e-3 relative), and a propagated state no longer converts back
+/// to the mean elements. Acceleration and jerk in propagate12 are those of the field at the
+/// propagated position and (corrected) velocity; the jerk residual of a 12-component start is taken
+/// against the corrected velocity, so propagate12(0) reproduces the input jerk.
+///
+/// It is a SecularPropagator (pass it wherever one is accepted) and costs ~2 % more per output.
+class SecularPropagatorCorrected : public SecularPropagator {
+public:
+    /// From mean elements (elliptic: e < 1).
+    explicit SecularPropagatorCorrected(const KeplerianElements& mean,
+                                        const ZonalParameters&   zp    = {},
+                                        SecularOrder             order = SecularOrder::J2SquaredJ4);
+    /// From an inertial state whose z axis is the Earth's pole; its osculating elements are taken
+    /// as mean elements, as for SecularPropagator.
+    explicit SecularPropagatorCorrected(const StateVector&     s0,
+                                        const ZonalParameters& zp    = {},
+                                        SecularOrder           order = SecularOrder::J2SquaredJ4);
+    /// From a 12-component state; `mode` is as for SecularPropagator.
+    SecularPropagatorCorrected(const StateVector12&   s0,
+                               const ZonalParameters& zp    = {},
+                               SecularOrder           order = SecularOrder::J2SquaredJ4,
+                               HigherOrderMode        mode  = HigherOrderMode::ModelOnly);
 };
 
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;

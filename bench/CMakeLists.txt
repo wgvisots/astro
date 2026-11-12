@@ -16,7 +16,7 @@
 # limitations under the License.
 ###########################################################################
 
-foreach(name propagation covariance impact)
+foreach(name propagation covariance impact conjunction)
     add_executable(astro_${name}_bench ${name}_bench.cpp)
     target_link_libraries(astro_${name}_bench PRIVATE astro::astro)
     target_compile_options(astro_${name}_bench PRIVATE ${ASTRO_WARNING_FLAGS})

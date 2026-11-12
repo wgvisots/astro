@@ -6,10 +6,12 @@
 |---|---|---|---|---|
 | `propagateKepler` | point mass | km per orbit (no J2) | ~150 ns per call | quick two-body estimates, Lambert transfers |
 | `SecularPropagator` | J2, J2^2, J4 mean-element drift (Brouwer) | **tens to hundreds of km** from a state vector; ~2-6 km with fitted mean elements | 40 ns per output | mean-element studies: node and perigee drift, sun-synchronous and repeat-track design |
+| `SecularPropagatorCorrected` | the same positions; velocity = d(position)/dt | the same | ~2 % more | the same, when velocity must agree with position (range rate, Doppler, closest approach) |
 | `NumericalPropagator` | point mass + zonal harmonics (+ third bodies, custom forces) | set by tolerance: 0.2 m over 4 h at relTol 1e-9, 0.2 mm at the default | 55 us per propagation at relTol 1e-9 | accurate J2/J4 trajectories, covariance |
 | `Sgp4` | SGP4/SDP4 from two-line elements | that of the TLE (typically ~km) | 0.3 us per call (1.3 us deep space) | catalogue element sets |
 
-Numbers are from [Accuracy](../accuracy.md) and [Performance](../performance.md).
+Numbers are from [Accuracy](../accuracy.md) and [Performance](../performance.md). All of them except
+`Sgp4` also propagate a covariance: see [Covariance and tracking](covariance-tracking.md).
 
 ## Numerical J2/J4 on an output grid
 
@@ -62,7 +64,9 @@ std::cout << "two-body differs from J2/J4 by " << norm(kepler.r - grid.back().r)
 ```
 
 `propagateKepler` uses universal variables with the Laguerre-Conway iteration
-[Conway (1986)](https://doi.org/10.1007/BF01230852), valid for elliptic, parabolic and hyperbolic orbits. `lambertIzzo`
+[Conway (1986)](https://doi.org/10.1007/BF01230852), valid for elliptic, parabolic and hyperbolic orbits.
+`propagateKeplerStm` adds its state transition matrix in closed form, and
+`propagateKeplerWithCovariance` a propagated covariance. `lambertIzzo`
 solves Lambert's problem, including multi-revolution branches [Izzo (2015)](https://doi.org/10.1007/s10569-014-9587-y). Classical
 and equinoctial elements [Broucke & Cefola (1972)](https://doi.org/10.1007/BF01228432) convert to and from states in
 `orbit/elements.h`.
@@ -94,6 +98,48 @@ gets the period wrong and the error grows every orbit:
 Even fitted, the residual stays at the 1-4 km level: those are the short-period oscillations a
 mean-element theory leaves out. For metre-level work use `NumericalPropagator`. The state's frame
 must have z along the pole (TOD, TEME, CIRS), or be rotated with `poleOfDateMatrix` first.
+
+### Two velocities: `SecularPropagator` or `SecularPropagatorCorrected`
+
+The two give **identical positions** and differ only in the velocity:
+
+| | `SecularPropagator` | `SecularPropagatorCorrected` |
+|---|---|---|
+| Velocity | two-body velocity of the mean elements at each time (as Vallado's PKEPLER) | time derivative of the position: v = (Mdot / n) v_mean + raanDot (z x r) + argpDot (w x r) |
+| Agrees with dr/dt of its own positions | no: off by 1.2-9.0 m/s (the drift of node, perigee and mean anomaly, ~1e-3 relative) | yes: to 0.002 m/s (the finite-difference check's own error) |
+| Velocity error against numerical J2/J4, fitted mean elements, 4 h | 6.3 / 8.3 / 3.9 m/s (LEO / SSO / HEO) | 3.6 / 8.4 / 4.0 m/s |
+| Reproduces the input state at dt = 0 | yes, position and velocity | position only; the velocity differs by the drift term (~6-10 m/s in LEO) |
+| A propagated state converts back to the mean elements | yes, exactly | no |
+| Cost | 39 ns per grid output | ~2 % more |
+
+**Neither velocity is the true one.** Against the numerical J2/J4 trajectory both miss by metres
+per second, set by the short-period terms a mean-element theory leaves out, and the corrected one
+is better only in LEO. What the correction buys is *consistency* between velocity and position.
+
+Choose **`SecularPropagatorCorrected`** when velocity and position are used together:
+
+- range rate and Doppler, or any rate of a geometric quantity;
+- closest-approach and event searches that find a zero of a rate (`Trajectory` uses it for the
+  secular models: with the original velocity, nearly co-orbital objects closing at a few m/s had
+  their time of closest approach off by up to 90 s);
+- interpolating outputs with Hermite polynomials, or differencing or integrating them.
+
+Choose **`SecularPropagator`** when the state stands for the mean orbit:
+
+- mean-element studies, where `stateToElements` of an output should give the propagated mean
+  elements back;
+- starting from a state that must be reproduced exactly at the epoch, such as a filter's estimate;
+- matching other tools that build the state from propagated elements (PKEPLER and its relatives).
+
+Both take the same constructors and `SecularPropagatorCorrected` is a `SecularPropagator`, so it
+can be passed anywhere the original is accepted. `velocityIsPositionRate()` says which one an
+instance is. The free functions `propagateSecular` keep the original velocity.
+
+Starting the corrected propagator from mean elements chosen so that its velocity *does* match an
+input state at the epoch was tried and rejected: the mean semi-major axis it implies is worse. The
+4 h position error grew in five of six test orbits (LEO 117 -> 195 km, polar 143 -> 571 km,
+near-equatorial 22 -> 896 km) and improved only for the eccentric 1000 x 20000 km orbit
+(219 -> 154 km); see [Accuracy](../accuracy.md#analytic-j2j4-secular).
 
 Mission-design helpers: `secularRates`, `sunSynchronousInclination`, `repeatGroundTrackSemiMajorAxis`,
 `kCriticalInclination`.
@@ -130,3 +176,187 @@ outputs carry the model's acceleration and jerk at the new time (the jerk is exa
 `Sgp4` implements SGP4/SDP4 as revised by Vallado et al. [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/)
 (after Spacetrack Report #3 [Hoots & Roehrich (1980)](https://celestrak.org/NORAD/documentation/spacetrk.pdf)) and reproduces their
 verification set to 0.12 mm. It outputs TEME; see [Satellite geometry](satellite-geometry.md).
+
+## Closest approach of two objects
+
+`closestApproach(first, second, start, end)` finds the smallest distance between two objects over a
+time window. `closeApproaches(..., maxDistance)` lists every local minimum of the distance under a
+threshold: a conjunction list. Each object is a `Trajectory`, built from any of these:
+
+| Built from | Propagated with |
+|---|---|
+| `{epoch, StateVector}` | `TrajectoryModel::TwoBody` (default, `propagateKepler`), `SecularJ2` or `SecularJ2J4` (`SecularPropagator`) |
+| `{epoch, KeplerianElements}` | the same; osculating elements for two-body, mean elements for the secular models |
+| `{epoch, EquinoctialElements}` | the same, via `equinoctialToKeplerian` |
+| any `std::function<StateVector(const Time&)>` | your own: a `NumericalPropagator`, an `Sgp4`, an ephemeris table, ... |
+
+So two element sets, two states, or one of each pass straight in:
+
+<!-- snippet: examples/propagation.cpp#close_approach -->
+```cpp
+// Closest approach within a day of a state vector and an element set (either may be either, or
+// any function of time, e.g. [&prop](const Time& t) { return prop.propagate(t); }). Both must be
+// in the same inertial frame; the default model is two-body.
+const KeplerianElements debris{6780e3, 0.001, deg2rad(97.6), 0.25, 0.0, 1.22};
+const Time              end = epoch + 86400.0;
+const CloseApproach     ca  = closestApproach({epoch, s0}, {epoch, debris}, epoch, end);
+std::cout << "closest approach " << ca.distance / 1e3 << " km at " << ca.time.iso8601(0) << ", "
+          << ca.relativeSpeed / 1e3 << " km/s\n";
+// Every approach within 10 km: a conjunction list.
+for (const CloseApproach& c : closeApproaches({epoch, s0}, {epoch, debris}, epoch, end, 10e3)) {
+    std::cout << "  " << c.time.iso8601(0) << "  " << c.distance / 1e3 << " km\n";
+}
+```
+
+**How it searches.** The range rate g(t) = (r2 - r1) . (v2 - v1) is negative while the objects
+close and positive while they separate. It is sampled with a step of 0.05 |r| / |v| (the shorter of
+the two objects' values at each sample: ~125 samples per circular orbit, 45 s in LEO, 11 min in
+GEO), so eccentric orbits are sampled finely near perigee and coarsely near apogee. Each change of
+sign from negative to positive brackets a minimum, which Brent's method
+([Brent 1973](../references.md#orbits-and-propagation)) refines to `timeTolerance` (1 us). Searching
+for the zeros of the range rate is the approach of [Alfano & Negron (1993)](../references.md#conjunctions-and-collision-probability); analytic
+pre-filters such as [Hoots, Crawford & Roehrich (1984)](https://doi.org/10.1007/BF01234152) can
+thin a large catalogue before it. The minima and maxima of the distance between two orbits about
+the same body are typically a large fraction of a revolution apart, so the step leaves a wide
+margin: over 300 random orbit pairs (LEO to 66 700 km, e up to 0.9) a 1-day search found every
+minimum a 0.5 s brute-force scan did, at the default step and at twice it (see
+[Accuracy](../accuracy.md#closest-approach-search)). `closestApproach` also compares the window's two ends
+(flagged `atBoundary`) for objects still closing at the end or already separating at the start.
+
+**Both objects must be in the same inertial frame.** Convert first if they are not (for example
+an `Sgp4` gives TEME; see [Reference frames](frames.md)). The secular models also need the Earth's
+pole as z (TOD, TEME or CIRS), as for `SecularPropagator`.
+
+**Secular velocity.** The secular models use `SecularPropagatorCorrected`, whose velocity is the
+time derivative of its position (see [Two velocities](propagation.md#two-velocities-secularpropagator-or-secularpropagatorcorrected)).
+The search finds zeros of the range rate, so that matters: with `SecularPropagator`'s velocity,
+nearly co-orbital objects (relative speeds of m/s) had their time of closest approach moved by
+tens of seconds.
+
+**Cost.** One propagation of each object per sample: about 2000 samples per day of window for
+two LEO objects, plus ~10 per minimum found. A wrapped `NumericalPropagator::propagate(t)`
+integrates from its epoch on every call, so keep its epoch near the window, or sample it once
+with `propagateGrid` and interpolate in your function.
+
+### Collision probability
+
+`collisionProbability(approach, covariance1, covariance2, hardBodyRadius)` turns an approach into
+the probability that the objects actually collide, given their sizes and position uncertainties:
+
+<!-- snippet: examples/propagation.cpp#collision_probability -->
+```cpp
+// Probability of collision at that approach, for a 5 m and a 1 m object. Position covariances at
+// the time of the approach: 400 m radial, 4 km in-track, 400 m cross-track (1 sigma) in each
+// object's RIC frame, rotated into the inertial frame. (From an epoch covariance,
+// NumericalPropagator::propagateGridWithCovariance gives them at any time.)
+// clang-format off
+const Mat3 ric{400.0 * 400.0,             0.0,           0.0,
+                         0.0, 4000.0 * 4000.0,           0.0,
+                         0.0,             0.0, 400.0 * 400.0};
+// clang-format on
+const Mat3                 m1 = ricMatrix(ca.first), m2 = ricMatrix(ca.second);
+const CollisionProbability pc = collisionProbability(ca, m1.transpose() * ric * m1, m2.transpose() * ric * m2, 6.0);
+std::cout << "collision probability " << std::scientific << std::setprecision(2) << pc.probability << std::fixed
+          << std::setprecision(1) << ", miss " << pc.mahalanobis << " sigma\n";
+```
+
+It is the standard short-term encounter model of [Foster & Estes (1992)](../references.md#conjunctions-and-collision-probability),
+[Akella & Alfriend (2000)](https://doi.org/10.2514/2.4611) and [Alfano (2005a)](https://doi.org/10.1007/BF03546397);
+[Chan (2008)](https://doi.org/10.2514/4.989186) gives the background:
+
+| Step | What happens |
+|---|---|
+| Objects | spheres whose radii add up to the hard-body radius (HBR) |
+| Uncertainty | independent Gaussian position errors at TCA: the relative position has covariance C1 + C2 |
+| Encounter plane | the plane through the miss vector perpendicular to the relative velocity; errors along the relative velocity only shift the time of the encounter, so they drop out |
+| Probability | the 2-D Gaussian of the miss in that plane integrated over the HBR circle (`probabilityInCircle`): exact along the covariance's minor axis, adaptive Gauss-Kronrod along the major axis, ~1e-12 relative in 6-13 us |
+
+The result also gives the miss distance, the projected 2x2 covariance, its sigmas and the miss in
+standard deviations (`mahalanobis`).
+
+**Validated against NASA CARA (Conjunction Assessment Risk Analysis) reference cases**
+([CARA Analysis Tools](https://github.com/nasa/CARA_Analysis_Tools)) to 1e-12 relative, and
+against [Alfano's (2009)](../references.md#conjunctions-and-collision-probability) test cases (see [Accuracy](../accuracy.md#collision-probability)).
+One convention differs from CARA's `PcCircle`: CARA takes the full distance |r2 - r1| as the miss,
+assuming the states are exactly at TCA; `collisionProbability` projects r2 - r1 onto the encounter
+plane, which is the closest distance of the straight-line encounter. They agree for a true closest
+approach from `closestApproach`; for states 2 deg off TCA they differ by ~0.1 %.
+
+**When it applies.** The model assumes the encounter is short: straight-line relative motion and
+constant covariances while the objects cross each other's uncertainty, as at relative speeds of
+km/s. Alfano's slow test cases (0.2-0.5 m/s) still agree with his Monte Carlo to within 2 %,
+because their relative motion stays nearly straight, but for slow, curving, nearly co-orbital
+encounters use a Monte Carlo or a long-term encounter method instead, such as
+[Patera (2001)](https://doi.org/10.2514/2.4771). Use a true closest approach (not
+`atBoundary`).
+
+**More uncertainty does not always mean more risk.** For a given miss, the probability peaks when
+the covariance is about the size of the miss and falls as it grows (probability dilution;
+[Alfano 2005b](https://doi.org/10.1007/BF03546350), [Balch, Martin & Ferson 2019](https://doi.org/10.1098/rspa.2018.0565)). In the
+example, growing the covariance from 400 m / 4 km (radial / in-track) to 800 m / 6 km raises Pc from
+1.9e-8 to 4.8e-7, but on to 1 km / 8 km barely changes it (4.84e-7): it has levelled off near its
+peak. A small Pc from a large covariance can mean the data cannot tell, not that the approach is safe.
+Balch, Martin & Ferson show that this is not peculiar to this model: with poor data, any
+epistemic probability of collision assigns high confidence to "no collision" whether or not it is
+true (false confidence).
+
+### From states and covariances
+
+`assessConjunction` and `assessConjunctions` do all three steps from each object's state and
+covariance at its epoch: find the approach, propagate both covariances to it, and compute the
+probability. Each object is an `UncertainTrajectory`:
+
+| Built from | Covariance propagated with |
+|---|---|
+| `{epoch, state, covariance}` | `propagateKeplerWithCovariance` (default `TrajectoryModel::TwoBody`) |
+| `{epoch, state, covariance, TrajectoryModel::SecularJ2J4}` (or `SecularJ2`) | `SecularPropagatorCorrected::propagateWithCovariance` |
+| a `Trajectory` and any function of time returning a `StateCovariance` | your own: a `NumericalPropagator`'s `propagateGridWithCovariance`, `EstimateTracker::predict`, ... |
+
+<!-- snippet: examples/propagation.cpp#conjunction_assessment -->
+```cpp
+// The same from each object's state and covariance at the epoch, in one call: the covariances
+// are propagated to every approach within 10 km with the trajectory's model (two-body here;
+// TrajectoryModel::SecularJ2J4 needs a frame with z along the pole). 1 sigma per axis: 100 m and
+// 10 cm/s for the first object, 1 km and 1 m/s for the debris.
+Mat6 P1{}, P2{};
+for (std::size_t i = 0; i < 3; ++i) {
+    P1[i][i]         = 100.0 * 100.0;
+    P1[i + 3][i + 3] = 0.1 * 0.1;
+    P2[i][i]         = 1000.0 * 1000.0;
+    P2[i + 3][i + 3] = 1.0 * 1.0;
+}
+const UncertainTrajectory first{epoch, s0, P1}, second{epoch, elementsToState(debris), P2};
+for (const ConjunctionAssessment& c : assessConjunctions(first, second, epoch, end, 6.0, 10e3)) {
+    std::cout << "  " << c.approach.time.iso8601(0) << "  " << c.approach.distance / 1e3 << " km, Pc "
+              << std::scientific << std::setprecision(2) << c.collision.probability << std::fixed
+              << std::setprecision(1) << " (" << c.collision.mahalanobis << " sigma)\n";
+}
+```
+
+```text
+  2026-03-01T02:00:09Z  6.2 km, Pc 1.48e-14 (5.9 sigma)
+  2026-03-01T02:46:27Z  2.4 km, Pc 1.01e-07 (1.5 sigma)
+```
+
+Each `ConjunctionAssessment` holds the `CloseApproach`, both covariances at its time, and the
+`CollisionProbability`. `assessConjunction` gives the closest approach only; that is not always the
+most probable collision, so to rank a window's approaches use `assessConjunctions` and sort by
+`collision.probability`.
+
+- **The search samples the trajectory; the covariance is computed once per approach.** The cost is
+  that of `closeApproaches` plus 0.3 us (two-body) or 6.4 us (secular) per approach and object.
+- **Validated end to end.** In the tests, 40 000 draws of both initial states, each propagated and
+  searched, pass within the hard-body radius as often as `assessConjunction` predicts (Pc 0.04,
+  within 0.3 sigma of the Monte Carlo).
+- **For a NumericalPropagator**, give the trajectory and the covariance separately, so that the search
+  does not integrate the covariance at every sample:
+
+```cpp
+const auto prop = NumericalPropagator::j2j4(epoch, s0, Frame::TOD);
+const UncertainTrajectory object{
+    Trajectory([&prop](const Time& t) { return prop.propagate(t); }),
+    [&prop, P0, epoch](const Time& t) { return prop.propagateGridWithCovariance(t - epoch, 1.0, 1, P0)[0]; }};
+```
+
+  Each `propagate(t)` integrates from the epoch, so keep the window near it (see the cost note above).
+

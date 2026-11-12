@@ -83,6 +83,12 @@ included in the repository are credited in
 
 ## Orbits and propagation
 
+- **Battin, R. H. (1999).** *An Introduction to the Mathematics and Methods of Astrodynamics*,
+  revised ed. AIAA. <https://doi.org/10.2514/4.861543>. Universal variables and the two-body state
+  transition matrix.
+- **Shepperd, S. W. (1985).** Universal Keplerian state transition matrix. *Celestial Mechanics*
+  35(2), 129-144. <https://doi.org/10.1007/BF01227666>. The closed-form two-body Phi
+  (`propagateKeplerStm`).
 - **Montenbruck, O. & Gill, E. (2000).** *Satellite Orbits: Models, Methods and Applications*.
   Springer. <https://doi.org/10.1007/978-3-642-58351-3>. Low-precision Moon, shadow model,
   variational equations and state transition matrix.
@@ -116,11 +122,50 @@ included in the repository are credited in
   *Computers & Mathematics with Applications* 39(5-6), 43-54.
   <https://doi.org/10.1016/S0898-1221%2800%2900045-6>. Locating events (impact) on the dense output.
 - **Brent, R. P. (1973).** *Algorithms for Minimization without Derivatives*. Prentice-Hall
-  (Dover reprint, 2002). Brent's method for event times (impacts, passes, rise and set).
+  (Dover reprint, 2002). Brent's method for event times (impacts, passes, rise and set) and times
+  of closest approach.
 - **Shepperd, S. W. (1978).** Quaternion from rotation matrix. *J. Guidance and Control* 1(3),
   223-224. <https://doi.org/10.2514/3.55767b>.
 - **Clohessy, W. H. & Wiltshire, R. S. (1960).** Terminal guidance system for satellite
   rendezvous. *J. Aerospace Sci.* 27(9), 653-658. <https://doi.org/10.2514/8.8704>. Relative motion in RIC.
+
+## Conjunctions and collision probability
+
+- **Foster, J. L. & Estes, H. S. (1992).** *A Parametric Analysis of Orbital Debris Collision
+  Probability and Maneuver Rate for Space Vehicles*. NASA/JSC-25898, NASA Johnson Space Center
+  (not on NTRS; no link). The short-term encounter model: the 2-D Gaussian over the hard-body
+  circle in the encounter plane.
+- **Hoots, F. R., Crawford, L. L. & Roehrich, R. L. (1984).** An analytic method to determine
+  future close approaches between satellites. *Celestial Mechanics* 33(2), 143-158.
+  <https://doi.org/10.1007/BF01234152>. Geometric pre-filters for screening a catalogue.
+- **Alfano, S. & Negron, D. (1993).** Determining satellite close approaches. *J. Astronaut. Sci.*
+  41(2), 217-225 (no DOI found). Close approaches as zeros of the range rate, bracketed by sampling.
+- **Akella, M. R. & Alfriend, K. T. (2000).** Probability of collision between space objects.
+  *J. Guidance, Control, and Dynamics* 23(5), 769-772. <https://doi.org/10.2514/2.4611>.
+- **Patera, R. P. (2001).** General method for calculating satellite collision probability.
+  *J. Guidance, Control, and Dynamics* 24(4), 716-722. <https://doi.org/10.2514/2.4771>. A method
+  for encounters whose relative motion is not a straight line.
+- **Alfano, S. (2005a).** A numerical implementation of spherical object collision probability.
+  *J. Astronaut. Sci.* 53(1), 103-109. <https://doi.org/10.1007/BF03546397>. The 1-D integral
+  with an exact error-function inner integral.
+- **Alfano, S. (2005b).** Relating position uncertainty to maximum conjunction probability.
+  *J. Astronaut. Sci.* 53(2), 193-205. <https://doi.org/10.1007/BF03546350>. Probability dilution:
+  the covariance size that maximizes Pc.
+- **Chan, F. K. (2008).** *Spacecraft Collision Probability*. The Aerospace Press / AIAA.
+  <https://doi.org/10.2514/4.989186>. Background, including probability dilution.
+- **Alfano, S. (2009).** Satellite conjunction Monte Carlo analysis. AAS/AIAA Space Flight
+  Mechanics Meeting, Savannah, GA (AAS 09-233; no DOI found). Test cases with Monte Carlo
+  probabilities, used in the tests through CARA's copies.
+- **Balch, M. S., Martin, R. & Ferson, S. (2019).** Satellite conjunction analysis and the false
+  confidence theorem. *Proc. R. Soc. A* 475(2227), 20180565. <https://doi.org/10.1098/rspa.2018.0565>.
+  Why a small Pc from a large covariance does not mean the approach is safe.
+- **NASA CARA Analysis Tools.** <https://github.com/nasa/CARA_Analysis_Tools>. Reference
+  inputs and probabilities for the tests (`PcCircle_UnitTest.m`, Alfano 2009 cases).
+- **Rice, S. O. (1945).** Mathematical analysis of random noise (part III). *Bell System Technical
+  Journal* 24(1), 46-156. <https://doi.org/10.1002/j.1538-7305.1945.tb00453.x>. The distribution
+  of the distance of an offset isotropic Gaussian point, used as a reference in the tests.
+- **Piessens, R., de Doncker-Kapenga, E., Ueberhuber, C. W. & Kahaner, D. K. (1983).**
+  *QUADPACK: A Subroutine Package for Automatic Integration*. Springer. The Gauss-Kronrod 7-15 rule.
 
 ## Estimation and covariance
 

@@ -12,13 +12,15 @@ LEO, output every Y seconds:
 |---|---|---|---|
 | `propagateSecular(state, dt)` called per output | 201 ns/output | 227 ns/output | 201 ns/output |
 | `SecularPropagator::propagateGrid` | 40 ns/output | 43 ns/output | 40 ns/output |
+| `SecularPropagatorCorrected::propagateGrid` | 39 ns/output | 39 ns/output | 39 ns/output |
 | `SecularPropagator::propagateGrid12` | 69 ns/output | 68 ns/output | 68 ns/output |
 | `NumericalPropagator::propagate(dts)`, stopping at each output | 0.68 ms | 4.4 ms | 0.68 ms |
 | `NumericalPropagator::propagateGrid`, default tolerance | 0.51 ms | 0.56 ms | 0.10 ms |
 | `NumericalPropagator::propagateGrid`, relTol 1e-9 | | | 0.056 ms |
 | `NumericalPropagator::propagateGrid12`, relTol 1e-9 | | | 0.13 ms |
 
-Times for the numerical propagator are per propagation (all outputs). Two-body `propagateKepler`
+`SecularPropagatorCorrected` was timed in a later run, alongside `SecularPropagator::propagateGrid` at
+38.7 ns/output: the velocity correction adds about 2 %. Times for the numerical propagator are per propagation (all outputs). Two-body `propagateKepler`
 costs about 150 ns per call; SGP4 about 0.3 us per call (1.3 us for deep-space SDP4).
 
 What makes the grids fast:
@@ -43,6 +45,9 @@ What makes the grids fast:
 
 | Operation | Time |
 |---|---|
+| `propagateKeplerWithCovariance` (closed-form Phi) | 0.31 us |
+| `SecularPropagatorCorrected::propagateWithCovariance` (24 differenced propagations) | 6.4 us |
+| `SecularPropagatorCorrected::propagateGridWithCovariance`, 4 h at 10 s (1441 outputs) | 1.7 ms (1.2 us per output) |
 | `checkConsistency` / `EstimateTracker::update`, gap 10 min / 30 min / 4 h | 15 / 26 / 137 us |
 | `FrameTransformer`, IAU 2006/2000A | 125 us |
 | `FrameTransformer`, IAU 2006/2000B | 6 us |
@@ -75,6 +80,27 @@ the horizon), with the Earth rotations built per call or shared between calls:
 - Propagate many orbits in parallel: the propagators are immutable, so threads can share them, and
   separate orbits scale with the number of cores.
 
+## Closest approach and collision probability
+
+From `astro_conjunction_bench`, 1-day window:
+
+| Call | Time |
+|---|---|
+| `closestApproach`, two LEO objects, two-body | 0.69 ms (about 2000 samples) |
+| `closestApproach`, two LEO objects, secular J2/J4 | 0.45 ms |
+| `closestApproach`, LEO and GTO, two-body | 0.71 ms |
+| `closeApproaches` (every minimum), two LEO objects, two-body | 0.64 ms |
+| `probabilityInCircle`, typical (miss ~ sigma, radius << sigma) | 6.4 us |
+| `probabilityInCircle`, 1000:1 covariance | 10.3 us |
+| `probabilityInCircle`, radius >> sigma | 12.8 us |
+| `probabilityInCircle`, 123 km x 19 m covariance, 30 km radius | 14.6 us |
+| `collisionProbability`, 200 m miss (projection + `probabilityInCircle`) | 6.5 us |
+| `assessConjunction`, two LEO objects, two-body (search, covariances, probability) | 0.67 ms |
+| `assessConjunction`, two LEO objects, secular J2/J4 | 0.41 ms |
+
+Over the 300 random orbit pairs of `astro_study_conjunctions` (LEO to 66 700 km, e up to 0.9), a
+1-day search averages 0.21 ms at the default step: higher orbits need fewer samples.
+
 ## Reproducing
 
 ```sh
@@ -83,4 +109,5 @@ cmake --build build -j
 build/bench/astro_propagation_bench 86400 60 100   # X seconds, Y seconds, number of states
 build/bench/astro_propagation_bench 14400 10 100
 build/bench/astro_covariance_bench
+build/bench/astro_conjunction_bench                # optional argument: window seconds
 ```

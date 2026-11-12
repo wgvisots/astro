@@ -34,6 +34,7 @@
 #include "astro/frames/transform.h"
 #include "astro/orbit/integrators.h"
 #include "astro/orbit/state12.h"
+#include "astro/orbit/state_covariance.h"
 #include "astro/time/time.h"
 
 /// \file
@@ -128,12 +129,6 @@ public:
 private:
     Vec3 a0_;
     Vec3 j0_;
-};
-
-/// A state and its 6x6 position/velocity covariance at one time.
-struct StateCovariance {
-    StateVector state;      ///< position (m) and velocity (m/s)
-    Mat6        covariance; ///< covariance of (r, v) in the same frame (m^2, m^2/s, m^2/s^2)
 };
 
 /// Which zero crossings of an event function count as events (see propagateToEvent).

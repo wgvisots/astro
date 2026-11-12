@@ -27,6 +27,8 @@
 #include "astro/frames/transform.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/numerical.h"
+#include "astro/orbit/secular.h"
+#include "astro/orbit/two_body.h"
 #include "astro/satellite/estimate_tracker.h"
 
 using namespace astro;
@@ -87,6 +89,18 @@ int main() {
         });
         std::printf("%-8.0e %13.0f us %13.0f us %21.0f us\n", rt, a, b, c);
     }
+
+    std::printf("\nAnalytic propagators with covariance (same orbit and P0)\n\n");
+    int        n       = 0;
+    const auto secular = SecularPropagatorCorrected(s0);
+    std::printf("  propagateKeplerWithCovariance                     %7.2f us\n",
+                microseconds([&] { sink += propagateKeplerWithCovariance(s0, P0, 100.0 + n++).covariance[0][0]; }));
+    std::printf("  SecularPropagatorCorrected::propagateWithCovariance %5.2f us\n",
+                microseconds([&] { sink += secular.propagateWithCovariance(100.0 + n++, P0).covariance[0][0]; }));
+    std::printf("  SecularPropagatorCorrected::propagateGridWithCovariance, 1441 outputs %7.0f us\n", microseconds([&] {
+                    secular.propagateGridWithCovariance(0.0, 10.0, P0, pc);
+                    sink += pc.back().covariance[0][0];
+                }));
 
     std::printf("\nConsistency check (propagate the previous estimate with covariance, compare)\n\n");
     for (double gap : {600.0, 1800.0, 14400.0}) {

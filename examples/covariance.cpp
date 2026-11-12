@@ -16,16 +16,19 @@
  *         limitations under the License.
  **********************************************************************/
 
-// Covariance propagation along an output grid, and the uncertainty in radial / in-track /
-// cross-track coordinates.
+// Covariance propagation along an output grid, the uncertainty in radial / in-track /
+// cross-track coordinates, and the same covariance through the analytic propagators.
 
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 
 #include "astro/core/angle.h"
+#include "astro/frames/transform.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/numerical.h"
+#include "astro/orbit/secular.h"
+#include "astro/orbit/two_body.h"
 #include "astro/satellite/orbital_frames.h"
 
 using namespace astro;
@@ -57,5 +60,25 @@ int main() {
                   << std::sqrt(ric[1][1]) << std::setw(14) << std::sqrt(ric[2][2]) << '\n';
     }
     //! [ric]
+
+    //! [analytic_covariance]
+    // The same initial covariance through the analytic propagators, at 4 h: two-body (closed-form
+    // state transition matrix) and secular J2/J4. The secular model needs z along the pole, so the
+    // state and covariance are rotated from GCRS first (a fixed rotation, which commutes with the
+    // propagation; RIC sigmas do not depend on the frame).
+    const StateCovariance            kepler = propagateKeplerWithCovariance(s0, P0, 4.0 * 3600.0);
+    const Mat3                       toPole = poleOfDateMatrix(Frame::GCRS, epoch);
+    const SecularPropagatorCorrected secular(StateVector{toPole * s0.r, toPole * s0.v});
+    const StateCovariance            mean = secular.propagateWithCovariance(4.0 * 3600.0, rotateCovariance(P0, toPole));
+    const auto                       row  = [](const char* name, const StateCovariance& s) {
+        const Mat6 ric = rotateCovariance(s.covariance, ricMatrix(s.state));
+        std::cout << std::left << std::setw(26) << name << std::right << std::setw(9) << std::sqrt(ric[0][0])
+                  << std::setw(14) << std::sqrt(ric[1][1]) << std::setw(14) << std::sqrt(ric[2][2]) << '\n';
+    };
+    std::cout << "at 4 h                     sigma R (m)   sigma I (m)   sigma C (m)\n";
+    row("numerical J2/J4 (+ noise)", out.back());
+    row("secular J2/J4", mean);
+    row("two-body", kepler);
+    //! [analytic_covariance]
     return 0;
 }

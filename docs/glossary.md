@@ -72,6 +72,8 @@ they are in alphabetical order.
 
 | Term | Stands for | What it means here |
 |---|---|---|
+| Closest approach | | the smallest distance between two objects, where their range rate is zero (`closestApproach`) |
+| Conjunction | | a close approach of two objects, usually below a screening distance (`closeApproaches`) |
 | Event | | a zero crossing of a function of time and state, such as height at impact (`propagateToEvent`) |
 | Flight-path angle | | angle of the velocity above (launch) or below (impact) the local horizontal |
 | GEO | Geostationary Earth Orbit | circular equatorial orbit with a one-sidereal-day period |
@@ -86,6 +88,7 @@ they are in alphabetical order.
 | RKF7(8) | Runge-Kutta-Fehlberg 7(8) | adaptive-step integrator used by `NumericalPropagator` |
 | SGP4 / SDP4 | Simplified General / Deep-space Perturbations 4 | the analytic propagators for TLEs (`Sgp4`) |
 | SSO | Sun-Synchronous Orbit | orbit whose plane turns with the Sun, through J2 |
+| TCA | Time of Closest Approach | when the distance between two objects is smallest (`CloseApproach::time`) |
 | TLE | Two-Line Element set | the NORAD element format for SGP4 (`Tle`) |
 
 ## Covariance, tracking and impact
@@ -93,18 +96,25 @@ they are in alphabetical order.
 | Term | Stands for | What it means here |
 |---|---|---|
 | 1-sigma | | one standard deviation; a 1-sigma error ellipse contains 39.3 % of 2-D Gaussian errors |
+| CARA | Conjunction Assessment Risk Analysis | NASA's conjunction assessment team; its open-source tools give the collision probability test cases |
 | CEP | Circular Error Probable | radius of the circle with 50 % of impacts. Not computed directly: `ellipse.scaled(0.5)` gives the 50 % ellipse |
 | Chi-square | | distribution of a sum of squared Gaussian errors; gives the p-values of the consistency checks |
 | Covariance | | the 6x6 matrix of position and velocity error variances and correlations (`Mat6`) |
+| Encounter plane | | the plane perpendicular to the relative velocity at closest approach, where the collision probability is integrated (`CollisionProbability::xAxis`, `yAxis`) |
 | Error ellipse | | the curve of equal probability on the ground; semi-major, semi-minor and rotation (`ErrorEllipse`) |
+| HBR | Hard-Body Radius | the radius of a sphere enclosing both objects: the sum of their radii (`collisionProbability`) |
 | LVLH | Local Vertical, Local Horizontal | orbit-following frame, CCSDS convention (`lvlhMatrix`) |
 | Mahalanobis distance | | a difference measured in units of its covariance: d^T P^-1 d |
 | NTW, VNC | Normal-Tangential-W, Velocity-Normal-Co-normal | orbit-following frames (`ntwMatrix`, `vncMatrix`) |
+| Pc | Probability of collision | chance that two objects pass within the hard-body radius (`collisionProbability`) |
+| Probability dilution | | a larger covariance can lower Pc for the same miss: a small Pc may only mean the data are poor |
 | Process noise | | extra uncertainty added during propagation for unmodelled forces (`accelerationNoisePsd`) |
 | PSD | Power Spectral Density | strength of white process noise (m^2/s^3 for acceleration noise) |
 | RIC / RSW | Radial, In-track, Cross-track | orbit-following frame for residuals and covariances (`ricMatrix`) |
 | Rotation (of an ellipse) | | direction of the semi-major axis, clockwise from north |
-| STM | State Transition Matrix | Phi: how a small change of the initial state changes the state later |
+| Shear (Keplerian) | | the growth of in-track error because a different energy means a different period; dominates propagated covariances |
+| STM | State Transition Matrix | Phi: how a small change of the initial state changes the state later (`propagateKeplerStm`, `propagateStm`, `propagateGridStm`) |
+| Symplectic | | Phi^T J Phi = J with J = [[0, I], [-I, 0]]: the property of every Phi of a Hamiltonian (e.g. purely gravitational) motion; a check on a computed Phi |
 
 ## Satellite geometry
 
