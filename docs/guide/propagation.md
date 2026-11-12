@@ -221,7 +221,7 @@ an `Sgp4` gives TEME; see [Reference frames](frames.md)). The secular models als
 pole as z (TOD, TEME or CIRS), as for `SecularPropagator`.
 
 **Secular velocity.** The secular models use `SecularPropagatorCorrected`, whose velocity is the
-time derivative of its position (see [Two velocities](#two-velocities-secularpropagator-or-secularpropagatorcorrected)).
+time derivative of its position (see [Two velocities](propagation.md#two-velocities-secularpropagator-or-secularpropagatorcorrected)).
 The search finds zeros of the range rate, so that matters: with `SecularPropagator`'s velocity,
 nearly co-orbital objects (relative speeds of m/s) had their time of closest approach moved by
 tens of seconds.

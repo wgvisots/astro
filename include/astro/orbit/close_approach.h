@@ -179,11 +179,11 @@ struct CloseApproach {
 struct CollisionProbability {
     double probability{0.0};  ///< probability that the objects pass within the hard-body radius
     double missDistance{0.0}; ///< miss distance in the encounter plane (m)
-    /// Combined position covariance projected onto the encounter plane, components along xAxis and
-    /// yAxis (m^2).
-    double xx{0.0}, xy{0.0}, yy{0.0};
-    double sigmaMajor{0.0}; ///< 1-sigma semi-major axis of that covariance (m)
-    double sigmaMinor{0.0}; ///< 1-sigma semi-minor axis of that covariance (m)
+    double xx{0.0};           ///< combined position covariance in the encounter plane, xAxis-xAxis (m^2)
+    double xy{0.0};           ///< combined position covariance in the encounter plane, xAxis-yAxis (m^2)
+    double yy{0.0};           ///< combined position covariance in the encounter plane, yAxis-yAxis (m^2)
+    double sigmaMajor{0.0};   ///< 1-sigma semi-major axis of that covariance (m)
+    double sigmaMinor{0.0};   ///< 1-sigma semi-minor axis of that covariance (m)
     /// Miss distance in standard deviations, sqrt(m^T C^-1 m); infinite for a nonzero miss with a
     /// singular covariance.
     double mahalanobis{0.0};
