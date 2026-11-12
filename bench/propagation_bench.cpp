@@ -96,6 +96,12 @@ int main(int argc, char** argv) {
                    sink += out.back().r.x;
                }
            }));
+    report("secular: SecularPropagatorCorrected::propagateGrid", secondsPerRun([&] {
+               for (const auto& s : states) {
+                   SecularPropagatorCorrected(s).propagateGrid(0.0, Y, out);
+                   sink += out.back().r.x;
+               }
+           }));
     report("secular: SecularPropagator::propagateGrid12", secondsPerRun([&] {
                for (const auto& s : states) {
                    SecularPropagator(s).propagateGrid12(0.0, Y, out12);

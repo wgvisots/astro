@@ -185,26 +185,75 @@ SecularPropagator::SecularPropagator(const StateVector12&   s0,
                                      SecularOrder           order,
                                      HigherOrderMode        mode)
     : SecularPropagator(s0.rv(), zp, order) {
+    initResiduals(s0, mode);
+}
+
+SecularPropagator::SecularPropagator(RateVelocity,
+                                     const KeplerianElements& mean,
+                                     const ZonalParameters&   zp,
+                                     SecularOrder             order)
+    : mean_(mean)
+    , zp_(zp)
+    , order_(order)
+    , rateVelocity_(true) {
+    init();
+}
+
+SecularPropagator::SecularPropagator(RateVelocity           tag,
+                                     const StateVector&     s0,
+                                     const ZonalParameters& zp,
+                                     SecularOrder           order)
+    : SecularPropagator(tag, stateToElements(s0, zp.mu), zp, order) {}
+
+SecularPropagator::SecularPropagator(RateVelocity           tag,
+                                     const StateVector12&   s0,
+                                     const ZonalParameters& zp,
+                                     SecularOrder           order,
+                                     HigherOrderMode        mode)
+    : SecularPropagator(tag, s0.rv(), zp, order) {
+    initResiduals(s0, mode);
+}
+
+void SecularPropagator::initResiduals(const StateVector12& s0, HigherOrderMode mode) {
     unmodeled_ = mode == HigherOrderMode::UnmodeledForce;
-    Vec3 a, j;
-    fieldDerivatives(s0.r, s0.v, a, j); // point mass + zonal jerk does not depend on the acceleration
+    // The model's velocity at the epoch: the input one, or its corrected form.
+    const Vec3 v0 = rateVelocity_ ? propagate(0.0).v : s0.v;
+    Vec3       a, j;
+    fieldDerivatives(s0.r, v0, a, j); // point mass + zonal jerk does not depend on the acceleration
     da0_ = s0.a - a;
     dj0_ = s0.j - j;
 }
+
+SecularPropagatorCorrected::SecularPropagatorCorrected(const KeplerianElements& mean,
+                                                       const ZonalParameters&   zp,
+                                                       SecularOrder             order)
+    : SecularPropagator(RateVelocity{}, mean, zp, order) {}
+
+SecularPropagatorCorrected::SecularPropagatorCorrected(const StateVector&     s0,
+                                                       const ZonalParameters& zp,
+                                                       SecularOrder           order)
+    : SecularPropagator(RateVelocity{}, s0, zp, order) {}
+
+SecularPropagatorCorrected::SecularPropagatorCorrected(const StateVector12&   s0,
+                                                       const ZonalParameters& zp,
+                                                       SecularOrder           order,
+                                                       HigherOrderMode        mode)
+    : SecularPropagator(RateVelocity{}, s0, zp, order, mode) {}
 
 void SecularPropagator::init() {
     if (!(mean_.e >= 0.0 && mean_.e < 1.0) || !(mean_.a > 0.0)) {
         throw Error("SecularPropagator: requires an elliptic orbit (a > 0, 0 <= e < 1)");
     }
-    rates_   = secularRates(mean_.a, mean_.e, mean_.i, zp_, order_);
-    J_       = order_ == SecularOrder::J2 ? std::vector<double>{0.0, 0.0, zp_.J2}
-                                          : std::vector<double>{0.0, 0.0, zp_.J2, 0.0, zp_.J4};
-    M0_      = mean_.meanAnomaly();
-    b_       = mean_.a * std::sqrt(1.0 - mean_.e * mean_.e);
-    sqrtMuA_ = std::sqrt(zp_.mu * mean_.a);
-    bOverA_  = b_ / mean_.a;
-    cosI_    = std::cos(mean_.i);
-    sinI_    = std::sin(mean_.i);
+    rates_     = secularRates(mean_.a, mean_.e, mean_.i, zp_, order_);
+    J_         = order_ == SecularOrder::J2 ? std::vector<double>{0.0, 0.0, zp_.J2}
+                                            : std::vector<double>{0.0, 0.0, zp_.J2, 0.0, zp_.J4};
+    M0_        = mean_.meanAnomaly();
+    b_         = mean_.a * std::sqrt(1.0 - mean_.e * mean_.e);
+    sqrtMuA_   = std::sqrt(zp_.mu * mean_.a);
+    bOverA_    = b_ / mean_.a;
+    cosI_      = std::cos(mean_.i);
+    sinI_      = std::sin(mean_.i);
+    mDotOverN_ = rates_.meanAnomalyDot / std::sqrt(zp_.mu / (mean_.a * mean_.a * mean_.a));
 }
 
 void SecularPropagator::fieldDerivatives(const Vec3& r, const Vec3& v, Vec3& a, Vec3& j) const noexcept {
@@ -230,7 +279,16 @@ StateVector SecularPropagator::state(const Angles& x) const noexcept {
     const double cO = x.cosRaan, sO = x.sinRaan, cw = x.cosArgp, sw = x.sinArgp;
     const Vec3   P{cO * cw - sO * sw * cosI_, sO * cw + cO * sw * cosI_, sw * sinI_};
     const Vec3   Q{-cO * sw - sO * cw * cosI_, -sO * sw + cO * cw * cosI_, cw * sinI_};
-    return {P * xp + Q * yp, P * vx + Q * vy};
+    const Vec3   r = P * xp + Q * yp;
+    const Vec3   v = P * vx + Q * vy;
+    if (!rateVelocity_) {
+        return {r, v};
+    }
+    // d r / dt: each angle's partial times its rate. dr/dM = v / n; the node turns the orbit about
+    // z and the perigee about the orbit normal W = P x Q.
+    const Vec3 W{sO * sinI_, -cO * sinI_, cosI_};
+    const Vec3 zxr{-r.y, r.x, 0.0};
+    return {r, mDotOverN_ * v + rates_.raanDot * zxr + rates_.argpDot * cross(W, r)};
 }
 
 SecularPropagator::Angles SecularPropagator::angles(double dt) const noexcept {

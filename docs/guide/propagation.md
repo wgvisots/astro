@@ -6,6 +6,7 @@
 |---|---|---|---|---|
 | `propagateKepler` | point mass | km per orbit (no J2) | ~150 ns per call | quick two-body estimates, Lambert transfers |
 | `SecularPropagator` | J2, J2^2, J4 mean-element drift (Brouwer) | **tens to hundreds of km** from a state vector; ~2-6 km with fitted mean elements | 40 ns per output | mean-element studies: node and perigee drift, sun-synchronous and repeat-track design |
+| `SecularPropagatorCorrected` | the same positions; velocity = d(position)/dt | the same | ~2 % more | the same, when velocity must agree with position (range rate, Doppler, closest approach) |
 | `NumericalPropagator` | point mass + zonal harmonics (+ third bodies, custom forces) | set by tolerance: 0.2 m over 4 h at relTol 1e-9, 0.2 mm at the default | 55 us per propagation at relTol 1e-9 | accurate J2/J4 trajectories, covariance |
 | `Sgp4` | SGP4/SDP4 from two-line elements | that of the TLE (typically ~km) | 0.3 us per call (1.3 us deep space) | catalogue element sets |
 
@@ -95,6 +96,48 @@ Even fitted, the residual stays at the 1-4 km level: those are the short-period 
 mean-element theory leaves out. For metre-level work use `NumericalPropagator`. The state's frame
 must have z along the pole (TOD, TEME, CIRS), or be rotated with `poleOfDateMatrix` first.
 
+### Two velocities: `SecularPropagator` or `SecularPropagatorCorrected`
+
+The two give **identical positions** and differ only in the velocity:
+
+| | `SecularPropagator` | `SecularPropagatorCorrected` |
+|---|---|---|
+| Velocity | two-body velocity of the mean elements at each time (as Vallado's PKEPLER) | time derivative of the position: v = (Mdot / n) v_mean + raanDot (z x r) + argpDot (w x r) |
+| Agrees with dr/dt of its own positions | no: off by 1.2-9.0 m/s (the drift of node, perigee and mean anomaly, ~1e-3 relative) | yes: to 0.002 m/s (the finite-difference check's own error) |
+| Velocity error against numerical J2/J4, fitted mean elements, 4 h | 6.3 / 8.3 / 3.9 m/s (LEO / SSO / HEO) | 3.6 / 8.4 / 4.0 m/s |
+| Reproduces the input state at dt = 0 | yes, position and velocity | position only; the velocity differs by the drift term (~6-10 m/s in LEO) |
+| A propagated state converts back to the mean elements | yes, exactly | no |
+| Cost | 39 ns per grid output | ~2 % more |
+
+**Neither velocity is the true one.** Against the numerical J2/J4 trajectory both miss by metres
+per second, set by the short-period terms a mean-element theory leaves out, and the corrected one
+is better only in LEO. What the correction buys is *consistency* between velocity and position.
+
+Choose **`SecularPropagatorCorrected`** when velocity and position are used together:
+
+- range rate and Doppler, or any rate of a geometric quantity;
+- closest-approach and event searches that find a zero of a rate (`Trajectory` uses it for the
+  secular models: with the original velocity, nearly co-orbital objects closing at a few m/s had
+  their time of closest approach off by up to 90 s);
+- interpolating outputs with Hermite polynomials, or differencing or integrating them.
+
+Choose **`SecularPropagator`** when the state stands for the mean orbit:
+
+- mean-element studies, where `stateToElements` of an output should give the propagated mean
+  elements back;
+- starting from a state that must be reproduced exactly at the epoch, such as a filter's estimate;
+- matching other tools that build the state from propagated elements (PKEPLER and its relatives).
+
+Both take the same constructors and `SecularPropagatorCorrected` is a `SecularPropagator`, so it
+can be passed anywhere the original is accepted. `velocityIsPositionRate()` says which one an
+instance is. The free functions `propagateSecular` keep the original velocity.
+
+Starting the corrected propagator from mean elements chosen so that its velocity *does* match an
+input state at the epoch was tried and rejected: the mean semi-major axis it implies is worse. The
+4 h position error grew in five of six test orbits (LEO 117 -> 195 km, polar 143 -> 571 km,
+near-equatorial 22 -> 896 km) and improved only for the eccentric 1000 x 20000 km orbit
+(219 -> 154 km); see [Accuracy](../accuracy.md#analytic-j2j4-secular).
+
 Mission-design helpers: `secularRates`, `sunSynchronousInclination`, `repeatGroundTrackSemiMajorAxis`,
 `kCriticalInclination`.
 
@@ -130,3 +173,63 @@ outputs carry the model's acceleration and jerk at the new time (the jerk is exa
 `Sgp4` implements SGP4/SDP4 as revised by Vallado et al. [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/)
 (after Spacetrack Report #3 [Hoots & Roehrich (1980)](https://celestrak.org/NORAD/documentation/spacetrk.pdf)) and reproduces their
 verification set to 0.12 mm. It outputs TEME; see [Satellite geometry](satellite-geometry.md).
+
+## Closest approach of two objects
+
+`closestApproach(first, second, start, end)` finds the smallest distance between two objects over a
+time window. `closeApproaches(..., maxDistance)` lists every local minimum of the distance under a
+threshold: a conjunction list. Each object is a `Trajectory`, built from any of these:
+
+| Built from | Propagated with |
+|---|---|
+| `{epoch, StateVector}` | `TrajectoryModel::TwoBody` (default, `propagateKepler`), `SecularJ2` or `SecularJ2J4` (`SecularPropagator`) |
+| `{epoch, KeplerianElements}` | the same; osculating elements for two-body, mean elements for the secular models |
+| `{epoch, EquinoctialElements}` | the same, via `equinoctialToKeplerian` |
+| any `std::function<StateVector(const Time&)>` | your own: a `NumericalPropagator`, an `Sgp4`, an ephemeris table, ... |
+
+So two element sets, two states, or one of each pass straight in:
+
+<!-- snippet: examples/propagation.cpp#close_approach -->
+```cpp
+// Closest approach within a day of a state vector and an element set (either may be either, or
+// any function of time, e.g. [&prop](const Time& t) { return prop.propagate(t); }). Both must be
+// in the same inertial frame; the default model is two-body.
+const KeplerianElements debris{6780e3, 0.001, deg2rad(97.6), 0.25, 0.0, 1.22};
+const Time              end = epoch + 86400.0;
+const CloseApproach     ca  = closestApproach({epoch, s0}, {epoch, debris}, epoch, end);
+std::cout << "closest approach " << ca.distance / 1e3 << " km at " << ca.time.iso8601(0) << ", "
+          << ca.relativeSpeed / 1e3 << " km/s\n";
+// Every approach within 10 km: a conjunction list.
+for (const CloseApproach& c : closeApproaches({epoch, s0}, {epoch, debris}, epoch, end, 10e3)) {
+    std::cout << "  " << c.time.iso8601(0) << "  " << c.distance / 1e3 << " km\n";
+}
+```
+
+**How it searches.** The range rate g(t) = (r2 - r1) . (v2 - v1) is negative while the objects
+close and positive while they separate. It is sampled with a step of 0.05 |r| / |v| (the shorter of
+the two objects' values at each sample: ~125 samples per circular orbit, 45 s in LEO, 11 min in
+GEO), so eccentric orbits are sampled finely near perigee and coarsely near apogee. Each change of
+sign from negative to positive brackets a minimum, which Brent's method refines to
+`timeTolerance` (1 us). The minima and maxima of the distance between two orbits about the same
+body are typically a large fraction of a revolution apart, so the step leaves a wide margin: over 300 random orbit
+pairs (LEO to 60 000 km, e up to 0.9) a 1-day search found every minimum a 0.5 s brute-force scan
+did, at the default step and at twice it. `closestApproach` also compares the window's two ends
+(flagged `atBoundary`) for objects still closing at the end or already separating at the start.
+
+**Both objects must be in the same inertial frame.** Convert first if they are not (for example
+an `Sgp4` gives TEME; see [Reference frames](frames.md)). The secular models also need the Earth's
+pole as z (TOD, TEME or CIRS), as for `SecularPropagator`.
+
+**Secular velocity.** The secular models use `SecularPropagatorCorrected`, whose velocity is the
+time derivative of its position (see [Two velocities](#two-velocities-secularpropagator-or-secularpropagatorcorrected)).
+The search finds zeros of the range rate, so that matters: with `SecularPropagator`'s velocity,
+nearly co-orbital objects (relative speeds of m/s) had their time of closest approach moved by
+tens of seconds.
+
+**Cost.** One propagation of each object per sample: about 2000 samples per day of window for
+two LEO objects, plus ~10 per minimum found. A wrapped `NumericalPropagator::propagate(t)`
+integrates from its epoch on every call, so keep its epoch near the window, or sample it once
+with `propagateGrid` and interpolate in your function.
+
+The result is geometric: it does not include the objects' sizes, covariances or a collision
+probability.

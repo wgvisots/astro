@@ -19,7 +19,8 @@
 // Propagation accuracy study (docs/accuracy.md):
 //  1. numerical J2/J4: integrator tolerance vs steps and worst position error over 4 h and 1 day;
 //  2. grid interpolation adds nothing visible: grid error vs the integrator's own error at its steps;
-//  3. analytic secular J2/J4 from a state vector, and with least-squares-fitted mean elements;
+//  3. analytic secular J2/J4 from a state vector, and with least-squares-fitted mean elements,
+//     with the original and the corrected (d position / dt) velocity;
 //  4. the J2 axis: GCRS z instead of the true pole, and TOD/TEME frames frozen at the epoch.
 
 #include <algorithm>
@@ -84,6 +85,23 @@ double maxDistance(const std::vector<StateVector>& a, const std::vector<StateVec
     double m = 0.0;
     for (std::size_t k = 0; k < a.size(); ++k) {
         m = std::max(m, norm(a[k].r - b[k].r));
+    }
+    return m;
+}
+
+double maxVelocityDifference(const std::vector<StateVector>& a, const std::vector<StateVector>& b) {
+    double m = 0.0;
+    for (std::size_t k = 0; k < a.size(); ++k) {
+        m = std::max(m, norm(a[k].v - b[k].v));
+    }
+    return m;
+}
+
+/// Worst |v - dr/dt| over a grid, with dr/dt from central differences of the grid's own positions.
+double maxRateInconsistency(const std::vector<StateVector>& g, double step) {
+    double m = 0.0;
+    for (std::size_t k = 1; k + 1 < g.size(); ++k) {
+        m = std::max(m, norm(g[k].v - (g[k + 1].r - g[k - 1].r) / (2.0 * step)));
     }
     return m;
 }
@@ -204,6 +222,10 @@ P6 fitMeanElements(const std::vector<StateVector>& obs, double step, P6 x, doubl
 void secularStudy() {
     std::printf("\n3. Analytic secular J2/J4 vs numerical truth (TOD-like frame, z = pole), 4 h\n\n");
     std::printf("%-24s %16s %22s %18s\n", "orbit", "from state", "fitted (2 orbits)", "fit RMS");
+    struct VelocityRow {
+        double directBase, directCorrected, fittedBase, fittedCorrected, rateBase, rateCorrected;
+    };
+    std::vector<VelocityRow> velocity;
     for (int i = 0; i < 3; ++i) {
         const StateVector s0           = elementsToState(kOrbits[i].el);
         TrackerOptions    tod          = tightOptions();
@@ -230,6 +252,71 @@ void secularStudy() {
                     maxDistance(direct, truth) / 1e3,
                     maxDistance(fitted, truth) / 1e3,
                     rms / 1e3);
+        // The same positions with the corrected velocity (d position / dt). Consistency on a 1 s grid.
+        const auto directC = SecularPropagatorCorrected(s0).propagateGrid(0.0, 30.0, 481);
+        const auto fittedC = SecularPropagatorCorrected(fromEquinoctialParams(x)).propagateGrid(0.0, 30.0, 481);
+        velocity.push_back(
+            {maxVelocityDifference(direct, truth),
+             maxVelocityDifference(directC, truth),
+             maxVelocityDifference(fitted, truth),
+             maxVelocityDifference(fittedC, truth),
+             maxRateInconsistency(SecularPropagator(fromEquinoctialParams(x)).propagateGrid(0.0, 1.0, 14401), 1.0),
+             maxRateInconsistency(SecularPropagatorCorrected(fromEquinoctialParams(x)).propagateGrid(0.0, 1.0, 14401),
+                                  1.0)});
+    }
+    std::printf("\n   Worst velocity error vs truth over 4 h (m/s), and worst |v - dr/dt| of the secular output\n\n");
+    std::printf("%-24s %22s %22s %22s\n", "", "from state", "fitted (2 orbits)", "|v - dr/dt|, fitted");
+    std::printf("%-24s %10s %11s %10s %11s %10s %11s\n",
+                "orbit",
+                "original",
+                "corrected",
+                "original",
+                "corrected",
+                "original",
+                "corrected");
+    for (int i = 0; i < 3; ++i) {
+        const VelocityRow& v = velocity[static_cast<std::size_t>(i)];
+        std::printf("%-24s %10.2f %11.2f %10.2f %11.2f %10.3f %11.3f\n",
+                    kOrbits[i].name,
+                    v.directBase,
+                    v.directCorrected,
+                    v.fittedBase,
+                    v.fittedCorrected,
+                    v.rateBase,
+                    v.rateCorrected);
+    }
+}
+
+/// Mean elements whose corrected (d position / dt) velocity at the epoch equals the state's velocity:
+/// v_mean = (v - raanDot z x r - argpDot w x r) / (Mdot / n), iterated with the rates.
+KeplerianElements matchCorrectedVelocity(const StateVector& s0) {
+    KeplerianElements el = stateToElements(s0);
+    for (int it = 0; it < 8; ++it) {
+        const SecularRates rt = secularRates(el.a, el.e, el.i);
+        const double       n  = std::sqrt(constants::gmEarth / (el.a * el.a * el.a));
+        const Vec3         w  = normalized(cross(s0.r, s0.v));
+        const Vec3         vk =
+            (s0.v - rt.raanDot * cross(Vec3{0, 0, 1}, s0.r) - rt.argpDot * cross(w, s0.r)) / (rt.meanAnomalyDot / n);
+        el = stateToElements({s0.r, vk});
+    }
+    return el;
+}
+
+void secularStartStudy() {
+    std::printf("\n3b. Secular from a state: osculating elements as mean, or mean elements whose corrected\n");
+    std::printf("    velocity reproduces the state's velocity at the epoch. Worst position error over 4 h\n\n");
+    std::printf("%-24s %16s %22s\n", "orbit", "osculating", "velocity-matched");
+    for (const Orbit& o : kOrbits) {
+        const StateVector s0  = elementsToState(o.el);
+        TrackerOptions    tod = tightOptions();
+        tod.frame             = Frame::TOD;
+        const auto truth      = makePropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
+        const auto osc        = SecularPropagator(s0).propagateGrid(0.0, 30.0, 481);
+        const auto matched    = SecularPropagatorCorrected(matchCorrectedVelocity(s0)).propagateGrid(0.0, 30.0, 481);
+        std::printf("%-24s %13.1f km %19.1f km\n",
+                    o.name,
+                    maxDistance(osc, truth) / 1e3,
+                    maxDistance(matched, truth) / 1e3);
     }
 }
 
@@ -266,6 +353,7 @@ int main() {
     toleranceStudy();
     interpolationStudy();
     secularStudy();
+    secularStartStudy();
     poleStudy();
     return 0;
 }

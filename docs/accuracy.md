@@ -72,6 +72,35 @@ A state's osculating elements are not mean elements, and the wrong mean motion m
 every orbit. Fitting removes that, but the short-period J2 terms a mean-element theory omits remain
 at the kilometre level.
 
+Velocity, `SecularPropagator` (the two-body velocity of the mean elements) against
+`SecularPropagatorCorrected` (the time derivative of the same positions). Worst error over 4 h
+against the numerical trajectory, and worst disagreement with dr/dt of the secular positions
+themselves (central differences on a 1 s grid, which alone contribute ~0.002 m/s):
+
+| Orbit | From the state: original / corrected | Fitted: original / corrected | \|v - dr/dt\|, fitted: original / corrected |
+|---|---|---|---|
+| LEO 400 km | 130.1 / 130.2 m/s | 6.25 / 3.59 m/s | 5.64 / 0.002 m/s |
+| SSO 800 km, e = 0.01 | 136.6 / 136.6 m/s | 8.25 / 8.40 m/s | 9.03 / 0.001 m/s |
+| 1000 x 20000 km | 39.5 / 39.3 m/s | 3.94 / 3.96 m/s | 1.15 / 0.001 m/s |
+
+The correction makes velocity and position agree; it does not make the velocity much closer to the
+truth, which the short-period terms dominate.
+
+Starting `SecularPropagatorCorrected` from mean elements whose corrected velocity reproduces the
+state's velocity at the epoch, instead of from the state's osculating elements (worst position
+error over 4 h):
+
+| Orbit | Osculating elements as mean | Velocity-matched mean elements |
+|---|---|---|
+| LEO 400 km | 117.0 km | 195.4 km |
+| SSO 800 km, e = 0.01 | 136.1 km | 494.8 km |
+| 1000 x 20000 km | 219.2 km | 153.8 km |
+| near-equatorial, i = 0.5 deg | 21.9 km | 896.3 km |
+| polar | 143.4 km | 570.9 km |
+| retrograde, i = 140 deg | 87.4 km | 247.8 km |
+
+The velocity-matched start is worse in five of six orbits, so the library does not offer it.
+
 ## Consistency checks
 
 From `astro_study_consistency`: priors drawn from their covariance (1500 samples per row), compared

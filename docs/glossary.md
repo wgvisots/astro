@@ -72,6 +72,8 @@ they are in alphabetical order.
 
 | Term | Stands for | What it means here |
 |---|---|---|
+| Closest approach | | the smallest distance between two objects, where their range rate is zero (`closestApproach`) |
+| Conjunction | | a close approach of two objects, usually below a screening distance (`closeApproaches`) |
 | Event | | a zero crossing of a function of time and state, such as height at impact (`propagateToEvent`) |
 | Flight-path angle | | angle of the velocity above (launch) or below (impact) the local horizontal |
 | GEO | Geostationary Earth Orbit | circular equatorial orbit with a one-sidereal-day period |
@@ -86,6 +88,7 @@ they are in alphabetical order.
 | RKF7(8) | Runge-Kutta-Fehlberg 7(8) | adaptive-step integrator used by `NumericalPropagator` |
 | SGP4 / SDP4 | Simplified General / Deep-space Perturbations 4 | the analytic propagators for TLEs (`Sgp4`) |
 | SSO | Sun-Synchronous Orbit | orbit whose plane turns with the Sun, through J2 |
+| TCA | Time of Closest Approach | when the distance between two objects is smallest (`CloseApproach::time`) |
 | TLE | Two-Line Element set | the NORAD element format for SGP4 (`Tle`) |
 
 ## Covariance, tracking and impact

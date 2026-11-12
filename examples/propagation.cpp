@@ -16,13 +16,15 @@
  *         limitations under the License.
  **********************************************************************/
 
-// Propagation: two-body, analytic J2/J4 (secular), numerical J2/J4 on an output grid, and a
-// 12-component (position, velocity, acceleration, jerk) state with an unmodeled force.
+// Propagation: two-body, analytic J2/J4 (secular), numerical J2/J4 on an output grid, a
+// 12-component (position, velocity, acceleration, jerk) state with an unmodeled force, and the
+// closest approach of two objects.
 
 #include <iomanip>
 #include <iostream>
 
 #include "astro/core/angle.h"
+#include "astro/orbit/close_approach.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
@@ -70,5 +72,20 @@ int main() {
               << " km from the unthrusted orbit\n";
     std::cout << "mode: " << HigherOrderMode::UnmodeledForce << '\n'; // enums print as Enum::Value
     //! [state12]
+
+    //! [close_approach]
+    // Closest approach within a day of a state vector and an element set (either may be either, or
+    // any function of time, e.g. [&prop](const Time& t) { return prop.propagate(t); }). Both must be
+    // in the same inertial frame; the default model is two-body.
+    const KeplerianElements debris{6780e3, 0.001, deg2rad(97.6), 0.25, 0.0, 1.22};
+    const Time              end = epoch + 86400.0;
+    const CloseApproach     ca  = closestApproach({epoch, s0}, {epoch, debris}, epoch, end);
+    std::cout << "closest approach " << ca.distance / 1e3 << " km at " << ca.time.iso8601(0) << ", "
+              << ca.relativeSpeed / 1e3 << " km/s\n";
+    // Every approach within 10 km: a conjunction list.
+    for (const CloseApproach& c : closeApproaches({epoch, s0}, {epoch, debris}, epoch, end, 10e3)) {
+        std::cout << "  " << c.time.iso8601(0) << "  " << c.distance / 1e3 << " km\n";
+    }
+    //! [close_approach]
     return 0;
 }
