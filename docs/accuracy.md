@@ -101,18 +101,49 @@ error over 4 h):
 
 The velocity-matched start is worse in five of six orbits, so the library does not offer it.
 
+## Closest-approach search
+
+From `astro_study_conjunctions`: 300 random pairs of two-body orbits (perigee at least 6600 km,
+semi-major axis up to 66 700 km, e up to 0.9), each searched over 1 day with `closeApproaches`, against
+a scan of the distance every 0.5 s:
+
+| `stepFraction` | Minima missed | Extra minima | Time per search |
+|---|---|---|---|
+| 0.05 (default) | 0 of 1245 | 0 | 0.21 ms |
+| 0.1 | 0 of 1245 | 0 | 0.11 ms |
+| 0.2 | 2 of 1245 | 0 | 0.07 ms |
+| 0.4 | 3 of 1245 | 0 | 0.04 ms |
+
+The tests also check `closestApproach` against brute force on random pairs, a constructed 100 m
+conjunction, a wrapped `NumericalPropagator` and the secular models.
+
 ## Collision probability
 
-From `tests/orbit/collision_probability_test.cpp`:
+Measured by `astro_study_conjunctions` (relative difference = `collisionProbability` / reference - 1):
 
-| Reference | Agreement (relative difference in Pc) |
+| Reference | Relative difference |
 |---|---|
-| closed form 1 - exp(-R^2 / 2 sigma^2) (isotropic, centred) and the Rice distribution (isotropic, offset) | 1e-10 relative or better |
-| brute-force polar-grid integration (4 million points): anisotropic, 1000:1 aspect ratio, R >> sigma, correlated, Pc ~ 1e-14 | 1e-8 relative asserted; 1e-13 relative measured on CARA's geometry |
-| 3-D Monte Carlo of straight-line encounters (400 000 draws) | within 5 binomial sigma |
-| NASA CARA `PcCircle` highest-accuracy values (Omitron cases, small radii) | 1e-12 relative (in CARA's miss convention, see the [guide](guide/propagation.md#collision-probability)) |
-| NASA CARA default-mode values at radii >= 1 km on a 123 km x 19 m covariance | 1-3e-4 relative: CARA's 64-point Gauss-Chebyshev quadrature cannot resolve the 19 m axis there; the brute-force grid agrees with `collisionProbability` to 1e-13 relative |
-| Alfano (2009) cases 5-7, Alfano's linear Pc | 2e-7 to 1.1e-4 relative; to his 1e8-sample Monte Carlo ~1 % |
+| [NASA CARA](https://github.com/nasa/CARA_Analysis_Tools) `PcCircle` highest-accuracy values (Omitron cases 1 and 2, 20 m radius) | 2.7e-14, 4.4e-16 |
+| CARA default-mode values on one geometry (123 km x 19 m covariance), radii 10 m and 100 m | 4.2e-14, 1.4e-14 |
+| the same, radii 1, 3, 10 and 30 km | -1.1e-4, -2.8e-4, 1.1e-4, 1.8e-4: CARA's 64-point Gauss-Chebyshev quadrature cannot resolve the 19 m axis there |
+| brute-force polar grid (4000 x 80000 points) on that geometry, radii 1-30 km | 1.6e-13 or less; CARA's values differ from the grid by the same 1-3e-4 |
+| [Alfano (2009)](references.md#conjunctions-and-collision-probability) cases 5-7, his linear Pc | 1.1e-4, -2.4e-7, -3.3e-6 |
+| Alfano (2009) cases 5-7, his 1e8-sample Monte Carlo | -1.5e-4, 8.1e-3, -2.1e-2 (the linear model's own error on these slow encounters, and Monte Carlo noise) |
+
+CARA's cases are compared in CARA's miss-distance convention (see the
+[guide](guide/propagation.md#collision-probability)).
+
+Asserted by `tests/orbit/collision_probability_test.cpp`:
+
+| Reference | Tolerance (relative unless stated) |
+|---|---|
+| closed form 1 - exp(-R^2 / 2 sigma^2) (isotropic, centred) | 1e-11 |
+| Rice distribution (isotropic, offset; [Rice 1945](references.md#conjunctions-and-collision-probability)), by Simpson's rule | 1e-10 |
+| brute-force polar grid: anisotropic, 1000:1 aspect ratio, R >> sigma, correlated, Pc ~ 1e-14 | 1e-8 |
+| 3-D Monte Carlo of straight-line encounters (400 000 draws) | 5 binomial standard deviations |
+| CARA Omitron cases, and the multiple-radius geometry at 10 m and 100 m | 1e-12 |
+| CARA multiple-radius geometry at 1-30 km, and Alfano's linear Pc | 1e-3 (CARA's own test tolerance) |
+| singular covariances (zero width), head-on encounter | 1e-14 and 1e-12 absolute |
 
 ## Consistency checks
 
@@ -196,6 +227,7 @@ ctest --test-dir build                       # the validation tests
 build/studies/astro_study_propagation        # < 1 s
 build/studies/astro_study_consistency        # ~1 min; optional argument: samples per row
 build/studies/astro_study_impact             # ~2 s; optional argument: Monte Carlo samples
+build/studies/astro_study_conjunctions       # ~45 s; optional argument: orbit pairs
 ```
 
 Regenerating the ERFA and JPL reference data needs Python with `numpy`, `pyerfa`, `sgp4` and

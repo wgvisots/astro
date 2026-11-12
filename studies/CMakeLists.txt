@@ -20,7 +20,10 @@
 add_executable(astro_study_propagation propagation_accuracy.cpp)
 add_executable(astro_study_consistency consistency_monte_carlo.cpp)
 add_executable(astro_study_impact impact_monte_carlo.cpp)
-foreach(t astro_study_propagation astro_study_consistency astro_study_impact)
+add_executable(astro_study_conjunctions conjunctions.cpp)
+foreach(t astro_study_propagation astro_study_consistency astro_study_impact astro_study_conjunctions)
     target_link_libraries(${t} PRIVATE astro::astro)
     target_compile_options(${t} PRIVATE ${ASTRO_WARNING_FLAGS})
 endforeach()
+# The conjunction study shares its reference cases with the tests.
+target_include_directories(astro_study_conjunctions PRIVATE ${PROJECT_SOURCE_DIR}/tests)

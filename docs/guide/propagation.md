@@ -209,11 +209,15 @@ for (const CloseApproach& c : closeApproaches({epoch, s0}, {epoch, debris}, epoc
 close and positive while they separate. It is sampled with a step of 0.05 |r| / |v| (the shorter of
 the two objects' values at each sample: ~125 samples per circular orbit, 45 s in LEO, 11 min in
 GEO), so eccentric orbits are sampled finely near perigee and coarsely near apogee. Each change of
-sign from negative to positive brackets a minimum, which Brent's method refines to
-`timeTolerance` (1 us). The minima and maxima of the distance between two orbits about the same
-body are typically a large fraction of a revolution apart, so the step leaves a wide margin: over 300 random orbit
-pairs (LEO to 60 000 km, e up to 0.9) a 1-day search found every minimum a 0.5 s brute-force scan
-did, at the default step and at twice it. `closestApproach` also compares the window's two ends
+sign from negative to positive brackets a minimum, which Brent's method
+([Brent 1973](../references.md#orbits-and-propagation)) refines to `timeTolerance` (1 us). Searching
+for the zeros of the range rate is the approach of [Alfano & Negron (1993)](../references.md#conjunctions-and-collision-probability); analytic
+pre-filters such as [Hoots, Crawford & Roehrich (1984)](https://doi.org/10.1007/BF01234152) can
+thin a large catalogue before it. The minima and maxima of the distance between two orbits about
+the same body are typically a large fraction of a revolution apart, so the step leaves a wide
+margin: over 300 random orbit pairs (LEO to 66 700 km, e up to 0.9) a 1-day search found every
+minimum a 0.5 s brute-force scan did, at the default step and at twice it (see
+[Accuracy](../accuracy.md#closest-approach-search)). `closestApproach` also compares the window's two ends
 (flagged `atBoundary`) for objects still closing at the end or already separating at the start.
 
 **Both objects must be in the same inertial frame.** Convert first if they are not (for example
@@ -253,8 +257,9 @@ std::cout << "collision probability " << std::scientific << std::setprecision(2)
           << std::setprecision(1) << ", miss " << pc.mahalanobis << " sigma\n";
 ```
 
-It is the standard short-term encounter model [Foster & Estes (1992)](../references.md#conjunctions-and-collision-probability),
-[Akella & Alfriend (2000)](https://doi.org/10.2514/2.4611), [Alfano (2005)](https://doi.org/10.1007/BF03546397):
+It is the standard short-term encounter model of [Foster & Estes (1992)](../references.md#conjunctions-and-collision-probability),
+[Akella & Alfriend (2000)](https://doi.org/10.2514/2.4611) and [Alfano (2005a)](https://doi.org/10.1007/BF03546397);
+[Chan (2008)](https://doi.org/10.2514/4.989186) gives the background:
 
 | Step | What happens |
 |---|---|
@@ -266,8 +271,9 @@ It is the standard short-term encounter model [Foster & Estes (1992)](../referen
 The result also gives the miss distance, the projected 2x2 covariance, its sigmas and the miss in
 standard deviations (`mahalanobis`).
 
-**Validated against NASA CARA (Conjunction Assessment Risk Analysis) reference cases** to
-1e-12 relative, and against Alfano's test cases (see [Accuracy](../accuracy.md#collision-probability)).
+**Validated against NASA CARA (Conjunction Assessment Risk Analysis) reference cases**
+([CARA Analysis Tools](https://github.com/nasa/CARA_Analysis_Tools)) to 1e-12 relative, and
+against [Alfano's (2009)](../references.md#conjunctions-and-collision-probability) test cases (see [Accuracy](../accuracy.md#collision-probability)).
 One convention differs from CARA's `PcCircle`: CARA takes the full distance |r2 - r1| as the miss,
 assuming the states are exactly at TCA; `collisionProbability` projects r2 - r1 onto the encounter
 plane, which is the closest distance of the straight-line encounter. They agree for a true closest
@@ -275,13 +281,18 @@ approach from `closestApproach`; for states 2 deg off TCA they differ by ~0.1 %.
 
 **When it applies.** The model assumes the encounter is short: straight-line relative motion and
 constant covariances while the objects cross each other's uncertainty, as at relative speeds of
-km/s. Alfano's slow test cases (0.2-0.5 m/s) still agree with Monte Carlo to ~1 %, because their
-relative motion stays nearly straight, but for slow, curving, nearly co-orbital encounters use a
-Monte Carlo or a long-term encounter method instead. Use a true closest approach (not
+km/s. Alfano's slow test cases (0.2-0.5 m/s) still agree with his Monte Carlo to within 2 %,
+because their relative motion stays nearly straight, but for slow, curving, nearly co-orbital
+encounters use a Monte Carlo or a long-term encounter method instead, such as
+[Patera (2001)](https://doi.org/10.2514/2.4771). Use a true closest approach (not
 `atBoundary`).
 
 **More uncertainty does not always mean more risk.** For a given miss, the probability peaks when
-the covariance is about the size of the miss and falls as it grows (probability dilution). In the
+the covariance is about the size of the miss and falls as it grows (probability dilution;
+[Alfano 2005b](https://doi.org/10.1007/BF03546350), [Balch, Martin & Ferson 2019](https://doi.org/10.1098/rspa.2018.0565)). In the
 example, growing the covariance from 400 m / 4 km (radial / in-track) to 800 m / 6 km raises Pc from
 1.9e-8 to 4.8e-7, but on to 1 km / 8 km barely changes it (4.84e-7): it has levelled off near its
 peak. A small Pc from a large covariance can mean the data cannot tell, not that the approach is safe.
+Balch, Martin & Ferson show that this is not peculiar to this model: with poor data, any
+epistemic probability of collision assigns high confidence to "no collision" whether or not it is
+true (false confidence).

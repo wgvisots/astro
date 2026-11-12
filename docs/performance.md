@@ -77,6 +77,25 @@ the horizon), with the Earth rotations built per call or shared between calls:
 - Propagate many orbits in parallel: the propagators are immutable, so threads can share them, and
   separate orbits scale with the number of cores.
 
+## Closest approach and collision probability
+
+From `astro_conjunction_bench`, 1-day window:
+
+| Call | Time |
+|---|---|
+| `closestApproach`, two LEO objects, two-body | 0.69 ms (about 2000 samples) |
+| `closestApproach`, two LEO objects, secular J2/J4 | 0.45 ms |
+| `closestApproach`, LEO and GTO, two-body | 0.71 ms |
+| `closeApproaches` (every minimum), two LEO objects, two-body | 0.64 ms |
+| `probabilityInCircle`, typical (miss ~ sigma, radius << sigma) | 6.4 us |
+| `probabilityInCircle`, 1000:1 covariance | 10.3 us |
+| `probabilityInCircle`, radius >> sigma | 12.8 us |
+| `probabilityInCircle`, 123 km x 19 m covariance, 30 km radius | 14.6 us |
+| `collisionProbability`, 200 m miss (projection + `probabilityInCircle`) | 6.5 us |
+
+Over the 300 random orbit pairs of `astro_study_conjunctions` (LEO to 66 700 km, e up to 0.9), a
+1-day search averages 0.21 ms at the default step: higher orbits need fewer samples.
+
 ## Reproducing
 
 ```sh
@@ -85,12 +104,5 @@ cmake --build build -j
 build/bench/astro_propagation_bench 86400 60 100   # X seconds, Y seconds, number of states
 build/bench/astro_propagation_bench 14400 10 100
 build/bench/astro_covariance_bench
+build/bench/astro_conjunction_bench                # optional argument: window seconds
 ```
-
-## Closest approach and collision probability
-
-- `closestApproach` over a day: 0.2-0.7 ms for two two-body objects (about 2000 samples in LEO);
-  the secular models are a little cheaper per sample.
-- `collisionProbability`: 6-13 us (adaptive Gauss-Kronrod to ~1e-12 relative), measured on
-  typical, high-aspect-ratio (1000:1), large-radius and 30 km-radius geometries.
-

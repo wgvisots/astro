@@ -52,10 +52,10 @@ std::ostream& operator<<(std::ostream& os, TrajectoryModel value);
 ///
 /// Built from a state vector or an element set at an epoch, with a propagation model, or from any
 /// function of time (e.g. a NumericalPropagator or an Sgp4). The constructors are not explicit, so
-/// `{epoch, elements}` and `{epoch, state}` can be passed directly. Both objects of a search must be
-/// in the same inertial frame (for the secular models, one whose z axis is the Earth's pole: TOD,
-/// TEME or CIRS). Instances are immutable and safe to share between threads, provided a wrapped
-/// function is.
+/// `{epoch, elements}` and `{epoch, state}` can be passed directly. Both objects of a search must
+/// be in the same inertial frame (for the secular models, one whose z axis is the Earth's pole:
+/// TOD, TEME or CIRS). Instances are immutable and safe to share between threads, provided a
+/// wrapped function is.
 class Trajectory {
 public:
     /// A state (m, m/s) at any time.
@@ -108,7 +108,7 @@ struct CloseApproachOptions {
     /// than the spacing of the distance's minima and maxima, which for orbits about the same body
     /// are typically a large fraction of a revolution apart. A minimum and maximum closer together
     /// than one step can be missed; 0.1 still found every minimum in a test of 300 random orbit
-    /// pairs, 0.2 missed 2 of 1245. Steps are at least 1 ms.
+    /// pairs, 0.2 missed 2 of 1245 (astro_study_conjunctions). Steps are at least 1 ms.
     double stepFraction{0.05};
     /// Time of closest approach tolerance (s). The miss distance is stationary there, so its error
     /// is second order: ~|dv|^2 dt^2 / (2 d), micrometres or less at the default.
@@ -136,10 +136,10 @@ struct CloseApproach {
 ///
 /// The range rate g(t) = (r2 - r1) . (v2 - v1), which is negative while the objects close and
 /// positive while they separate, is sampled with the step of `options`. Each change of sign from
-/// negative to positive is a local minimum of the distance; it is refined with Brent's method to
-/// options.timeTolerance. The result is the smallest of those minima and the distances at the two
-/// ends of the window (flagged CloseApproach::atBoundary). A window of zero length gives the
-/// distance at `start`.
+/// negative to positive is a local minimum of the distance (as in Alfano & Negron 1993); it is
+/// refined with Brent's method (Brent 1973) to options.timeTolerance. The result is the smallest of
+/// those minima and the distances at the two ends of the window (flagged
+/// CloseApproach::atBoundary). A window of zero length gives the distance at `start`.
 ///
 /// Elements and states, or one of each, can be passed directly:
 ///
@@ -169,10 +169,10 @@ struct CloseApproach {
 /// The covariance is rotated to its principal axes. Along the minor axis the integral over the
 /// circle's chord is exact (error functions, in complementary form for small probabilities); along
 /// the major axis it is integrated numerically with u = radius sin t, which removes the square-root
-/// end points, by adaptive Gauss-Kronrod (7-15) to ~1e-12 relative. A singular covariance (one or both standard
-/// deviations zero) is handled exactly. Probabilities below ~1e-45 come out as 0. Throws
-/// astro::Error for a radius that is not positive and finite, or a covariance that is not positive
-/// semi-definite.
+/// end points, by adaptive Gauss-Kronrod (7-15; Piessens et al. 1983, QUADPACK) to ~1e-12 relative:
+/// the 1-D form of Alfano (2005a). A singular covariance (one or both standard deviations zero) is
+/// handled exactly. Probabilities below ~1e-45 come out as 0. Throws astro::Error for a radius
+/// that is not positive and finite, or a covariance that is not positive semi-definite.
 [[nodiscard]] double probabilityInCircle(double mx, double my, double xx, double xy, double yy, double radius);
 
 /// The collision probability of one approach, and the encounter-plane quantities behind it.
@@ -193,7 +193,7 @@ struct CollisionProbability {
 };
 
 /// Probability that two objects collide at an approach, by the short-term encounter model (Foster
-/// & Estes 1992; Akella & Alfriend 2000; Alfano 2005).
+/// & Estes 1992; Akella & Alfriend 2000; Alfano 2005a; links in docs/references.md).
 ///
 /// The objects are taken as spheres whose radii add up to `hardBodyRadius` (m). `covariance1` and
 /// `covariance2` are their position covariances (m^2) at approach.time, in the frame of the
@@ -205,10 +205,11 @@ struct CollisionProbability {
 ///
 /// That holds when the encounter is short: the objects cross the region of their uncertainty in a
 /// small fraction of an orbit, as for relative speeds of km/s. For slow, nearly co-orbital
-/// encounters (m/s) the relative motion curves during the encounter and the result is not
-/// reliable. Use the approach's own states (a true closest approach, not atBoundary) for the
-/// encounter plane. Throws astro::Error for a radius that is not positive and finite, a zero
-/// relative velocity, or a covariance that is not finite and positive semi-definite in the plane.
+/// encounters (m/s) the relative motion curves during the encounter and the result is not reliable
+/// (Patera 2001 treats curved relative motion). Use the approach's own states (a true closest
+/// approach, not atBoundary) for the encounter plane. Throws astro::Error for a radius that is not
+/// positive and finite, a zero relative velocity, or a covariance that is not finite and positive
+/// semi-definite in the plane.
 [[nodiscard]] CollisionProbability collisionProbability(const CloseApproach& approach,
                                                         const Mat3&          covariance1,
                                                         const Mat3&          covariance2,
