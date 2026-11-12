@@ -47,6 +47,64 @@ for (std::size_t k = 0; k < out.size(); k += 6) {
 
 In-track uncertainty grows fastest: a velocity error changes the period.
 
+### With the analytic propagators
+
+The two-body and secular propagators carry a covariance too, without integrating anything:
+
+| Propagator | Call | How Phi is found | Cost |
+|---|---|---|---|
+| two-body | `propagateKeplerWithCovariance(s0, P0, dt)`; `propagateKeplerStm` for Phi | closed form: the universal-variable Lagrange coefficients differentiated, as in [Shepperd (1985)](https://doi.org/10.1007/BF01227666) and [Battin (1999)](https://doi.org/10.2514/4.861543); exact to rounding, any conic | 0.31 us |
+| secular J2/J4 | `SecularPropagator::propagateWithCovariance(dt, P0)`, `propagateGridWithCovariance`; `propagateStm` for Phi | fourth-order central differences of the whole state-to-state map; 1e-11 to 2e-5 relative | 6.4 us per time, 1.2 us per grid output |
+| numerical | `propagateGridWithCovariance` (above) | variational equations, integrated | 0.3 ms for 4 h at 10 s |
+
+<!-- snippet: examples/covariance.cpp#analytic_covariance -->
+```cpp
+// The same initial covariance through the analytic propagators, at 4 h: two-body (closed-form
+// state transition matrix) and secular J2/J4. The secular model needs z along the pole, so the
+// state and covariance are rotated from GCRS first (a fixed rotation, which commutes with the
+// propagation; RIC sigmas do not depend on the frame).
+const StateCovariance            kepler = propagateKeplerWithCovariance(s0, P0, 4.0 * 3600.0);
+const Mat3                       toPole = poleOfDateMatrix(Frame::GCRS, epoch);
+const SecularPropagatorCorrected secular(StateVector{toPole * s0.r, toPole * s0.v});
+const StateCovariance            mean = secular.propagateWithCovariance(4.0 * 3600.0, rotateCovariance(P0, toPole));
+const auto                       row  = [](const char* name, const StateCovariance& s) {
+    const Mat6 ric = rotateCovariance(s.covariance, ricMatrix(s.state));
+    std::cout << std::left << std::setw(26) << name << std::right << std::setw(9) << std::sqrt(ric[0][0])
+              << std::setw(14) << std::sqrt(ric[1][1]) << std::setw(14) << std::sqrt(ric[2][2]) << '\n';
+};
+std::cout << "at 4 h                     sigma R (m)   sigma I (m)   sigma C (m)\n";
+row("numerical J2/J4 (+ noise)", out.back());
+row("secular J2/J4", mean);
+row("two-body", kepler);
+```
+
+```text
+at 4 h                     sigma R (m)   sigma I (m)   sigma C (m)
+numerical J2/J4 (+ noise)      44.5         675.0           9.7
+secular J2/J4                  44.0         675.5           9.7
+two-body                       44.0         675.1           9.7
+```
+
+- **The covariance is mostly Keplerian shear.** Against the numerical J2/J4 covariance, both analytic
+  ones match the in-track sigma to 0.5 % at 4 h on all six test orbits, and two-body does as well as
+  secular. Over a day the small radial sigma differs by up to ~35 % (it oscillates, and the analytic
+  trajectories are at a different phase), and the HEO in-track sigma by 10 %
+  ([Accuracy](../accuracy.md#analytic-state-transition-matrices-and-covariances)). The state, not the
+  covariance, is where the models really differ: tens of km for the secular model, more for two-body.
+- **No process noise.** The analytic covariances show only how the model maps the initial
+  uncertainty. For process noise, or forces beyond J2/J4, use `NumericalPropagator`.
+- **For a whole grid, the numerical propagator is faster.** Differencing costs 25 secular grids, 1.7 ms
+  for 4 h at 10 s, against 0.3 ms for the numerical covariance at relTol 1e-9, which is also more
+  accurate. The secular covariance pays off at single times (6.4 us) and where it must go with the
+  secular trajectory; the two-body one is cheap anywhere.
+- **Which state.** P0 is the covariance of the state the propagator was built from
+  (`epochState()`; for mean elements, their state). `SecularPropagatorCorrected`'s velocity at the
+  epoch is not the input velocity, so its Phi(0) is not the identity.
+- **Frames.** As for the states: any inertial frame for two-body, z along the pole for the secular
+  models (rotate with `poleOfDateMatrix` and `rotateCovariance`, as above).
+- `assessConjunction` uses these to propagate both objects' covariances to their closest approach
+  (see [Propagation](propagation.md#from-states-and-covariances)).
+
 ## Following an upstream filter
 
 If you receive a stream of states and covariances from one upstream filter (an orbit determination,

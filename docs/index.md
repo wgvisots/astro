@@ -16,6 +16,7 @@ dependency is header-only Boost (Describe).
 | get Sun and Moon positions, rise/set times, apparent places | [Ephemerides and astrometry](guide/ephemerides-astrometry.md) |
 | propagate an orbit (Kepler, J2/J4, SGP4) quickly and accurately | [Propagation](guide/propagation.md) |
 | find when and how closely two objects pass, and how likely they are to collide | [Propagation](guide/propagation.md#closest-approach-of-two-objects) |
+| assess a conjunction straight from two states and their covariances | [Propagation](guide/propagation.md#from-states-and-covariances) |
 | carry a covariance along, or follow an upstream filter's estimates | [Covariance and tracking](guide/covariance-tracking.md) |
 | find where and when a ballistic trajectory hits the ground, with its error ellipse | [Impact prediction](guide/impact.md) |
 | compute passes, look angles, Doppler, eclipses, orbital frames | [Satellite geometry](guide/satellite-geometry.md) |

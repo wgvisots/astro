@@ -23,6 +23,7 @@
 #include "astro/core/constants.h"
 #include "astro/core/vec.h"
 #include "astro/orbit/state12.h"
+#include "astro/orbit/state_covariance.h"
 
 /// \file
 /// Two-body (Keplerian) propagation and Lambert's problem.
@@ -34,6 +35,21 @@ void stumpff(double psi, double& c2, double& c3) noexcept;
 /// Propagate a two-body state by dt seconds using universal variables
 /// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits.
 [[nodiscard]] StateVector propagateKepler(const StateVector& s0, double dt, double mu = constants::gmEarth);
+
+/// propagateKepler with the state transition matrix Phi(dt) = d(state at dt) / d(s0), in closed
+/// form (the quantity of Shepperd 1985 and Battin 1999): the universal-variable Lagrange
+/// coefficients differentiated with respect to r0, v0 and, implicitly through Kepler's equation,
+/// the universal anomaly over the full dt (whole revolutions included, which carry the
+/// along-track drift). Exact to rounding and valid for any conic: symplectic to ~1e-9 and equal to
+/// the integrated variational equations to ~1e-11 (astro_study_propagation). The state is
+/// propagateKepler's, bit for bit. Phi(0) is the identity.
+[[nodiscard]] StateTransition propagateKeplerStm(const StateVector& s0, double dt, double mu = constants::gmEarth);
+
+/// Two-body state and covariance dt seconds after s0: P = Phi P0 Phi^T, Phi from propagateKeplerStm.
+/// P0 is the covariance of s0 (m^2, m^2/s, m^2/s^2) in the frame of s0. No process noise; for that,
+/// or for any force beyond the point mass, use NumericalPropagator::propagateGridWithCovariance.
+[[nodiscard]] StateCovariance
+propagateKeplerWithCovariance(const StateVector& s0, const Mat6& P0, double dt, double mu = constants::gmEarth);
 
 /// Two-body propagation of a 12-component state (position, velocity, acceleration, jerk) by dt
 /// seconds. The output acceleration and jerk are those of the point mass (plus the unmodeled

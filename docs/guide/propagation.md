@@ -10,7 +10,8 @@
 | `NumericalPropagator` | point mass + zonal harmonics (+ third bodies, custom forces) | set by tolerance: 0.2 m over 4 h at relTol 1e-9, 0.2 mm at the default | 55 us per propagation at relTol 1e-9 | accurate J2/J4 trajectories, covariance |
 | `Sgp4` | SGP4/SDP4 from two-line elements | that of the TLE (typically ~km) | 0.3 us per call (1.3 us deep space) | catalogue element sets |
 
-Numbers are from [Accuracy](../accuracy.md) and [Performance](../performance.md).
+Numbers are from [Accuracy](../accuracy.md) and [Performance](../performance.md). All of them except
+`Sgp4` also propagate a covariance: see [Covariance and tracking](covariance-tracking.md).
 
 ## Numerical J2/J4 on an output grid
 
@@ -63,7 +64,9 @@ std::cout << "two-body differs from J2/J4 by " << norm(kepler.r - grid.back().r)
 ```
 
 `propagateKepler` uses universal variables with the Laguerre-Conway iteration
-[Conway (1986)](https://doi.org/10.1007/BF01230852), valid for elliptic, parabolic and hyperbolic orbits. `lambertIzzo`
+[Conway (1986)](https://doi.org/10.1007/BF01230852), valid for elliptic, parabolic and hyperbolic orbits.
+`propagateKeplerStm` adds its state transition matrix in closed form, and
+`propagateKeplerWithCovariance` a propagated covariance. `lambertIzzo`
 solves Lambert's problem, including multi-revolution branches [Izzo (2015)](https://doi.org/10.1007/s10569-014-9587-y). Classical
 and equinoctial elements [Broucke & Cefola (1972)](https://doi.org/10.1007/BF01228432) convert to and from states in
 `orbit/elements.h`.
@@ -296,3 +299,64 @@ peak. A small Pc from a large covariance can mean the data cannot tell, not that
 Balch, Martin & Ferson show that this is not peculiar to this model: with poor data, any
 epistemic probability of collision assigns high confidence to "no collision" whether or not it is
 true (false confidence).
+
+### From states and covariances
+
+`assessConjunction` and `assessConjunctions` do all three steps from each object's state and
+covariance at its epoch: find the approach, propagate both covariances to it, and compute the
+probability. Each object is an `UncertainTrajectory`:
+
+| Built from | Covariance propagated with |
+|---|---|
+| `{epoch, state, covariance}` | `propagateKeplerWithCovariance` (default `TrajectoryModel::TwoBody`) |
+| `{epoch, state, covariance, TrajectoryModel::SecularJ2J4}` (or `SecularJ2`) | `SecularPropagatorCorrected::propagateWithCovariance` |
+| a `Trajectory` and any function of time returning a `StateCovariance` | your own: a `NumericalPropagator`'s `propagateGridWithCovariance`, `EstimateTracker::predict`, ... |
+
+<!-- snippet: examples/propagation.cpp#conjunction_assessment -->
+```cpp
+// The same from each object's state and covariance at the epoch, in one call: the covariances
+// are propagated to every approach within 10 km with the trajectory's model (two-body here;
+// TrajectoryModel::SecularJ2J4 needs a frame with z along the pole). 1 sigma per axis: 100 m and
+// 10 cm/s for the first object, 1 km and 1 m/s for the debris.
+Mat6 P1{}, P2{};
+for (std::size_t i = 0; i < 3; ++i) {
+    P1[i][i]         = 100.0 * 100.0;
+    P1[i + 3][i + 3] = 0.1 * 0.1;
+    P2[i][i]         = 1000.0 * 1000.0;
+    P2[i + 3][i + 3] = 1.0 * 1.0;
+}
+const UncertainTrajectory first{epoch, s0, P1}, second{epoch, elementsToState(debris), P2};
+for (const ConjunctionAssessment& c : assessConjunctions(first, second, epoch, end, 6.0, 10e3)) {
+    std::cout << "  " << c.approach.time.iso8601(0) << "  " << c.approach.distance / 1e3 << " km, Pc "
+              << std::scientific << std::setprecision(2) << c.collision.probability << std::fixed
+              << std::setprecision(1) << " (" << c.collision.mahalanobis << " sigma)\n";
+}
+```
+
+```text
+  2026-03-01T02:00:09Z  6.2 km, Pc 1.48e-14 (5.9 sigma)
+  2026-03-01T02:46:27Z  2.4 km, Pc 1.01e-07 (1.5 sigma)
+```
+
+Each `ConjunctionAssessment` holds the `CloseApproach`, both covariances at its time, and the
+`CollisionProbability`. `assessConjunction` gives the closest approach only; that is not always the
+most probable collision, so to rank a window's approaches use `assessConjunctions` and sort by
+`collision.probability`.
+
+- **The search samples the trajectory; the covariance is computed once per approach.** The cost is
+  that of `closeApproaches` plus 0.3 us (two-body) or 6.4 us (secular) per approach and object.
+- **Validated end to end.** In the tests, 40 000 draws of both initial states, each propagated and
+  searched, pass within the hard-body radius as often as `assessConjunction` predicts (Pc 0.04,
+  within 0.3 sigma of the Monte Carlo).
+- **For a NumericalPropagator**, give the trajectory and the covariance separately, so that the search
+  does not integrate the covariance at every sample:
+
+```cpp
+const auto prop = NumericalPropagator::j2j4(epoch, s0, Frame::TOD);
+const UncertainTrajectory object{
+    Trajectory([&prop](const Time& t) { return prop.propagate(t); }),
+    [&prop, P0, epoch](const Time& t) { return prop.propagateGridWithCovariance(t - epoch, 1.0, 1, P0)[0]; }};
+```
+
+  Each `propagate(t)` integrates from the epoch, so keep the window near it (see the cost note above).
+

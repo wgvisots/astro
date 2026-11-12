@@ -112,7 +112,9 @@ they are in alphabetical order.
 | PSD | Power Spectral Density | strength of white process noise (m^2/s^3 for acceleration noise) |
 | RIC / RSW | Radial, In-track, Cross-track | orbit-following frame for residuals and covariances (`ricMatrix`) |
 | Rotation (of an ellipse) | | direction of the semi-major axis, clockwise from north |
-| STM | State Transition Matrix | Phi: how a small change of the initial state changes the state later |
+| Shear (Keplerian) | | the growth of in-track error because a different energy means a different period; dominates propagated covariances |
+| STM | State Transition Matrix | Phi: how a small change of the initial state changes the state later (`propagateKeplerStm`, `propagateStm`, `propagateGridStm`) |
+| Symplectic | | Phi^T J Phi = J with J = [[0, I], [-I, 0]]: the property of every Phi of a Hamiltonian (e.g. purely gravitational) motion; a check on a computed Phi |
 
 ## Satellite geometry
 

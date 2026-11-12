@@ -446,4 +446,93 @@ CollisionProbability collisionProbability(const CloseApproach& approach,
     return collisionProbability(approach, block(covariance1, 0, 0), block(covariance2, 0, 0), hardBodyRadius);
 }
 
+namespace {
+
+/// The approach with both covariances and its collision probability.
+ConjunctionAssessment assess(const CloseApproach&       approach,
+                             const UncertainTrajectory& first,
+                             const UncertainTrajectory& second,
+                             double                     hardBodyRadius) {
+    ConjunctionAssessment out;
+    out.approach         = approach;
+    out.firstCovariance  = first.stateCovariance(approach.time).covariance;
+    out.secondCovariance = second.stateCovariance(approach.time).covariance;
+    out.collision        = collisionProbability(approach, out.firstCovariance, out.secondCovariance, hardBodyRadius);
+    return out;
+}
+
+void checkHardBodyRadius(double hardBodyRadius) {
+    if (!(hardBodyRadius > 0.0) || !std::isfinite(hardBodyRadius)) {
+        throw Error("assessConjunction: the hard-body radius must be positive and finite");
+    }
+}
+
+} // namespace
+
+UncertainTrajectory::UncertainTrajectory(const Time&            epoch,
+                                         const StateVector&     state,
+                                         const Mat6&            covariance,
+                                         TrajectoryModel        model,
+                                         const ZonalParameters& zp)
+    : trajectory_(epoch, state, model, zp) {
+    for (const auto& row : covariance) {
+        for (double x : row) {
+            if (!std::isfinite(x)) {
+                throw Error("UncertainTrajectory: covariance is not finite");
+            }
+        }
+    }
+    if (model == TrajectoryModel::TwoBody) {
+        covarianceAt_ = [epoch, state, covariance, mu = zp.mu](const Time& t) {
+            return propagateKeplerWithCovariance(state, covariance, t - epoch, mu);
+        };
+    } else {
+        auto p        = std::make_shared<const SecularPropagatorCorrected>(state, zp, secularOrder(model));
+        covarianceAt_ = [epoch, covariance, p = std::move(p)](const Time& t) {
+            return p->propagateWithCovariance(t - epoch, covariance);
+        };
+    }
+}
+
+UncertainTrajectory::UncertainTrajectory(Trajectory trajectory, StateCovarianceFunction stateCovarianceAt)
+    : trajectory_(std::move(trajectory))
+    , covarianceAt_(std::move(stateCovarianceAt)) {
+    if (!covarianceAt_) {
+        throw Error("UncertainTrajectory: empty state-covariance function");
+    }
+}
+
+StateCovariance UncertainTrajectory::stateCovariance(const Time& t) const {
+    return covarianceAt_(t);
+}
+
+ConjunctionAssessment assessConjunction(const UncertainTrajectory&  first,
+                                        const UncertainTrajectory&  second,
+                                        const Time&                 start,
+                                        const Time&                 end,
+                                        double                      hardBodyRadius,
+                                        const CloseApproachOptions& options) {
+    checkHardBodyRadius(hardBodyRadius);
+    return assess(closestApproach(first.trajectory(), second.trajectory(), start, end, options),
+                  first,
+                  second,
+                  hardBodyRadius);
+}
+
+std::vector<ConjunctionAssessment> assessConjunctions(const UncertainTrajectory&  first,
+                                                      const UncertainTrajectory&  second,
+                                                      const Time&                 start,
+                                                      const Time&                 end,
+                                                      double                      hardBodyRadius,
+                                                      double                      maxDistance,
+                                                      const CloseApproachOptions& options) {
+    checkHardBodyRadius(hardBodyRadius);
+    std::vector<ConjunctionAssessment> out;
+    for (const CloseApproach& c :
+         closeApproaches(first.trajectory(), second.trajectory(), start, end, maxDistance, options)) {
+        out.push_back(assess(c, first, second, hardBodyRadius));
+    }
+    return out;
+}
+
 } // namespace astro

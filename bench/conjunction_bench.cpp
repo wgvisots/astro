@@ -112,6 +112,20 @@ int main(int argc, char** argv) {
            secondsPerRun([&] { sink += collisionProbability(ca, C, C, 10.0).probability; }));
     std::printf("  (Pc %.2e)\n", collisionProbability(ca, C, C, 10.0).probability);
 
+    // From states and covariances at the epoch: search, covariances to the approach, probability.
+    Mat6 P0{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        P0[i][i]         = 100.0 * 100.0;
+        P0[i + 3][i + 3] = 0.1 * 0.1;
+    }
+    const UncertainTrajectory u1{epoch, elementsToState(leo1), P0}, u2{epoch, elementsToState(leo2), P0};
+    const UncertainTrajectory s1{epoch, elementsToState(leo1), P0, TrajectoryModel::SecularJ2J4};
+    const UncertainTrajectory s2{epoch, elementsToState(leo2), P0, TrajectoryModel::SecularJ2J4};
+    report("assessConjunction, LEO-LEO, two-body",
+           secondsPerRun([&] { sink += assessConjunction(u1, u2, epoch, end, 10.0).collision.missDistance; }));
+    report("assessConjunction, LEO-LEO, secular J2/J4",
+           secondsPerRun([&] { sink += assessConjunction(s1, s2, epoch, end, 10.0).collision.missDistance; }));
+
     std::printf("\n(sink %g)\n", sink);
     return 0;
 }

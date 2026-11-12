@@ -83,6 +83,12 @@ included in the repository are credited in
 
 ## Orbits and propagation
 
+- **Battin, R. H. (1999).** *An Introduction to the Mathematics and Methods of Astrodynamics*,
+  revised ed. AIAA. <https://doi.org/10.2514/4.861543>. Universal variables and the two-body state
+  transition matrix.
+- **Shepperd, S. W. (1985).** Universal Keplerian state transition matrix. *Celestial Mechanics*
+  35(2), 129-144. <https://doi.org/10.1007/BF01227666>. The closed-form two-body Phi
+  (`propagateKeplerStm`).
 - **Montenbruck, O. & Gill, E. (2000).** *Satellite Orbits: Models, Methods and Applications*.
   Springer. <https://doi.org/10.1007/978-3-642-58351-3>. Low-precision Moon, shadow model,
   variational equations and state transition matrix.

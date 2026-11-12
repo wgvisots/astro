@@ -45,6 +45,9 @@ What makes the grids fast:
 
 | Operation | Time |
 |---|---|
+| `propagateKeplerWithCovariance` (closed-form Phi) | 0.31 us |
+| `SecularPropagatorCorrected::propagateWithCovariance` (24 differenced propagations) | 6.4 us |
+| `SecularPropagatorCorrected::propagateGridWithCovariance`, 4 h at 10 s (1441 outputs) | 1.7 ms (1.2 us per output) |
 | `checkConsistency` / `EstimateTracker::update`, gap 10 min / 30 min / 4 h | 15 / 26 / 137 us |
 | `FrameTransformer`, IAU 2006/2000A | 125 us |
 | `FrameTransformer`, IAU 2006/2000B | 6 us |
@@ -92,6 +95,8 @@ From `astro_conjunction_bench`, 1-day window:
 | `probabilityInCircle`, radius >> sigma | 12.8 us |
 | `probabilityInCircle`, 123 km x 19 m covariance, 30 km radius | 14.6 us |
 | `collisionProbability`, 200 m miss (projection + `probabilityInCircle`) | 6.5 us |
+| `assessConjunction`, two LEO objects, two-body (search, covariances, probability) | 0.67 ms |
+| `assessConjunction`, two LEO objects, secular J2/J4 | 0.41 ms |
 
 Over the 300 random orbit pairs of `astro_study_conjunctions` (LEO to 66 700 km, e up to 0.9), a
 1-day search averages 0.21 ms at the default step: higher orbits need fewer samples.

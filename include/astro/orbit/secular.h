@@ -27,6 +27,7 @@
 #include "astro/core/constants.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/state12.h"
+#include "astro/orbit/state_covariance.h"
 
 /// \file
 /// Analytic secular (mean-element) drift due to the Earth's zonal harmonics,
@@ -147,6 +148,37 @@ public:
     /// As propagateGrid12, returning `count` states.
     [[nodiscard]] std::vector<StateVector12> propagateGrid12(double start, double step, std::size_t count) const;
 
+    /// State dt seconds after the epoch and the state transition matrix Phi(dt) = d(state at dt) /
+    /// d(epochState()), for the covariance of the input state.
+    ///
+    /// Phi is the derivative of the whole map from the input state to the propagated one (input
+    /// state -> mean elements -> secular drift -> state), by fourth-order central differences of
+    /// propagations from perturbed input states, with steps of 1e-5 |r0| and 1e-5 |v0|. Relative
+    /// accuracy 2e-5 or better: against the closed-form two-body Phi (propagateKeplerStm) with
+    /// J2 = J4 = 0, 1e-11 to 5e-9 for the LEO test orbits over up to a week, and 1.6e-5 for e = 0.74
+    /// over a week (astro_study_propagation).
+    /// For SecularPropagatorCorrected Phi(0) is not the identity: its velocity at the epoch is not
+    /// the input velocity. Costs 24 extra propagations (and constructions); for many times use
+    /// propagateGridWithCovariance, which builds the perturbed propagators once. The state is
+    /// propagate(dt), or propagate12(dt) for HigherOrderMode::UnmodeledForce, whose input
+    /// acceleration and jerk are held fixed.
+    [[nodiscard]] StateTransition propagateStm(double dt) const;
+    /// State and covariance dt seconds after the epoch: P = Phi P0 Phi^T, Phi from propagateStm. P0 is
+    /// the covariance of epochState() (m^2, m^2/s, m^2/s^2) in its frame. There is no process noise:
+    /// the covariance shows only how the model maps the initial uncertainty (see
+    /// NumericalPropagator::propagateGridWithCovariance for process noise).
+    [[nodiscard]] StateCovariance propagateWithCovariance(double dt, const Mat6& P0) const;
+    /// States and covariances at dt = start + k * step for k = 0 .. out.size() - 1, written into
+    /// `out`: the grid form of propagateWithCovariance, 25 grid propagations in all (1.2 us per
+    /// output; NumericalPropagator::propagateGridWithCovariance is faster on long grids).
+    void propagateGridWithCovariance(double start, double step, const Mat6& P0, std::span<StateCovariance> out) const;
+    /// As above, returning `count` states and covariances.
+    [[nodiscard]] std::vector<StateCovariance>
+    propagateGridWithCovariance(double start, double step, std::size_t count, const Mat6& P0) const;
+    /// The input state the covariance methods refer to: the state given to the constructor, or for
+    /// mean elements elementsToState(mean, zp.mu).
+    [[nodiscard]] StateVector epochState() const noexcept { return input_.rv(); }
+
     /// Mean elements at the epoch.
     [[nodiscard]] const KeplerianElements& meanElements() const noexcept { return mean_; }
     /// Secular rates of the mean elements.
@@ -189,6 +221,12 @@ private:
     [[nodiscard]] StateVector12 complete(double dt, StateVector s) const noexcept;
     template <class Emit>
     void grid(double start, double step, std::size_t count, Emit&& emit) const noexcept;
+    /// The same kind of propagator from another input state (keeping acceleration, jerk and mode).
+    [[nodiscard]] SecularPropagator rebuilt(const StateVector& s) const;
+    /// States of the trajectory (including an unmodeled force) on a grid.
+    void trajectoryGrid(double start, double step, std::span<StateVector> out) const;
+    /// States and state transition matrices on a grid.
+    void stmGrid(double start, double step, std::span<StateVector> states, std::span<Mat6> stm) const;
 
     KeplerianElements   mean_;
     ZonalParameters     zp_;
@@ -206,6 +244,9 @@ private:
     double              mDotOverN_{1.0};      // mean-anomaly rate over the two-body mean motion
     Vec3                da0_;
     Vec3                dj0_;
+    StateVector12       input_;                            // epoch state for the covariance methods
+    HigherOrderMode     mode_{HigherOrderMode::ModelOnly}; // mode of a StateVector12 start
+    bool                fromState12_{false};               // built from a StateVector12
 };
 
 /// SecularPropagator whose velocity is the time derivative of its position.

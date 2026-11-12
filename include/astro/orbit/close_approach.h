@@ -29,11 +29,13 @@
 #include "astro/core/vec.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/secular.h"
+#include "astro/orbit/state_covariance.h"
 #include "astro/time/time.h"
 
 /// \file
 /// Closest approach of two objects within a time window, each given by orbital elements, a state
-/// vector or any function of time, and the probability that they collide.
+/// vector or any function of time, and the probability that they collide; assessConjunction does
+/// both from states and covariances.
 namespace astro {
 
 /// How Trajectory propagates an element set or a state vector.
@@ -221,5 +223,80 @@ struct CollisionProbability {
                                                         const Mat6&          covariance1,
                                                         const Mat6&          covariance2,
                                                         double               hardBodyRadius);
+
+/// The motion and position/velocity uncertainty of one object, for assessConjunction and
+/// assessConjunctions.
+///
+/// Built from a state and its covariance at an epoch, with a propagation model, or from any
+/// Trajectory with a function giving the state and covariance at any time (e.g. from a
+/// NumericalPropagator or EstimateTracker::predict). Instances are immutable and safe to share
+/// between threads, provided wrapped functions are.
+class UncertainTrajectory {
+public:
+    /// A state (m, m/s) and its covariance (m^2, m^2/s, m^2/s^2) at any time.
+    using StateCovarianceFunction = std::function<StateCovariance(const Time& t)>;
+
+    /// Propagate `state` (m, m/s) and its covariance (m^2, m^2/s, m^2/s^2, in the frame of the
+    /// state) from `epoch` with `model`, as Trajectory does: TwoBody with propagateKeplerWithCovariance
+    /// (analytic state transition matrix), the secular models with
+    /// SecularPropagatorCorrected::propagateWithCovariance (differenced). Neither adds process noise.
+    /// Throws astro::Error for a non-finite covariance, or as Trajectory does.
+    UncertainTrajectory(const Time&            epoch,
+                        const StateVector&     state,
+                        const Mat6&            covariance,
+                        TrajectoryModel        model = TrajectoryModel::TwoBody,
+                        const ZonalParameters& zp    = {});
+    /// Any trajectory, with a function giving its state and covariance at any time. The search
+    /// samples `trajectory`; `stateCovarianceAt` is called once per approach, for its covariance.
+    /// Throws astro::Error if `stateCovarianceAt` is empty.
+    UncertainTrajectory(Trajectory trajectory, StateCovarianceFunction stateCovarianceAt);
+
+    /// The trajectory the search samples.
+    [[nodiscard]] const Trajectory& trajectory() const noexcept { return trajectory_; }
+    /// State and covariance at time t.
+    [[nodiscard]] StateCovariance stateCovariance(const Time& t) const;
+
+private:
+    Trajectory              trajectory_;
+    StateCovarianceFunction covarianceAt_;
+};
+
+/// One approach of two objects with its collision probability.
+struct ConjunctionAssessment {
+    CloseApproach        approach;         ///< the approach (states at approach.time)
+    Mat6                 firstCovariance;  ///< covariance of the first object at approach.time
+    Mat6                 secondCovariance; ///< covariance of the second object at approach.time
+    CollisionProbability collision;        ///< collisionProbability of the approach
+};
+
+/// The closest approach of two objects over [start, end] (closestApproach), with both covariances
+/// propagated to it and its collision probability (collisionProbability) for spheres whose radii
+/// add up to `hardBodyRadius` (m):
+///
+///     const ConjunctionAssessment c = assessConjunction({epoch1, state1, cov1}, {epoch2, state2, cov2},
+///                                                       start, end, 10.0);
+///
+/// The closest approach is not always the most probable collision; assessConjunctions gives every
+/// approach. If it is at an end of the window (approach.atBoundary) it is not a true closest
+/// approach, and the probability is that of the straight-line encounter through it. Throws
+/// astro::Error as closestApproach and collisionProbability do.
+[[nodiscard]] ConjunctionAssessment assessConjunction(const UncertainTrajectory&  first,
+                                                      const UncertainTrajectory&  second,
+                                                      const Time&                 start,
+                                                      const Time&                 end,
+                                                      double                      hardBodyRadius,
+                                                      const CloseApproachOptions& options = {});
+
+/// Every local minimum of the distance strictly inside [start, end] no farther than `maxDistance`
+/// (m), as closeApproaches, each with its covariances and collision probability, in time order.
+/// Throws astro::Error as closeApproaches and collisionProbability do.
+[[nodiscard]] std::vector<ConjunctionAssessment>
+assessConjunctions(const UncertainTrajectory&  first,
+                   const UncertainTrajectory&  second,
+                   const Time&                 start,
+                   const Time&                 end,
+                   double                      hardBodyRadius,
+                   double                      maxDistance = std::numeric_limits<double>::infinity(),
+                   const CloseApproachOptions& options     = {});
 
 } // namespace astro

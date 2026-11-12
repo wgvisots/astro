@@ -18,7 +18,7 @@
 
 // Propagation: two-body, analytic J2/J4 (secular), numerical J2/J4 on an output grid, a
 // 12-component (position, velocity, acceleration, jerk) state with an unmodeled force, and the
-// closest approach of two objects with their collision probability.
+// closest approach of two objects with their collision probability, from states and covariances.
 
 #include <iomanip>
 #include <iostream>
@@ -104,5 +104,25 @@ int main() {
     std::cout << "collision probability " << std::scientific << std::setprecision(2) << pc.probability << std::fixed
               << std::setprecision(1) << ", miss " << pc.mahalanobis << " sigma\n";
     //! [collision_probability]
+
+    //! [conjunction_assessment]
+    // The same from each object's state and covariance at the epoch, in one call: the covariances
+    // are propagated to every approach within 10 km with the trajectory's model (two-body here;
+    // TrajectoryModel::SecularJ2J4 needs a frame with z along the pole). 1 sigma per axis: 100 m and
+    // 10 cm/s for the first object, 1 km and 1 m/s for the debris.
+    Mat6 P1{}, P2{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        P1[i][i]         = 100.0 * 100.0;
+        P1[i + 3][i + 3] = 0.1 * 0.1;
+        P2[i][i]         = 1000.0 * 1000.0;
+        P2[i + 3][i + 3] = 1.0 * 1.0;
+    }
+    const UncertainTrajectory first{epoch, s0, P1}, second{epoch, elementsToState(debris), P2};
+    for (const ConjunctionAssessment& c : assessConjunctions(first, second, epoch, end, 6.0, 10e3)) {
+        std::cout << "  " << c.approach.time.iso8601(0) << "  " << c.approach.distance / 1e3 << " km, Pc "
+                  << std::scientific << std::setprecision(2) << c.collision.probability << std::fixed
+                  << std::setprecision(1) << " (" << c.collision.mahalanobis << " sigma)\n";
+    }
+    //! [conjunction_assessment]
     return 0;
 }
