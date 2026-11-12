@@ -18,7 +18,7 @@
 
 // Propagation: two-body, analytic J2/J4 (secular), numerical J2/J4 on an output grid, a
 // 12-component (position, velocity, acceleration, jerk) state with an unmodeled force, and the
-// closest approach of two objects.
+// closest approach of two objects with their collision probability.
 
 #include <iomanip>
 #include <iostream>
@@ -29,6 +29,7 @@
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
 #include "astro/orbit/two_body.h"
+#include "astro/satellite/orbital_frames.h"
 
 using namespace astro;
 
@@ -87,5 +88,21 @@ int main() {
         std::cout << "  " << c.time.iso8601(0) << "  " << c.distance / 1e3 << " km\n";
     }
     //! [close_approach]
+
+    //! [collision_probability]
+    // Probability of collision at that approach, for a 5 m and a 1 m object. Position covariances at
+    // the time of the approach: 400 m radial, 4 km in-track, 400 m cross-track (1 sigma) in each
+    // object's RIC frame, rotated into the inertial frame. (From an epoch covariance,
+    // NumericalPropagator::propagateGridWithCovariance gives them at any time.)
+    // clang-format off
+    const Mat3 ric{400.0 * 400.0,             0.0,           0.0,
+                             0.0, 4000.0 * 4000.0,           0.0,
+                             0.0,             0.0, 400.0 * 400.0};
+    // clang-format on
+    const Mat3                 m1 = ricMatrix(ca.first), m2 = ricMatrix(ca.second);
+    const CollisionProbability pc = collisionProbability(ca, m1.transpose() * ric * m1, m2.transpose() * ric * m2, 6.0);
+    std::cout << "collision probability " << std::scientific << std::setprecision(2) << pc.probability << std::fixed
+              << std::setprecision(1) << ", miss " << pc.mahalanobis << " sigma\n";
+    //! [collision_probability]
     return 0;
 }

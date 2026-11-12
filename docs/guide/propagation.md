@@ -231,5 +231,57 @@ two LEO objects, plus ~10 per minimum found. A wrapped `NumericalPropagator::pro
 integrates from its epoch on every call, so keep its epoch near the window, or sample it once
 with `propagateGrid` and interpolate in your function.
 
-The result is geometric: it does not include the objects' sizes, covariances or a collision
-probability.
+### Collision probability
+
+`collisionProbability(approach, covariance1, covariance2, hardBodyRadius)` turns an approach into
+the probability that the objects actually collide, given their sizes and position uncertainties:
+
+<!-- snippet: examples/propagation.cpp#collision_probability -->
+```cpp
+// Probability of collision at that approach, for a 5 m and a 1 m object. Position covariances at
+// the time of the approach: 400 m radial, 4 km in-track, 400 m cross-track (1 sigma) in each
+// object's RIC frame, rotated into the inertial frame. (From an epoch covariance,
+// NumericalPropagator::propagateGridWithCovariance gives them at any time.)
+// clang-format off
+const Mat3 ric{400.0 * 400.0,             0.0,           0.0,
+                         0.0, 4000.0 * 4000.0,           0.0,
+                         0.0,             0.0, 400.0 * 400.0};
+// clang-format on
+const Mat3                 m1 = ricMatrix(ca.first), m2 = ricMatrix(ca.second);
+const CollisionProbability pc = collisionProbability(ca, m1.transpose() * ric * m1, m2.transpose() * ric * m2, 6.0);
+std::cout << "collision probability " << std::scientific << std::setprecision(2) << pc.probability << std::fixed
+          << std::setprecision(1) << ", miss " << pc.mahalanobis << " sigma\n";
+```
+
+It is the standard short-term encounter model [Foster & Estes (1992)](../references.md#conjunctions-and-collision-probability),
+[Akella & Alfriend (2000)](https://doi.org/10.2514/2.4611), [Alfano (2005)](https://doi.org/10.1007/BF03546397):
+
+| Step | What happens |
+|---|---|
+| Objects | spheres whose radii add up to the hard-body radius (HBR) |
+| Uncertainty | independent Gaussian position errors at TCA: the relative position has covariance C1 + C2 |
+| Encounter plane | the plane through the miss vector perpendicular to the relative velocity; errors along the relative velocity only shift the time of the encounter, so they drop out |
+| Probability | the 2-D Gaussian of the miss in that plane integrated over the HBR circle (`probabilityInCircle`): exact along the covariance's minor axis, adaptive Gauss-Kronrod along the major axis, ~1e-12 relative in 6-13 us |
+
+The result also gives the miss distance, the projected 2x2 covariance, its sigmas and the miss in
+standard deviations (`mahalanobis`).
+
+**Validated against NASA CARA (Conjunction Assessment Risk Analysis) reference cases** to
+1e-12 relative, and against Alfano's test cases (see [Accuracy](../accuracy.md#collision-probability)).
+One convention differs from CARA's `PcCircle`: CARA takes the full distance |r2 - r1| as the miss,
+assuming the states are exactly at TCA; `collisionProbability` projects r2 - r1 onto the encounter
+plane, which is the closest distance of the straight-line encounter. They agree for a true closest
+approach from `closestApproach`; for states 2 deg off TCA they differ by ~0.1 %.
+
+**When it applies.** The model assumes the encounter is short: straight-line relative motion and
+constant covariances while the objects cross each other's uncertainty, as at relative speeds of
+km/s. Alfano's slow test cases (0.2-0.5 m/s) still agree with Monte Carlo to ~1 %, because their
+relative motion stays nearly straight, but for slow, curving, nearly co-orbital encounters use a
+Monte Carlo or a long-term encounter method instead. Use a true closest approach (not
+`atBoundary`).
+
+**More uncertainty does not always mean more risk.** For a given miss, the probability peaks when
+the covariance is about the size of the miss and falls as it grows (probability dilution). In the
+example, growing the covariance from 400 m / 4 km (radial / in-track) to 800 m / 6 km raises Pc from
+1.9e-8 to 4.8e-7, but on to 1 km / 8 km barely changes it (4.84e-7): it has levelled off near its
+peak. A small Pc from a large covariance can mean the data cannot tell, not that the approach is safe.

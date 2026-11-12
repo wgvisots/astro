@@ -87,3 +87,10 @@ build/bench/astro_propagation_bench 14400 10 100
 build/bench/astro_covariance_bench
 ```
 
+## Closest approach and collision probability
+
+- `closestApproach` over a day: 0.2-0.7 ms for two two-body objects (about 2000 samples in LEO);
+  the secular models are a little cheaper per sample.
+- `collisionProbability`: 6-13 us (adaptive Gauss-Kronrod to ~1e-12 relative), measured on
+  typical, high-aspect-ratio (1000:1), large-radius and 30 km-radius geometries.
+

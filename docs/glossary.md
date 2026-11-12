@@ -96,13 +96,18 @@ they are in alphabetical order.
 | Term | Stands for | What it means here |
 |---|---|---|
 | 1-sigma | | one standard deviation; a 1-sigma error ellipse contains 39.3 % of 2-D Gaussian errors |
+| CARA | Conjunction Assessment Risk Analysis | NASA's conjunction assessment team; its open-source tools give the collision probability test cases |
 | CEP | Circular Error Probable | radius of the circle with 50 % of impacts. Not computed directly: `ellipse.scaled(0.5)` gives the 50 % ellipse |
 | Chi-square | | distribution of a sum of squared Gaussian errors; gives the p-values of the consistency checks |
 | Covariance | | the 6x6 matrix of position and velocity error variances and correlations (`Mat6`) |
+| Encounter plane | | the plane perpendicular to the relative velocity at closest approach, where the collision probability is integrated (`CollisionProbability::xAxis`, `yAxis`) |
 | Error ellipse | | the curve of equal probability on the ground; semi-major, semi-minor and rotation (`ErrorEllipse`) |
+| HBR | Hard-Body Radius | the radius of a sphere enclosing both objects: the sum of their radii (`collisionProbability`) |
 | LVLH | Local Vertical, Local Horizontal | orbit-following frame, CCSDS convention (`lvlhMatrix`) |
 | Mahalanobis distance | | a difference measured in units of its covariance: d^T P^-1 d |
 | NTW, VNC | Normal-Tangential-W, Velocity-Normal-Co-normal | orbit-following frames (`ntwMatrix`, `vncMatrix`) |
+| Pc | Probability of collision | chance that two objects pass within the hard-body radius (`collisionProbability`) |
+| Probability dilution | | a larger covariance can lower Pc for the same miss: a small Pc may only mean the data are poor |
 | Process noise | | extra uncertainty added during propagation for unmodelled forces (`accelerationNoisePsd`) |
 | PSD | Power Spectral Density | strength of white process noise (m^2/s^3 for acceleration noise) |
 | RIC / RSW | Radial, In-track, Cross-track | orbit-following frame for residuals and covariances (`ricMatrix`) |

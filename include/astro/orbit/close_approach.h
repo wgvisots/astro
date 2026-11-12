@@ -25,6 +25,7 @@
 
 #include <boost/describe/enum.hpp>
 
+#include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/secular.h"
@@ -32,7 +33,7 @@
 
 /// \file
 /// Closest approach of two objects within a time window, each given by orbital elements, a state
-/// vector or any function of time.
+/// vector or any function of time, and the probability that they collide.
 namespace astro {
 
 /// How Trajectory propagates an element set or a state vector.
@@ -161,5 +162,63 @@ struct CloseApproach {
                                                          const Time&       end,
                                                          double maxDistance = std::numeric_limits<double>::infinity(),
                                                          const CloseApproachOptions& options = {});
+
+/// Probability that a 2-D Gaussian point with mean (mx, my) and covariance [[xx, xy], [xy, yy]]
+/// (m^2) lies within `radius` (m) of the origin.
+///
+/// The covariance is rotated to its principal axes. Along the minor axis the integral over the
+/// circle's chord is exact (error functions, in complementary form for small probabilities); along
+/// the major axis it is integrated numerically with u = radius sin t, which removes the square-root
+/// end points, by adaptive Gauss-Kronrod (7-15) to ~1e-12 relative. A singular covariance (one or both standard
+/// deviations zero) is handled exactly. Probabilities below ~1e-45 come out as 0. Throws
+/// astro::Error for a radius that is not positive and finite, or a covariance that is not positive
+/// semi-definite.
+[[nodiscard]] double probabilityInCircle(double mx, double my, double xx, double xy, double yy, double radius);
+
+/// The collision probability of one approach, and the encounter-plane quantities behind it.
+struct CollisionProbability {
+    double probability{0.0};  ///< probability that the objects pass within the hard-body radius
+    double missDistance{0.0}; ///< miss distance in the encounter plane (m)
+    /// Combined position covariance projected onto the encounter plane, components along xAxis and
+    /// yAxis (m^2).
+    double xx{0.0}, xy{0.0}, yy{0.0};
+    double sigmaMajor{0.0}; ///< 1-sigma semi-major axis of that covariance (m)
+    double sigmaMinor{0.0}; ///< 1-sigma semi-minor axis of that covariance (m)
+    /// Miss distance in standard deviations, sqrt(m^T C^-1 m); infinite for a nonzero miss with a
+    /// singular covariance.
+    double mahalanobis{0.0};
+    Vec3   xAxis; ///< encounter frame x: along the miss vector (any direction perpendicular to zAxis if 0)
+    Vec3   yAxis; ///< encounter frame y: zAxis x xAxis
+    Vec3   zAxis; ///< encounter frame z: along the relative velocity v2 - v1
+};
+
+/// Probability that two objects collide at an approach, by the short-term encounter model (Foster
+/// & Estes 1992; Akella & Alfriend 2000; Alfano 2005).
+///
+/// The objects are taken as spheres whose radii add up to `hardBodyRadius` (m). `covariance1` and
+/// `covariance2` are their position covariances (m^2) at approach.time, in the frame of the
+/// approach's states, and their errors are independent, so the relative position has covariance
+/// C = C1 + C2. During the encounter the relative motion is taken as a straight line at constant
+/// velocity, with C constant: the probability is then the integral of the relative position's
+/// Gaussian, projected onto the plane perpendicular to the relative velocity, over the
+/// hard-body circle (probabilityInCircle).
+///
+/// That holds when the encounter is short: the objects cross the region of their uncertainty in a
+/// small fraction of an orbit, as for relative speeds of km/s. For slow, nearly co-orbital
+/// encounters (m/s) the relative motion curves during the encounter and the result is not
+/// reliable. Use the approach's own states (a true closest approach, not atBoundary) for the
+/// encounter plane. Throws astro::Error for a radius that is not positive and finite, a zero
+/// relative velocity, or a covariance that is not finite and positive semi-definite in the plane.
+[[nodiscard]] CollisionProbability collisionProbability(const CloseApproach& approach,
+                                                        const Mat3&          covariance1,
+                                                        const Mat3&          covariance2,
+                                                        double               hardBodyRadius);
+
+/// As above, from 6x6 position/velocity covariances (only the position blocks are used), e.g. from
+/// NumericalPropagator::propagateGridWithCovariance at the time of the approach.
+[[nodiscard]] CollisionProbability collisionProbability(const CloseApproach& approach,
+                                                        const Mat6&          covariance1,
+                                                        const Mat6&          covariance2,
+                                                        double               hardBodyRadius);
 
 } // namespace astro

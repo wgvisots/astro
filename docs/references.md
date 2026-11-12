@@ -122,6 +122,27 @@ included in the repository are credited in
 - **Clohessy, W. H. & Wiltshire, R. S. (1960).** Terminal guidance system for satellite
   rendezvous. *J. Aerospace Sci.* 27(9), 653-658. <https://doi.org/10.2514/8.8704>. Relative motion in RIC.
 
+## Conjunctions and collision probability
+
+- **Foster, J. L. & Estes, H. S. (1992).** *A Parametric Analysis of Orbital Debris Collision
+  Probability and Maneuver Rate for Space Vehicles*. NASA/JSC-25898, NASA Johnson Space Center
+  (not on NTRS; no link). The short-term encounter model: the 2-D Gaussian over the hard-body
+  circle in the encounter plane.
+- **Akella, M. R. & Alfriend, K. T. (2000).** Probability of collision between space objects.
+  *J. Guidance, Control, and Dynamics* 23(5), 769-772. <https://doi.org/10.2514/2.4611>.
+- **Alfano, S. (2005).** A numerical implementation of spherical object collision probability.
+  *J. Astronaut. Sci.* 53(1), 103-109. <https://doi.org/10.1007/BF03546397>. The 1-D integral
+  with an exact error-function inner integral.
+- **Chan, F. K. (2008).** *Spacecraft Collision Probability*. The Aerospace Press / AIAA.
+  <https://doi.org/10.2514/4.989186>. Background, including probability dilution.
+- **Alfano, S. (2009).** Satellite conjunction Monte Carlo analysis. AAS/AIAA Space Flight
+  Mechanics Meeting, Savannah, GA (AAS 09-233; no DOI found). Test cases with Monte Carlo
+  probabilities, used in the tests through CARA's copies.
+- **NASA CARA Analysis Tools.** <https://github.com/nasa/CARA_Analysis_Tools>. Reference
+  inputs and probabilities for the tests (`PcCircle_UnitTest.m`, Alfano 2009 cases).
+- **Piessens, R., de Doncker-Kapenga, E., Ueberhuber, C. W. & Kahaner, D. K. (1983).**
+  *QUADPACK: A Subroutine Package for Automatic Integration*. Springer. The Gauss-Kronrod 7-15 rule.
+
 ## Estimation and covariance
 
 - **Bar-Shalom, Y., Li, X. R. & Kirubarajan, T. (2001).** *Estimation with Applications to Tracking

@@ -101,6 +101,19 @@ error over 4 h):
 
 The velocity-matched start is worse in five of six orbits, so the library does not offer it.
 
+## Collision probability
+
+From `tests/orbit/collision_probability_test.cpp`:
+
+| Reference | Agreement |
+|---|---|
+| closed form 1 - exp(-R^2 / 2 sigma^2) (isotropic, centred) and the Rice distribution (isotropic, offset) | 1e-10 relative or better |
+| brute-force polar-grid integration (4 million points): anisotropic, 1000:1 aspect ratio, R >> sigma, correlated, Pc ~ 1e-14 | 1e-8 asserted; 1e-13 measured on CARA's geometry |
+| 3-D Monte Carlo of straight-line encounters (400 000 draws) | within 5 binomial sigma |
+| NASA CARA `PcCircle` highest-accuracy values (Omitron cases, small radii) | 1e-12 relative (in CARA's miss convention, see the [guide](guide/propagation.md#collision-probability)) |
+| NASA CARA default-mode values at radii >= 1 km on a 123 km x 19 m covariance | 1-3e-4: CARA's 64-point Gauss-Chebyshev quadrature cannot resolve the 19 m axis there; the brute-force grid agrees with `collisionProbability` to 1e-13 |
+| Alfano (2009) cases 5-7, Alfano's linear Pc | 2e-7 to 1.1e-4 relative; to his 1e8-sample Monte Carlo ~1 % |
+
 ## Consistency checks
 
 From `astro_study_consistency`: priors drawn from their covariance (1500 samples per row), compared
