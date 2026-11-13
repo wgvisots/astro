@@ -402,7 +402,8 @@ namespace {
 
 // Relative step of the state transition matrix's differences, |r0| and |v0| times this. The
 // fourth-order stencil makes the truncation error ~(n dt * step)^4: 1e-5 keeps it below ~1e-5 over
-// a week, and above the ~1e-8 rad noise of the element conversion near e = 0 and i = 0.
+// a week, and the rounding error of the differences (machine epsilon / step) near 1e-11. A step of
+// 1e-6 gives 2e-10 everywhere in the study instead, and 1.6e-9 for e = 0.74 over a week.
 constexpr double kStmStep = 1e-5;
 
 // Offsets of the stencil, in steps, and their weights times 12 (f' = sum w f(x + o h) / (12 h)).
