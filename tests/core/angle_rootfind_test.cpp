@@ -118,6 +118,26 @@ TEST(Angle, WrapPiAnd180SubtractWholeTurnsExactly) {
     }
 }
 
+// A negative first argument makes the whole angle negative, as "-5 deg 30 min" does on paper. Truth: the
+// same angle written as a decimal, -(5 + 30/60) = -5.5 degrees; both sides round the same way, so the
+// comparison is for equality.
+TEST(Angle, DmsAndHmsToRadTakeTheSignOfTheFirstArgument) {
+    EXPECT_EQ(dmsToRad(-5, 30, 0.0), deg2rad(-5.5));
+    EXPECT_EQ(hmsToRad(-1, 30, 0.0), deg2rad(-22.5));
+    // `negative` is still how to write an angle between 0 and -1: an int has no negative zero.
+    EXPECT_EQ(dmsToRad(0, 30, 0.0, true), deg2rad(-0.5));
+    EXPECT_EQ(hmsToRad(0, 30, 0.0, true), deg2rad(-7.5));
+    // The two ways of giving the sign agree; they do not cancel.
+    EXPECT_EQ(dmsToRad(-5, 30, 0.0, true), deg2rad(-5.5));
+    EXPECT_EQ(hmsToRad(-1, 30, 0.0, true), deg2rad(-22.5));
+    // Positive angles, and the flag alone, are as before.
+    EXPECT_EQ(dmsToRad(5, 30, 0.0), deg2rad(5.5));
+    EXPECT_EQ(dmsToRad(5, 30, 0.0, true), deg2rad(-5.5));
+    // Minutes and seconds are magnitudes: their signs do not change the sign of the angle.
+    EXPECT_EQ(dmsToRad(5, -30, -0.0), deg2rad(5.5));
+    EXPECT_EQ(dmsToRad(-5, -30, -0.0), deg2rad(-5.5));
+}
+
 TEST(Angle, Sexagesimal) {
     EXPECT_NEAR(parseHms("12:00:00"), pi, 1e-15);
     EXPECT_NEAR(parseHms("06h30m"), deg2rad(97.5), 1e-15);

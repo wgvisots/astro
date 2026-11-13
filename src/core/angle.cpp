@@ -72,14 +72,17 @@ double wrap180(double deg) noexcept {
     return r;
 }
 
+// The sign belongs to the whole angle, as in "-5 deg 30 min": it comes from the first argument or from
+// `negative`, and the three parts are then magnitudes. (Dropping the sign of the first argument, as this
+// did, turned dmsToRad(-5, 30, 0) into +5.5 degrees.)
 double hmsToRad(int h, int m, double s, bool negative) noexcept {
     const double v = (std::abs(h) + std::abs(m) / 60.0 + std::abs(s) / 3600.0) * 15.0 * constants::degToRad;
-    return negative ? -v : v;
+    return (negative || h < 0) ? -v : v;
 }
 
 double dmsToRad(int d, int m, double s, bool negative) noexcept {
     const double v = (std::abs(d) + std::abs(m) / 60.0 + std::abs(s) / 3600.0) * constants::degToRad;
-    return negative ? -v : v;
+    return (negative || d < 0) ? -v : v;
 }
 
 namespace {

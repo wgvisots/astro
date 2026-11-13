@@ -75,8 +75,16 @@ struct Sexagesimal {
 };
 
 /// Hours, minutes, seconds of time to radians (15 deg per hour).
+///
+/// The sign belongs to the whole angle: the result is negative if `h` is negative or `negative` is
+/// true, and `h`, `m` and `s` are then used as magnitudes (the signs of `m` and `s` are ignored). So
+/// hmsToRad(-1, 30, 0) is -1.5 hours. An angle between 0 and -1 hour needs `negative`, because an `int`
+/// has no negative zero: hmsToRad(0, 30, 0, true) is -0.5 hours.
 [[nodiscard]] double hmsToRad(int h, int m, double s, bool negative = false) noexcept;
 /// Degrees, arcminutes, arcseconds to radians.
+///
+/// The sign is handled as in hmsToRad: dmsToRad(-5, 30, 0) is -5.5 degrees, and
+/// dmsToRad(0, 30, 0, true) is -0.5 degrees.
 [[nodiscard]] double dmsToRad(int d, int m, double s, bool negative = false) noexcept;
 
 /// Decompose radians into hours/minutes/seconds, with seconds rounded to `decimals`
