@@ -52,7 +52,15 @@ struct SkyEvent {
 /// Find upward/downward crossings of `threshold` by `elevation(t)` and its local
 /// maxima (transits) in [start, end]. The function is sampled every `step`
 /// seconds and events are refined with Brent's method to ~1 ms; features
-/// shorter than `step` can be missed.
+/// shorter than `step` can be missed. `elevation` is only called for times in
+/// [start, end].
+///
+/// A transit is a maximum strictly inside the window, wherever it falls,
+/// including the first and the last sample interval. A window edge is never a
+/// transit: where the elevation is highest at `start` or at `end` itself, it
+/// cannot be told, from inside the window, whether it turns there or is still
+/// falling (or rising) through the edge. So with windows laid end to end, each
+/// transit is found in exactly one of them, unless it falls on a shared edge.
 [[nodiscard]] std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&)>& elevation,
                                                         const Time&                               start,
                                                         const Time&                               end,

@@ -47,6 +47,15 @@ std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&
         x[static_cast<std::size_t>(i)] = i * h;
         y[static_cast<std::size_t>(i)] = f(i * h);
     }
+    // The highest elevation between `lo` and `hi` seconds after start. The minimizer works on the
+    // bracket mapped to [1, 2], where a tolerance means the same whether it is taken as relative or
+    // as absolute. 2e-8 is just above the square root of machine epsilon, the finest a minimizer can
+    // resolve, and is 0.05 ms of a 20 minute bracket.
+    auto highest = [&](double lo, double hi) {
+        auto       s = [&](double u) { return lo + (u - 1.0) * (hi - lo); };
+        const auto m = brentMinimize([&](double u) { return -f(s(u)); }, 1.0, 2.0, 2e-8);
+        return SkyEvent{SkyEventType::Transit, start + s(m.x), -m.fx};
+    };
     for (std::size_t i = 1; i < x.size(); ++i) {
         const double a = y[i - 1] - threshold, b = y[i] - threshold;
         if ((a < 0.0) != (b < 0.0)) {
@@ -55,8 +64,21 @@ std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&
         }
         // Local maximum bracketed by samples i-1, i, i+1.
         if (i + 1 < x.size() && y[i] >= y[i - 1] && y[i] > y[i + 1]) {
-            const auto m = brentMinimize([&](double s) { return -f(s); }, x[i - 1], x[i + 1], 1e-9);
-            events.push_back({SkyEventType::Transit, start + m.x, -m.fx});
+            events.push_back(highest(x[i - 1], x[i + 1]));
+        }
+    }
+    // The first and the last sample interval have a sample on one side only. There, a window edge
+    // that is higher than the sample next to it means one of two things: the elevation is still
+    // falling from (or rising to) the edge, or it has a maximum between the two, nearer the edge.
+    // The highest point of the interval tells them apart: it is a transit only if it is higher than
+    // the edge. So a maximum exactly at the edge is not one.
+    for (const std::size_t edge : {std::size_t{0}, x.size() - 1}) {
+        const std::size_t inner = edge == 0 ? 1 : edge - 1;
+        if (y[edge] > y[inner]) {
+            const SkyEvent top = highest(std::min(x[edge], x[inner]), std::max(x[edge], x[inner]));
+            if (top.elevation > y[edge]) {
+                events.push_back(top);
+            }
         }
     }
     std::sort(events.begin(), events.end(), [](const SkyEvent& p, const SkyEvent& q) { return p.time < q.time; });

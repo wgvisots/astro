@@ -18,13 +18,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <vector>
 
 #include "astro/astrometry/apparent.h"
 #include "astro/astrometry/refraction.h"
 #include "astro/astrometry/rise_set.h"
 #include "astro/astrometry/spherical.h"
 #include "astro/core/angle.h"
+#include "astro/core/rootfind.h"
 #include "astro/ephemeris/low_precision.h"
 #include "astro/ephemeris/spk.h"
 #include "test_util.h"
@@ -264,6 +267,132 @@ TEST(RiseSet, MoonRiseSetAndPhase) {
     EXPECT_NEAR(wrapPi(nm.age), 0.0, deg2rad(0.5));
     const MoonPhase wax = moonPhase(Time::fromIso8601("2024-02-14T00:00:00Z"), eph);
     EXPECT_TRUE(wax.waxing);
+}
+
+namespace {
+
+/// A day-long cosine "elevation" of 1 rad amplitude, greatest at `peak` and once every `period`
+/// seconds from it.
+std::function<double(const Time&)> cosineElevation(const Time& peak, double period) {
+    return [=](const Time& t) { return std::cos(constants::twoPi * (t - peak) / period); };
+}
+
+/// The transits among `events`.
+std::vector<SkyEvent> transitsOf(const std::vector<SkyEvent>& events) {
+    std::vector<SkyEvent> transits;
+    for (const SkyEvent& e : events) {
+        if (e.type == SkyEventType::Transit) {
+            transits.push_back(e);
+        }
+    }
+    return transits;
+}
+
+// A cosine of period one day is exactly 1 in double precision within 0.15 ms of its peak, so no
+// search can place the peak better than that; twice that is allowed.
+constexpr double kTransitTolerance = 3e-4;
+
+} // namespace
+
+TEST(RiseSet, TransitInTheFirstOrLastSampleIntervalIsFound) {
+    const Time   peak = Time::fromIso8601("2024-03-01T00:00:00Z");
+    const auto   el   = cosineElevation(peak, 86400.0);
+    const double step = 600.0, span = 36000.0; // 60 sample intervals
+    // The peak 0.01 s to 599 s after the start of the window, and as far before its end. Up to half
+    // a step from the edge, the edge sample is higher than the one next to it.
+    for (double offset : {0.01, 1.0, 100.0, 299.0, 301.0, 450.0, 599.0}) {
+        SCOPED_TRACE(offset);
+        const auto atStart = transitsOf(findElevationEvents(el, peak - offset, peak - offset + span, 2.0, step));
+        ASSERT_EQ(atStart.size(), 1u);
+        EXPECT_NEAR(atStart[0].time - peak, 0.0, kTransitTolerance);
+        EXPECT_NEAR(atStart[0].elevation, 1.0, 3e-16); // 0.3 ms from the peak the cosine is 1 - 2.4e-16
+        const auto atEnd = transitsOf(findElevationEvents(el, peak + offset - span, peak + offset, 2.0, step));
+        ASSERT_EQ(atEnd.size(), 1u);
+        EXPECT_NEAR(atEnd[0].time - peak, 0.0, kTransitTolerance);
+        EXPECT_NEAR(atEnd[0].elevation, 1.0, 3e-16);
+    }
+}
+
+TEST(RiseSet, WindowEdgeIsNotATransit) {
+    const Time   peak = Time::fromIso8601("2024-03-01T00:00:00Z");
+    const auto   el   = cosineElevation(peak, 86400.0);
+    const double step = 600.0;
+    // Falling all through the window, and rising all through it: the highest point of the window is
+    // its edge, which is not a maximum of the elevation.
+    EXPECT_TRUE(transitsOf(findElevationEvents(el, peak + 1000.0, peak + 31000.0, 2.0, step)).empty());
+    EXPECT_TRUE(transitsOf(findElevationEvents(el, peak - 31000.0, peak - 1000.0, 2.0, step)).empty());
+    // The maximum exactly at the start, or exactly at the end, of the window is not reported either:
+    // from inside the window it looks the same.
+    EXPECT_TRUE(transitsOf(findElevationEvents(el, peak, peak + 30000.0, 2.0, step)).empty());
+    EXPECT_TRUE(transitsOf(findElevationEvents(el, peak - 30000.0, peak, 2.0, step)).empty());
+}
+
+TEST(RiseSet, EveryTransitIsFoundOnceByWindowsLaidEndToEnd) {
+    // Day-long windows, with a peak that comes 37 s later each day: it starts 500 s before the first
+    // window, crosses a window boundary on the way, and is within half a step of one for 16 days.
+    const Time            t0  = Time::fromIso8601("2024-03-01T00:00:00Z");
+    const double          day = 86400.0, period = day + 37.0;
+    const auto            el   = cosineElevation(t0 - 500.0, period);
+    const int             days = 40;
+    std::vector<SkyEvent> found;
+    for (int d = 0; d < days; ++d) {
+        const auto transits = transitsOf(findElevationEvents(el, t0 + d * day, t0 + (d + 1) * day, 2.0, 600.0));
+        found.insert(found.end(), transits.begin(), transits.end());
+    }
+    // Peak k is at t0 - 500 + k * period; those of k = 1 .. 39 are inside the 40 days. Peak 14 is 18 s
+    // after a boundary, peak 13 is 19 s before one.
+    std::vector<double> expected;
+    for (int k = 0; k <= days; ++k) {
+        const double s = -500.0 + k * period;
+        if (s > 0.0 && s < days * day) {
+            expected.push_back(s);
+        }
+    }
+    ASSERT_EQ(expected.size(), 39u);
+    ASSERT_EQ(found.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_NEAR(found[i].time - t0, expected[i], kTransitTolerance) << i;
+    }
+}
+
+TEST(RiseSet, SolarTransitNextToMidnightUtcIsFoundInDailyWindows) {
+    // At 17 S 179 E the Sun transits within 20 minutes of 00:00 UTC all year, so day-long windows
+    // from 00:00 UTC have the transit next to an edge.
+    const LowPrecisionEphemeris eph;
+    const ConstantEop           eop;
+    const Geodetic              site{deg2rad(-17.0), deg2rad(179.0), 0.0};
+    const Time                  t0   = Time::fromIso8601("2024-01-01T00:00:00Z");
+    const double                day  = 86400.0;
+    const int                   days = 366;
+    std::vector<double>         found; // seconds after t0
+    for (int d = 0; d < days; ++d) {
+        for (const SkyEvent& e : transitsOf(sunRiseSet(site, t0 + d * day, t0 + (d + 1) * day, eop, eph))) {
+            found.push_back(e.time - t0);
+        }
+    }
+    // Truth, without the search under test: near each midnight the elevation has its maximum where the
+    // elevations 30 s before and 30 s after are equal (exact for a parabola, which the top of the
+    // Sun's path is over a minute).
+    std::vector<double> expected;
+    for (int d = 0; d <= days; ++d) {
+        const auto slope = [&](double s) {
+            return bodyElevation(Body::Sun, t0 + (s + 30.0), site, eop, eph)
+                 - bodyElevation(Body::Sun, t0 + (s - 30.0), site, eop, eph);
+        };
+        const double s = brentRoot(slope, d * day - 1800.0, d * day + 1800.0, 1e-6);
+        if (s > 0.0 && s < days * day) {
+            expected.push_back(s);
+        }
+    }
+    ASSERT_EQ(expected.size(), 366u);
+    // Each expected transit is found, and nothing else is. The two times agree to 1.4 ms at worst
+    // over the year; 10 ms is allowed.
+    std::size_t lost = 0;
+    for (double s : expected) {
+        lost += std::none_of(found.begin(), found.end(), [&](double f) { return std::abs(f - s) < 0.01; });
+    }
+    EXPECT_EQ(lost, 0u) << "of " << expected.size() << " transits";
+    EXPECT_EQ(found.size(), expected.size());
 }
 
 TEST(Sidereal, LocalSiderealTimeAndHourAngle) {
