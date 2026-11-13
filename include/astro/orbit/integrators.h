@@ -101,9 +101,9 @@ template <std::size_t N, class F>
 struct AdaptiveOptions {
     double relTol{1e-12};      ///< relative error tolerance per component
     double absTol{1e-9};       ///< absolute error tolerance per component (units of y)
-    double initialStep{60.0};  ///< size of the first trial step (clipped to |t1 - t0|)
+    double initialStep{60.0};  ///< size of the first trial step (clipped to |t1 - t0| and to maxStep)
     double minStep{1e-6};      ///< smallest step; throws astro::Error if the error is still too large
-    double maxStep{1e30};      ///< largest step
+    double maxStep{1e30};      ///< largest step, the first included
     int    maxSteps{10000000}; ///< limit on attempted steps; throws astro::Error when exceeded
     /// Only the first errorComponents components enter the error control (e.g. the state but not
     /// an attached state transition matrix). Default: all.
@@ -121,6 +121,18 @@ struct AdaptiveStats {
 /// onStep(tPrev, yPrev, t, y) after every accepted step. Use it for dense output: let the
 /// integrator choose its own steps and interpolate between them. If onStep returns bool, false
 /// stops the integration after that step (e.g. once an event is found) and returns its end state.
+///
+/// **What the error control cannot see.** Fehlberg's estimate compares derivative evaluations at
+/// the two ends of the step. A part of f that depends on t alone (a thrust profile a(t), say)
+/// cancels in it exactly, whatever its shape, so the step is chosen for the rest of f only. For such
+/// a term that varies smoothly, set AdaptiveOptions::maxStep to a fraction of the time over which it
+/// changes; where it jumps (an engine switching on or off), end the integration at the jump and
+/// start a new one there. Terms that depend on the state are not affected.
+///
+/// Throws astro::Error if t0 or t1 is not finite, if the options are unusable (a zero or
+/// non-finite initial step, maxStep not positive, minStep negative or above maxStep, negative
+/// tolerances or both zero), if f returns a value that is not finite and a smaller step does not
+/// cure it, if the error stays too large at minStep, or after maxSteps attempts.
 template <std::size_t N, class F, class OnStep>
 OdeState<N> integrateRkf78Steps(F&&                    f,
                                 double                 t0,
@@ -156,11 +168,19 @@ OdeState<N> integrateRkf78Steps(F&&                    f,
                                       0.0, 41.0 / 840.0, 41.0 / 840.0};
     // clang-format on
 
+    if (!std::isfinite(t0) || !std::isfinite(t1)) {
+        throw Error("integrateRkf78: t0 and t1 must be finite");
+    }
+    if (!std::isfinite(opt.initialStep) || opt.initialStep == 0.0 || !(opt.maxStep > 0.0) || !(opt.minStep >= 0.0)
+        || !(opt.minStep <= opt.maxStep) || !(opt.relTol >= 0.0) || !(opt.absTol >= 0.0)
+        || !(opt.relTol + opt.absTol > 0.0)) {
+        throw Error("integrateRkf78: unusable options (steps and tolerances must be positive and finite)");
+    }
     if (t1 == t0) {
         return y;
     }
     const double                dir = t1 > t0 ? 1.0 : -1.0;
-    double                      h   = dir * std::min(std::abs(opt.initialStep), std::abs(t1 - t0));
+    double                      h   = dir * std::min({std::abs(opt.initialStep), std::abs(t1 - t0), opt.maxStep});
     double                      t   = t0;
     std::array<OdeState<N>, 13> k;
     AdaptiveStats               st;
@@ -181,17 +201,30 @@ OdeState<N> integrateRkf78Steps(F&&                    f,
         st.evaluations      += 13;
         OdeState<N> yn       = y;
         double      errNorm  = 0.0;
+        bool        finite   = true;
         for (std::size_t i = 0; i < N; ++i) {
             double acc = 0.0;
             for (int s = 0; s < 13; ++s) {
                 acc += b8[s] * k[static_cast<std::size_t>(s)][i];
             }
-            yn[i] += h * acc;
+            yn[i]  += h * acc;
+            finite  = finite && std::isfinite(yn[i]);
             if (i < opt.errorComponents) {
                 const double err = h * 41.0 / 840.0 * (k[0][i] + k[10][i] - k[11][i] - k[12][i]);
                 const double sc  = opt.absTol + opt.relTol * std::max(std::abs(y[i]), std::abs(yn[i]));
                 errNorm          = std::max(errNorm, std::abs(err) / sc);
             }
+        }
+        if (!finite || !std::isfinite(errNorm)) {
+            // f returned something that is not a number (std::max above would drop it silently). A
+            // step into a singularity can do that, so try a shorter one; at the smallest step the
+            // fault is in f or in the state itself.
+            if (std::abs(h) <= opt.minStep) {
+                throw Error("integrateRkf78: the derivative or the state is not finite");
+            }
+            ++st.rejected;
+            h = dir * std::max(0.2 * std::abs(h), opt.minStep);
+            continue;
         }
         if (errNorm <= 1.0) {
             bool more = true;

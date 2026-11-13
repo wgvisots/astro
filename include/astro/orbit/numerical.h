@@ -43,6 +43,10 @@ namespace astro {
 
 /// A perturbing (or central) acceleration. `t` is seconds since the propagator epoch;
 /// r, v are in the propagator's inertial frame.
+///
+/// A force that depends on `t` alone, or has a part that does (a thrust profile, for example), is
+/// invisible to the integrator's step-size control: see integrateRkf78Steps. Bound the step with
+/// AdaptiveOptions::maxStep if it varies smoothly, and start a new propagation where it jumps.
 class ForceModel {
 public:
     virtual ~ForceModel() = default;
@@ -96,7 +100,7 @@ private:
 class ThirdBodyForce final : public ForceModel {
 public:
     /// Perturbation by `body` with gravitational parameter `muBody` (m^3/s^2); its geocentric
-    /// position comes from `ephemeris` at `epoch` + t.
+    /// position comes from `ephemeris` at `epoch` + t. Throws astro::Error if `ephemeris` is null.
     ThirdBodyForce(Body body, double muBody, std::shared_ptr<const Ephemeris> ephemeris, const Time& epoch);
     /// Tidal acceleration (m/s^2) on a satellite at geocentric r: the body's pull on the satellite
     /// minus its pull on the Earth. v is unused.
@@ -157,7 +161,8 @@ struct PropagationEvent {
 class NumericalPropagator {
 public:
     /// Start from position (m) and velocity (m/s) at `epoch`, in the inertial frame the force
-    /// models assume (all outputs are in the same frame). Throws astro::Error if `forces` is empty.
+    /// models assume (all outputs are in the same frame). Throws astro::Error if `forces` is empty
+    /// or holds a null pointer.
     NumericalPropagator(const Time&                                    epoch,
                         const StateVector&                             initial,
                         std::vector<std::shared_ptr<const ForceModel>> forces,

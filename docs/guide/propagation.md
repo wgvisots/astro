@@ -55,6 +55,21 @@ pressure and higher harmonics, which usually dominate.
 pole frame; `ThirdBodyForce` adds the Sun or Moon from any `Ephemeris`; derive from `ForceModel` for
 your own forces. `propagate(dt)` and `propagate(dts)` stop exactly at the requested times instead.
 
+**A grid may lie anywhere relative to the epoch.** It can start before the epoch, span it, or step
+towards it. The integration only ever moves away from the epoch, so every output has the accuracy of
+integrating straight to its own time, and an output at the epoch is the initial state exactly.
+
+**A force that depends on time alone needs a step limit.** The step-size control compares
+evaluations at the two ends of a step [Fehlberg (1968)](https://ntrs.nasa.gov/citations/19680027281).
+A part of the force that depends only on time, such as a thrust profile, cancels in that comparison
+exactly, so the integrator cannot tell when it is stepping over it.
+
+- If such a force varies smoothly, set `AdaptiveOptions::maxStep` to a fraction of the time over
+  which it changes.
+- If it jumps (an engine switching on or off), propagate to the jump and start a new
+  `NumericalPropagator` from the state there.
+- Forces that depend on position or velocity (gravity, drag, third bodies) are not affected.
+
 ## Two-body
 
 <!-- snippet: examples/propagation.cpp#two_body -->

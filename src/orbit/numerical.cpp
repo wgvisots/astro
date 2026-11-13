@@ -129,7 +129,11 @@ ThirdBodyForce::ThirdBodyForce(Body body, double muBody, std::shared_ptr<const E
     : body_(body)
     , mu_(muBody)
     , eph_(std::move(ephemeris))
-    , epoch_(epoch) {}
+    , epoch_(epoch) {
+    if (!eph_) {
+        throw Error("ThirdBodyForce: the ephemeris must not be null");
+    }
+}
 
 Vec3 ThirdBodyForce::acceleration(double t, const Vec3& r, const Vec3& /*v*/) const {
     return thirdBodyAcceleration(r, eph_->position(body_, Body::Earth, epoch_ + t), mu_);
@@ -153,6 +157,11 @@ NumericalPropagator::NumericalPropagator(const Time&                            
     , opt_(options) {
     if (forces_.empty()) {
         throw Error("NumericalPropagator: at least one force model is required");
+    }
+    for (const auto& force : forces_) {
+        if (!force) {
+            throw Error("NumericalPropagator: a force model must not be null");
+        }
     }
 }
 
