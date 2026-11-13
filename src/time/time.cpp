@@ -194,6 +194,22 @@ TimeScale gnssScale(GnssSystem system) {
     return TimeScale::GPS;
 }
 
+// --------------------------------------------------------------- Unix time
+
+// Unix times are accepted up to 1e9 days either side of 1970 (2.7 million years), the span the leap-second
+// table accepts as a Modified Julian Date. Within it the seconds and days are exact integers; a larger value,
+// a NaN or an infinity cannot be converted to an integer at all (undefined behaviour).
+constexpr double kMaxUnixSeconds = 1.0e9 * secondsPerDay;
+
+void requireUnixSeconds(double seconds, const char* what) {
+    if (!std::isfinite(seconds)) {
+        throw Error(std::string("Time::fromUnix: ") + what + " is not finite");
+    }
+    if (std::abs(seconds) > kMaxUnixSeconds) {
+        throw Error(std::string("Time::fromUnix: ") + what + " is out of range (more than 1e9 days from 1970)");
+    }
+}
+
 // --------------------------------------------------------------- ISO-8601 parsing
 
 struct Cursor {
@@ -279,6 +295,9 @@ Time Time::fromCalendar(TimeScale scale, int year, int month, int day, int hour,
     if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
         throw Error("Time::fromCalendar: invalid date");
     }
+    if (!std::isfinite(second)) { // a NaN passes every range check below
+        throw Error("Time::fromCalendar: second is not finite");
+    }
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0.0) {
         throw Error("Time::fromCalendar: invalid time of day");
     }
@@ -303,6 +322,8 @@ Time Time::fromCalendar(TimeScale scale, const CalendarDate& c) {
 }
 
 Time Time::fromUnix(long long wholeSeconds, double fraction) {
+    requireUnixSeconds(static_cast<double>(wholeSeconds), "the whole-second count");
+    requireUnixSeconds(fraction, "the fraction");
     const double fWhole  = std::floor(fraction);
     wholeSeconds        += static_cast<long long>(fWhole);
     fraction            -= fWhole;
@@ -318,6 +339,7 @@ Time Time::fromUnix(long long wholeSeconds, double fraction) {
 }
 
 Time Time::fromUnix(double unixSeconds) {
+    requireUnixSeconds(unixSeconds, "the Unix time");
     const double whole = std::floor(unixSeconds);
     return fromUnix(static_cast<long long>(whole), unixSeconds - whole);
 }
@@ -460,6 +482,10 @@ Time Time::to(TimeScale target, const EopProvider* eop) const {
 }
 
 CalendarDate Time::calendar(int decimals) const {
+    // Refused here, before the day number is turned into an integer (undefined for a NaN or an infinity).
+    if (!std::isfinite(jd_.jd1) || !std::isfinite(jd_.jd2)) {
+        throw Error("Time::calendar: the time is not finite");
+    }
     if (scale_ != TimeScale::UTC) {
         return jd_.toCalendar(decimals);
     }

@@ -98,15 +98,19 @@ public:
     [[nodiscard]] static Time fromMjd(double mjd, TimeScale scale);
     /// From calendar fields in the given scale. For UTC, second may be in
     /// [60, 61) on a day that ends in a leap second. Throws astro::Error for an
-    /// invalid date or time of day.
+    /// invalid date or time of day, which includes a second that is not finite
+    /// (NaN or infinity).
     /// @{
     [[nodiscard]] static Time
     fromCalendar(TimeScale scale, int year, int month, int day, int hour = 0, int minute = 0, double second = 0.0);
     [[nodiscard]] static Time fromCalendar(TimeScale scale, const CalendarDate& cal);
     /// @}
     /// From POSIX/Unix time (seconds since 1970-01-01T00:00:00 UTC, leap seconds not counted). Result is UTC.
+    /// Throws astro::Error if `unixSeconds` is not finite (NaN or infinity) or is more than 1e9 days from 1970.
     [[nodiscard]] static Time fromUnix(double unixSeconds);
-    /// From whole + fractional Unix seconds (full precision). Result is UTC.
+    /// From whole + fractional Unix seconds (full precision). Result is UTC. `fraction` need not be in
+    /// [0, 1): its whole part is carried into the seconds. Throws astro::Error if `fraction` is not finite,
+    /// or if either argument is more than 1e9 days from 1970.
     [[nodiscard]] static Time fromUnix(long long wholeSeconds, double fraction);
     /// From a std::chrono::system_clock time point, read as Unix time
     /// (nanosecond resolution). Result is UTC.
@@ -152,6 +156,8 @@ public:
     /// @}
 
     /// Calendar date in this scale (UTC: leap-second aware, second may be 60.x).
+    /// Throws astro::Error if this time is not finite (it was made from a NaN or
+    /// an infinity).
     [[nodiscard]] CalendarDate calendar(int decimals = 9) const;
     /// ISO-8601 text. UTC ends with 'Z'; other scales get a " TT"-style suffix
     /// unless `withScale` is false. fromIso8601() reads the text back.

@@ -18,6 +18,10 @@
 
 #include "astro/time/time.h"
 
+#include <cmath>
+#include <limits>
+#include <string>
+
 #include "astro/core/error.h"
 #include "astro/frames/eop.h"
 #include "astro/time/leap_seconds.h"
@@ -32,6 +36,21 @@ namespace {
 double diffSec(const JulianDate& a, double b1, double b2) {
     return ((a.jd1 - b1) + (a.jd2 - b2)) * 86400.0;
 }
+
+// `call` must throw astro::Error, and the message must contain `what`.
+template <typename Call>
+void expectErrorSaying(Call&& call, const std::string& what, const char* label) {
+    try {
+        call();
+        ADD_FAILURE() << label << ": no error";
+    } catch (const Error& e) {
+        EXPECT_NE(std::string(e.what()).find(what), std::string::npos)
+            << label << ": expected \"" << what << "\" in the message, which was: " << e.what();
+    }
+}
+
+const double kNaN = std::numeric_limits<double>::quiet_NaN();
+const double kInf = std::numeric_limits<double>::infinity();
 } // namespace
 
 TEST(JulianDate, CalendarRoundTrip) {
@@ -394,4 +413,67 @@ TEST(Time, GlobalLeapSecondTableOverride) {
     EXPECT_NEAR(t.to(TimeScale::TAI).jd().secondsSince(JulianDate::fromCalendar(2030, 1, 1)), 37.5, 1e-9);
     setLeapSecondTable(LeapSecondTable::builtin());
     EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 2029, 12, 31, 23, 59, 60.5), Error);
+}
+
+TEST(Time, NonFiniteSecondsThrowAndSaySo) {
+    // A NaN or an infinity is refused where it comes in, with a message that names it: it must never reach a
+    // conversion to an integer (undefined behaviour) or surface later as an unrelated error.
+    for (const TimeScale scale : {TimeScale::UTC, TimeScale::TT}) {
+        for (const double bad : {kNaN, kInf, -kInf}) {
+            expectErrorSaying([&] { (void)Time::fromCalendar(scale, 2024, 1, 1, 0, 0, bad); },
+                              "not finite",
+                              "fromCalendar");
+            expectErrorSaying([&] { (void)Time::fromCalendar(scale, CalendarDate{2024, 1, 1, 0, 0, bad}); },
+                              "not finite",
+                              "fromCalendar(CalendarDate)");
+        }
+    }
+    for (const double bad : {kNaN, kInf, -kInf}) {
+        expectErrorSaying([&] { (void)Time::fromUnix(bad); }, "not finite", "fromUnix(double)");
+        expectErrorSaying([&] { (void)Time::fromUnix(1700000000LL, bad); }, "not finite", "fromUnix(whole, fraction)");
+    }
+    // Finite, but too large to be turned into whole seconds and days.
+    for (const double big : {1.0e30, -1.0e30}) {
+        expectErrorSaying([&] { (void)Time::fromUnix(big); }, "out of range", "fromUnix(double)");
+        expectErrorSaying([&] { (void)Time::fromUnix(0LL, big); }, "out of range", "fromUnix(whole, fraction)");
+    }
+    expectErrorSaying([] { (void)Time::fromUnix(std::numeric_limits<long long>::max(), 0.5); },
+                      "out of range",
+                      "fromUnix(whole, fraction)");
+    expectErrorSaying([] { (void)Time::fromUnix(std::numeric_limits<long long>::min(), 0.5); },
+                      "out of range",
+                      "fromUnix(whole, fraction)");
+    // A fraction outside [0, 1) is still carried into the whole seconds: 1483228799 + 1.25 s.
+    EXPECT_EQ(Time::fromUnix(1483228799LL, 1.25).iso8601(2), "2017-01-01T00:00:00.25Z");
+}
+
+TEST(Time, CalendarOfANonFiniteTimeThrows) {
+    // A Time made from a NaN Julian date cannot be written as a date in any scale.
+    for (const TimeScale scale : {TimeScale::UTC, TimeScale::TT, TimeScale::GPS}) {
+        for (const double bad : {kNaN, kInf, -kInf}) {
+            const Time t = Time::fromJd(bad, 0.0, scale);
+            expectErrorSaying([&] { (void)t.calendar(); }, "not finite", "calendar");
+            expectErrorSaying([&] { (void)t.iso8601(); }, "not finite", "iso8601");
+        }
+    }
+}
+
+TEST(JulianDate, ToCalendarRejectsNonFiniteAndHugeDates) {
+    for (const double bad : {kNaN, kInf, -kInf}) {
+        expectErrorSaying([&] { (void)JulianDate{bad, 0.0}.toCalendar(); }, "not finite", "jd1");
+        expectErrorSaying([&] { (void)JulianDate{2451545.0, bad}.toCalendar(); }, "not finite", "jd2");
+    }
+    // Finite, but beyond the years an int can hold.
+    expectErrorSaying([] { (void)JulianDate{1.0e30, 0.0}.toCalendar(); }, "out of range", "1e30");
+    expectErrorSaying([] { (void)JulianDate{-1.0e30, 0.0}.toCalendar(); }, "out of range", "-1e30");
+    // Far dates inside the range are unaffected.
+    const CalendarDate far = JulianDate::fromCalendar(99999, 12, 31, 12).toCalendar(3);
+    EXPECT_EQ(far.year, 99999);
+    EXPECT_EQ(far.month, 12);
+    EXPECT_EQ(far.day, 31);
+    EXPECT_EQ(far.hour, 12);
+    const CalendarDate old = JulianDate::fromCalendar(-99999, 1, 1).toCalendar(3);
+    EXPECT_EQ(old.year, -99999);
+    EXPECT_EQ(old.month, 1);
+    EXPECT_EQ(old.day, 1);
 }
