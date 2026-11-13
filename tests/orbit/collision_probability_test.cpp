@@ -93,7 +93,7 @@ TEST(ProbabilityInCircle, AnisotropicMatchesBruteForce) {
         {100.0,  50.0,   400.0,  100.0, 0.3,  20.0}, // typical: miss ~ sigma, R << sigma
         {30.0,   -5.0,   1000.0, 1.0,   0.0,  10.0}, // aspect ratio 1000
         {0.0,    40.0,   5.0,    3.0,   -0.5, 50.0}, // R >> sigma, mean inside near the edge
-        {800.0,  -300.0, 100.0,  60.0,  0.2,  15.0}, // far: probability ~ 1e-14
+        {800.0,  -300.0, 100.0,  60.0,  0.2,  15.0}, // far: probability 6e-26
         {-200.0, 150.0,  300.0,  250.0, 0.95, 5.0 }, // strongly correlated
     };
     for (const Case& c : cases) {
@@ -222,7 +222,7 @@ TEST(CollisionProbability, MatchesMonteCarloOfStraightLineEncounters) {
     std::mt19937                     rng(1992);
     std::normal_distribution<double> n01;
     const Vec3                       u    = normalized(dv);
-    const int                        N    = 400000;
+    const int                        N    = 4000000;
     int                              hits = 0;
     for (int k = 0; k < N; ++k) {
         const Vec3 p   = miss + L * Vec3{n01(rng), n01(rng), n01(rng)};
@@ -231,33 +231,36 @@ TEST(CollisionProbability, MatchesMonteCarloOfStraightLineEncounters) {
     }
     const double mc    = static_cast<double>(hits) / N;
     const double sigma = std::sqrt(pc * (1.0 - pc) / N);
-    EXPECT_NEAR(mc, pc, 5.0 * sigma) << "Pc " << pc;
+    EXPECT_NEAR(mc, pc, 4.0 * sigma) << "Pc " << pc; // 4 sigma is 1.2 % of Pc
     EXPECT_GT(pc, 0.01);
 }
 
 TEST(CollisionProbability, NasaCaraReferenceCases) {
-    // Omitron cases: CARA's highest-accuracy values (RelTol 1e-10 in its test).
+    // Omitron cases (CARA asserts these to RelTol 1e-10 in its unit test).
     EXPECT_NEAR(caraPc(kCara[0], kOmitronHbr), kOmitronPc[0], 1e-12 * kOmitronPc[0]);
     EXPECT_NEAR(caraPc(kCara[1], kOmitronHbr), kOmitronPc[1], 1e-12 * kOmitronPc[1]);
 
     // Omitron 2's states are 2.1 deg from TCA: projecting the miss (the default) gives a slightly
-    // larger Pc than CARA's convention.
+    // larger Pc than CARA's convention (0.017 %).
     CloseApproach raw;
     raw.first               = {kCara[1].r1, kCara[1].v1};
     raw.second              = {kCara[1].r2, kCara[1].v2};
     Mat3 c1                 = kCara[1].c1;
     c1                     *= kCara[1].c1Scale;
     const double projected  = collisionProbability(raw, c1, kCara[1].c2, kOmitronHbr).probability;
-    EXPECT_GT(projected, kOmitronPc[1]);
-    EXPECT_LT(projected, kOmitronPc[1] * 1.001);
+    EXPECT_NEAR(projected / kOmitronPc[1] - 1.0, 1.65e-4, 0.05e-4);
 
-    // One geometry over a range of hard-body radii. The plane covariance here has sigmas of 123 km
-    // and 19 m, and from 1 km up CARA's default quadrature is off by 1-3e-4 relative (a brute-force
-    // grid agrees with collisionProbability to 1e-13; astro_study_conjunctions prints both):
-    // compare to CARA's own stated accuracy, 1e-3, there.
+    // One geometry over a range of hard-body radii. Its plane covariance has sigmas of 123 km and
+    // 18.6 m, with the miss 7 sigma along the narrow axis, so CARA's values are not exact:
+    //  - at 10 m and 100 m they are 2.0e-8 and 1.9e-9 from an evaluation with exactly computed
+    //    principal axes: the rounding of the minor variance formed as a difference,
+    //    epsilon * (123 km / 18.6 m)^2 (collisionProbability forms it as determinant / major);
+    //  - from 1 km up the default 64-point quadrature is off by 1-3e-4.
+    // astro_study_conjunctions prints all of these against a brute-force grid.
+    const double tolerance[] = {1e-7, 1e-8, 1e-3, 1e-3, 1e-3, 1e-3};
     for (int k = 0; k < 6; ++k) {
-        const double tol = (kMultiRadiusHbr[k] < 1e3 ? 1e-12 : 1e-3) * kMultiRadiusPc[k];
-        EXPECT_NEAR(caraPc(kCara[2], kMultiRadiusHbr[k]), kMultiRadiusPc[k], tol) << kMultiRadiusHbr[k];
+        EXPECT_NEAR(caraPc(kCara[2], kMultiRadiusHbr[k]), kMultiRadiusPc[k], tolerance[k] * kMultiRadiusPc[k])
+            << kMultiRadiusHbr[k];
     }
 
     // Alfano (2009) cases 5-7 against Alfano's linear Pc, which CARA tests to 1e-3. These are slow
@@ -265,6 +268,54 @@ TEST(CollisionProbability, NasaCaraReferenceCases) {
     for (int k = 0; k < 3; ++k) {
         EXPECT_NEAR(caraPc(kCara[3 + k], kAlfanoHbr), kAlfanoLinearPc[k], 1e-3 * kAlfanoLinearPc[k])
             << "Alfano case " << 5 + k;
+    }
+}
+
+TEST(ProbabilityInCircle, NearSingularCovariances) {
+    // A covariance far narrower than the circle, with the narrow axis's line at the circle's edge:
+    // the integrand along the major axis is then a peak or a step much narrower than the range.
+    // (Before the range was cut at those features, the first case returned 0 and the second took
+    // minutes.) Reference: the integral taken the other way round.
+    struct Case {
+        double mx, my, sx, sy, R;
+    };
+    const Case cases[] = {
+        {3.0,       10.00003,  0.5,  1e-5, 10.0}, // 3 sigma outside the edge: Pc 2.2e-13
+        {3.0,       10.0003,   0.5,  1e-4, 10.0},
+        {3.0,       10.0003,   10.0, 1e-4, 10.0},
+        {1.0,       10.003,    1.0,  1e-3, 10.0},
+        {3.0,       10.008,    0.5,  2e-3, 10.0},
+        {3.0,       10.03,     0.5,  5e-3, 10.0}, // Pc 4.6e-18
+        {3.0,       9.99997,   0.5,  1e-5, 10.0}, // 3 sigma inside the edge
+        {3.0,       9.5,       0.5,  1e-5, 10.0}, // well inside: the chord is cut by the line
+        {7.0710678, 7.0710678, 1e-3, 1e-5, 10.0}, // a point-like cloud on the edge, at 45 deg
+    };
+    for (const Case& c : cases) {
+        const double ref = crossAxisReference(c.mx, c.my, c.sx, c.sy, c.R);
+        ASSERT_GT(ref, 0.0);
+        EXPECT_NEAR(probabilityInCircle(c.mx, c.my, c.sx * c.sx, 0.0, c.sy * c.sy, c.R), ref, 1e-9 * ref)
+            << c.mx << " " << c.my << " " << c.sx << " " << c.sy;
+    }
+}
+
+TEST(ProbabilityInCircle, RotatedElongatedCovariance) {
+    // Standard deviations 6000 and 0.8 at an angle. The entries are integers, so the determinant,
+    // and with it the minor variance, is exact in double arithmetic here. Formed as
+    // mean - sqrt(...) it is off by 7e-10, which is 1e-9 to 1e-8 in a probability this far out along
+    // the minor axis. The reference takes the two standard deviations directly.
+    const double xx = 12960001.0, yy = 23040000.0, xy = 17280000.0;
+    const double major = 0.5 * (xx + yy) + std::hypot(0.5 * (xx - yy), xy);
+    const double minor = (xx * yy - xy * xy) / major; // both products are below 2^53: exact
+    EXPECT_NEAR(minor, 0.64, 1e-6);
+    const double angle = 0.5 * std::atan2(2.0 * xy, xx - yy);
+    const double c = std::cos(angle), s = std::sin(angle);
+    for (double v : {4.0, 4.8, 6.4, 8.0}) {                           // offset along the minor axis: 5 to 10 sigma
+        const double mx = -s * v + c * 100.0, my = c * v + s * 100.0; // and 100 along the major axis
+        const double ref = crossAxisReference(100.0, v, std::sqrt(major), std::sqrt(minor), 3.0);
+        ASSERT_GT(ref, 0.0);
+        EXPECT_NEAR(probabilityInCircle(mx, my, xx, xy, yy, 3.0), ref, 1e-10 * ref) << v;
+        // The same along its own axes.
+        EXPECT_NEAR(probabilityInCircle(100.0, v, major, 0.0, minor, 3.0), ref, 1e-10 * ref) << v;
     }
 }
 

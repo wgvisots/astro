@@ -86,17 +86,20 @@ From `astro_conjunction_bench`, 1-day window:
 
 | Call | Time |
 |---|---|
-| `closestApproach`, two LEO objects, two-body | 0.69 ms (about 2000 samples) |
-| `closestApproach`, two LEO objects, secular J2/J4 | 0.45 ms |
-| `closestApproach`, LEO and GTO, two-body | 0.71 ms |
-| `closeApproaches` (every minimum), two LEO objects, two-body | 0.64 ms |
-| `probabilityInCircle`, typical (miss ~ sigma, radius << sigma) | 6.4 us |
-| `probabilityInCircle`, 1000:1 covariance | 10.3 us |
-| `probabilityInCircle`, radius >> sigma | 12.8 us |
-| `probabilityInCircle`, 123 km x 19 m covariance, 30 km radius | 14.6 us |
-| `collisionProbability`, 200 m miss (projection + `probabilityInCircle`) | 6.5 us |
-| `assessConjunction`, two LEO objects, two-body (search, covariances, probability) | 0.67 ms |
-| `assessConjunction`, two LEO objects, secular J2/J4 | 0.41 ms |
+| `closestApproach`, two LEO objects, two-body | 0.66 ms (about 2000 samples) |
+| `closestApproach`, two LEO objects, secular J2/J4 | 0.40 ms |
+| `closestApproach`, LEO and GTO, two-body | 0.72 ms |
+| `closeApproaches` (every minimum), two LEO objects, two-body | 0.65 ms |
+| `probabilityInCircle`, typical (miss ~ sigma, radius << sigma) | 6.7 us |
+| `probabilityInCircle`, 1000:1 covariance | 12.6 us |
+| `probabilityInCircle`, radius >> sigma | 17.5 us |
+| `probabilityInCircle`, 123 km x 19 m covariance, 30 km radius | 9-12 us |
+| `collisionProbability`, 200 m miss (projection + `probabilityInCircle`) | 6.8 us |
+| `assessConjunction`, two LEO objects, two-body (search, covariances, probability) | 0.66 ms |
+| `assessConjunction`, two LEO objects, secular J2/J4 | 0.42 ms |
+
+Near-singular covariances at the circle's edge take 10-20 us in the cases of the study and up to
+0.12 ms in a random search; the refinement is capped at ~1 ms whatever the input.
 
 Over the 300 random orbit pairs of `astro_study_conjunctions` (LEO to 66 700 km, e up to 0.9), a
 1-day search averages 0.21 ms at the default step: higher orbits need fewer samples.

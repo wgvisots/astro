@@ -18,9 +18,12 @@
 
 #pragma once
 
+#include <concepts>
 #include <functional>
 #include <iosfwd>
 #include <limits>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <boost/describe/enum.hpp>
@@ -85,9 +88,16 @@ public:
                const EquinoctialElements& elements,
                TrajectoryModel            model = TrajectoryModel::TwoBody,
                const ZonalParameters&     zp    = {});
-    /// Any trajectory, e.g. `[&prop](const Time& t) { return prop.propagate(t); }`. Throws
-    /// astro::Error if `stateAt` is empty.
+    /// Any trajectory. Throws astro::Error if `stateAt` is empty.
     Trajectory(StateFunction stateAt);
+    /// Any callable taking a Time and returning a StateVector, so that a lambda can be passed
+    /// wherever a Trajectory is expected: `[&prop](const Time& t) { return prop.propagate(t); }`.
+    template <class F>
+        requires(!std::same_as<std::remove_cvref_t<F>, Trajectory>
+                 && !std::same_as<std::remove_cvref_t<F>, StateFunction>
+                 && std::is_invocable_r_v<StateVector, F&, const Time&>)
+    Trajectory(F&& stateAt)
+        : Trajectory(StateFunction(std::forward<F>(stateAt))) {}
 
     /// Position (m) and velocity (m/s) at time t.
     [[nodiscard]] StateVector state(const Time& t) const;
@@ -112,8 +122,10 @@ struct CloseApproachOptions {
     /// than one step can be missed; 0.1 still found every minimum in a test of 300 random orbit
     /// pairs, 0.2 missed 2 of 1245 (astro_study_conjunctions). Steps are at least 1 ms.
     double stepFraction{0.05};
-    /// Time of closest approach tolerance (s). The miss distance is stationary there, so its error
-    /// is second order: ~|dv|^2 dt^2 / (2 d), micrometres or less at the default.
+    /// Time of closest approach tolerance (s). The miss distance d is stationary there, so its
+    /// error is second order, ~|dv|^2 dt^2 / (2 d): below a micrometre at the default for misses
+    /// over ~100 m at 15 km/s. It can never exceed |dv| dt (15 mm at 15 km/s), which is what a
+    /// near-zero miss gets.
     double timeTolerance{1e-6};
 };
 
@@ -155,9 +167,12 @@ struct CloseApproach {
                                             const Time&                 end,
                                             const CloseApproachOptions& options = {});
 
-/// Every local minimum of the distance strictly inside [start, end] (zero range rate, so never
-/// atBoundary) that is no farther than `maxDistance` (m), in time order: a conjunction list. Same
-/// search and errors as closestApproach.
+/// Every local minimum of the distance in (start, end] that is no farther than `maxDistance` (m),
+/// in time order: a conjunction list. Each is a point of zero range rate reached while closing, so
+/// none is flagged atBoundary; one that falls exactly on `end` is included, one exactly on `start`
+/// is not. Objects that keep a constant distance (the same orbit, a fixed phase apart) have no
+/// minimum: a change of sign of the range rate within its rounding error is ignored. Same search
+/// and errors as closestApproach.
 [[nodiscard]] std::vector<CloseApproach> closeApproaches(const Trajectory& first,
                                                          const Trajectory& second,
                                                          const Time&       start,
@@ -168,13 +183,19 @@ struct CloseApproach {
 /// Probability that a 2-D Gaussian point with mean (mx, my) and covariance [[xx, xy], [xy, yy]]
 /// (m^2) lies within `radius` (m) of the origin.
 ///
-/// The covariance is rotated to its principal axes. Along the minor axis the integral over the
-/// circle's chord is exact (error functions, in complementary form for small probabilities); along
-/// the major axis it is integrated numerically with u = radius sin t, which removes the square-root
-/// end points, by adaptive Gauss-Kronrod (7-15; Piessens et al. 1983, QUADPACK) to ~1e-12 relative:
-/// the 1-D form of Alfano (2005a). A singular covariance (one or both standard deviations zero) is
-/// handled exactly. Probabilities below ~1e-45 come out as 0. Throws astro::Error for a radius
-/// that is not positive and finite, or a covariance that is not positive semi-definite.
+/// The covariance is rotated to its principal axes (the minor variance as determinant / major
+/// variance, which stays accurate however elongated the ellipse). Along the minor axis the integral
+/// over the circle's chord is exact (error functions, in complementary form for small
+/// probabilities); along the major axis it is integrated numerically with u = radius sin t, which
+/// removes the square-root end points, by adaptive Gauss-Kronrod (7-15; Piessens et al. 1983,
+/// QUADPACK): the 1-D form of Alfano (2005a). The range is cut where the chord meets the minor
+/// axis's offset, so that a covariance far narrower than the circle is not stepped over.
+///
+/// Relative accuracy ~1e-12, and ~1e-11 for a near-singular covariance whose axis grazes the
+/// circle; 7-20 us, at most ~1 ms. A singular covariance (one or both standard deviations zero) is
+/// handled exactly. A mean more than 15 standard deviations outside the circle along the major axis
+/// gives 0 (the probability is below ~1e-49). Throws astro::Error for a radius that is not positive
+/// and finite, a non-finite argument, or a covariance that is not positive semi-definite.
 [[nodiscard]] double probabilityInCircle(double mx, double my, double xx, double xy, double yy, double radius);
 
 /// The collision probability of one approach, and the encounter-plane quantities behind it.
@@ -208,10 +229,10 @@ struct CollisionProbability {
 /// That holds when the encounter is short: the objects cross the region of their uncertainty in a
 /// small fraction of an orbit, as for relative speeds of km/s. For slow, nearly co-orbital
 /// encounters (m/s) the relative motion curves during the encounter and the result is not reliable
-/// (Patera 2001 treats curved relative motion). Use the approach's own states (a true closest
+/// (Patera 2003 treats curved relative motion). Use the approach's own states (a true closest
 /// approach, not atBoundary) for the encounter plane. Throws astro::Error for a radius that is not
-/// positive and finite, a zero relative velocity, or a covariance that is not finite and positive
-/// semi-definite in the plane.
+/// positive and finite, a non-finite state, a zero relative velocity, or a covariance that is not
+/// finite and positive semi-definite in the plane.
 [[nodiscard]] CollisionProbability collisionProbability(const CloseApproach& approach,
                                                         const Mat3&          covariance1,
                                                         const Mat3&          covariance2,

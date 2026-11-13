@@ -109,8 +109,9 @@ TEST(ConjunctionAssessment, MatchesMonteCarloOfInitialStates) {
     // End to end: draw both initial states from their covariances, propagate each draw, find its
     // closest approach, and count the draws that pass within the hard-body radius. Checks the
     // propagated covariances (linear over the hour) and the short-term encounter model together.
+    // The radius is large enough for Pc ~ 0.3, so that 100 000 draws resolve it to 0.5 %.
     const Crossing60            c;
-    const double                sr = 10.0, sv = 0.005, hbr = 20.0;
+    const double                sr = 10.0, sv = 0.005, hbr = 60.0;
     const Mat6                  P = diagonalCovariance(sr, sv);
     const ConjunctionAssessment a =
         assessConjunction({c.epoch, c.first, P}, {c.epoch, c.second, P}, c.tca - 600.0, c.tca + 600.0, hbr);
@@ -124,7 +125,7 @@ TEST(ConjunctionAssessment, MatchesMonteCarloOfInitialStates) {
             s.v + sv * Vec3{n01(rng), n01(rng), n01(rng)}
         };
     };
-    const int N    = 40000;
+    const int N    = 100000;
     int       hits = 0;
     for (int k = 0; k < N; ++k) {
         const StateVector a1 = draw(c.first), a2 = draw(c.second);
@@ -132,8 +133,8 @@ TEST(ConjunctionAssessment, MatchesMonteCarloOfInitialStates) {
     }
     const double mc    = static_cast<double>(hits) / N;
     const double sigma = std::sqrt(pc * (1.0 - pc) / N);
-    EXPECT_NEAR(mc, pc, 5.0 * sigma) << "Pc " << pc;
-    EXPECT_GT(pc, 0.01);
+    EXPECT_NEAR(mc, pc, 4.0 * sigma) << "Pc " << pc; // 4 sigma is ~2 % of Pc
+    EXPECT_GT(pc, 0.2);
 }
 
 TEST(ConjunctionAssessment, SecularModel) {
