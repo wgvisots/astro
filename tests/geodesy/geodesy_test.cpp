@@ -16,6 +16,9 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <cmath>
+#include <limits>
+#include <numbers>
 #include <random>
 
 #include "astro/core/angle.h"
@@ -85,6 +88,98 @@ TEST(Geodetic, InsideEvoluteFallback) {
         const Geodetic g = ecefToGeodetic(p);
         expectVecNear(geodeticToEcef(g), p, 1e-6, "evolute");
     }
+}
+
+namespace {
+
+/// Geodetic colatitude (pi/2 - latitude) and height of a point of a meridian plane.
+struct MeridianReference {
+    long double colatitude; ///< rad
+    long double height;     ///< m
+};
+
+/// Reference for ecefToGeodetic() at the point (rho, z), rho >= 0 and z >= 0, of a meridian plane:
+/// extended precision, and a different route from the library's. With g the parametric (reduced)
+/// colatitude, the distance from (rho, z) to the point (a sin g, b cos g) of the ellipse is stationary
+/// where
+///     a rho cos g - b z sin g - (a^2 - b^2) sin g cos g = 0.
+/// Measuring g from the pole makes the pole exactly g = 0, so a root 1e-18 rad from it is found as
+/// surely as any other. Every root in the quadrant is bracketed on a fine scan and refined by
+/// bisection; the pole is one more when rho = 0, and the equator when z = 0. The nearest of these
+/// points is the answer, and tan(colatitude) = (b / a) tan g.
+MeridianReference meridianReference(long double rho, long double z, const Ellipsoid& ell) {
+    const long double a      = ell.a;
+    const long double b      = a * (1.0L - static_cast<long double>(ell.f));
+    const long double halfPi = std::numbers::pi_v<long double> / 2.0L;
+    const auto        slope  = [&](long double g) {
+        return a * rho * std::cos(g) - b * z * std::sin(g) - (a * a - b * b) * std::sin(g) * std::cos(g);
+    };
+    const auto distance2 = [&](long double g) {
+        const long double dRho = rho - a * std::sin(g), dZ = z - b * std::cos(g);
+        return dRho * dRho + dZ * dZ;
+    };
+    long double best = 0.0L, bestDistance2 = std::numeric_limits<long double>::infinity();
+    const auto  consider = [&](long double g) {
+        if (distance2(g) < bestDistance2) {
+            bestDistance2 = distance2(g);
+            best          = g;
+        }
+    };
+    if (rho == 0.0L) {
+        consider(0.0L);
+    }
+    if (z == 0.0L) {
+        consider(halfPi);
+    }
+    constexpr int n = 4096;
+    for (int i = 0; i < n; ++i) {
+        long double lo = halfPi * i / n, hi = halfPi * (i + 1) / n;
+        if ((slope(lo) > 0.0L) == (slope(hi) > 0.0L)) {
+            continue;
+        }
+        for (int it = 0; it < 100; ++it) {
+            const long double mid                                 = 0.5L * (lo + hi);
+            ((slope(mid) > 0.0L) == (slope(lo) > 0.0L) ? lo : hi) = mid;
+        }
+        consider(0.5L * (lo + hi));
+    }
+    const bool inside = (rho / a) * (rho / a) + (z / b) * (z / b) < 1.0L;
+    return {std::atan2(b * std::sin(best), a * std::cos(best)), (inside ? -1.0L : 1.0L) * std::sqrt(bestDistance2)};
+}
+
+} // namespace
+
+TEST(Geodetic, OnAndNextToThePolarAxisMatchesExtendedPrecision) {
+    // Distances from the polar axis from zero up to a metre, at heights inside the evolute (it reaches
+    // 42.84 km along the axis for WGS84), just outside it, and at the surface. Next to the axis the
+    // nearest point of the ellipsoid is next to the pole: the latitude must approach +-90 deg, and the
+    // height |z| - b, continuously as the distance goes to zero.
+    const Ellipsoid   ell    = Ellipsoid::wgs84();
+    const long double halfPi = std::numbers::pi_v<long double> / 2.0L;
+    const double      lon    = 2.0;
+    for (double z : {0.0, 1.0, 1000.0, 20000.0, 42000.0, 42800.0, 42900.0, 1.0e5, 6.4e6}) {
+        for (double rho : {0.0, 1e-300, 1e-13, 1e-12, 3e-12, 1e-11, 1e-9, 1e-3, 1.0}) {
+            const MeridianReference ref = meridianReference(rho, z, ell);
+            for (double sign : {1.0, -1.0}) {
+                const Geodetic g = ecefToGeodetic({rho * std::cos(lon), rho * std::sin(lon), sign * z}, ell);
+                SCOPED_TRACE(testing::Message() << "rho = " << rho << " m, z = " << sign * z << " m");
+                // 1e-15 rad: a few units in the last place of pi/2 (2.2e-16).
+                const long double latError = std::abs(static_cast<long double>(g.lat)) - (halfPi - ref.colatitude);
+                EXPECT_NEAR(static_cast<double>(latError), 0.0, 1e-15);
+                if (z > 0.0) {
+                    EXPECT_EQ(std::signbit(g.lat), sign < 0.0);
+                }
+                // 1e-8 m: the library's own bound for the height (rounding of terms of size a).
+                EXPECT_NEAR(static_cast<double>(static_cast<long double>(g.h) - ref.height), 0.0, 1e-8);
+                // The longitude is that of the point, however close to the axis; on the axis it is 0.
+                EXPECT_NEAR(g.lon, rho > 0.0 ? lon : 0.0, 1e-15);
+            }
+        }
+    }
+    // The reviewer's point: 1e-13 m from the axis, 1 km north of the center.
+    const Geodetic g = ecefToGeodetic({1e-13, 0.0, 1000.0}, ell);
+    EXPECT_NEAR(g.lat, constants::halfPi, 1e-15);
+    EXPECT_NEAR(g.h, 1000.0 - ell.b(), 1e-8);
 }
 
 TEST(Geodetic, Latitudes) {
