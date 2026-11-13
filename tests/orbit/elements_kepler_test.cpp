@@ -672,3 +672,99 @@ TEST(Elements, EquinoctialElementsAreDefinedForEllipsesOnly) {
     EXPECT_NEAR(std::hypot(qe.h, qe.k), 0.999, 1e-14);
     EXPECT_NO_THROW((void)equinoctialToKeplerian(qe));
 }
+
+// ------------------------------------------------------------------------- Secular helpers
+
+namespace {
+
+/// The first-order J2 secular rates (Brouwer 1959) written out in their textbook form, for checking
+/// the design helpers without the library's secularRates.
+struct J2Rates {
+    double raanDot, argpDot, meanAnomalyDot;
+};
+
+J2Rates j2Rates(double a, double e, double i, const ZonalParameters& zp) {
+    const double n  = std::sqrt(zp.mu / (a * a * a));
+    const double p  = a * (1.0 - e * e);
+    const double k  = 1.5 * n * zp.J2 * (zp.re / p) * (zp.re / p);
+    const double ci = std::cos(i);
+    return {-k * ci, 0.5 * k * (5.0 * ci * ci - 1.0), n + 0.5 * k * std::sqrt(1.0 - e * e) * (3.0 * ci * ci - 1.0)};
+}
+
+} // namespace
+
+TEST(Secular, RepeatGroundTrackSatisfiesTheRepeatCondition) {
+    // revs nodal periods must equal days nodal days.
+    const ZonalParameters zp;
+    struct Case {
+        int    revs, days;
+        double e, i;
+    };
+    // clang-format off
+    const Case cases[] = {{233, 16, 0.0,   deg2rad(98.2)},
+                          {15,  1,  0.001, deg2rad(51.6)},
+                          {2,   1,  0.72,  deg2rad(63.4)},
+                          {1,   1,  0.0,   0.0          }};
+    // clang-format on
+    for (const Case& c : cases) {
+        const double  a = repeatGroundTrackSemiMajorAxis(c.revs, c.days, c.e, c.i, zp);
+        const J2Rates r = j2Rates(a, c.e, c.i, zp);
+        // The iteration stops when a changes by less than 1e-13 of itself.
+        EXPECT_NEAR((r.meanAnomalyDot + r.argpDot) * c.days / ((constants::earthRotationRate - r.raanDot) * c.revs),
+                    1.0,
+                    1e-12)
+            << c.revs << " revolutions in " << c.days << " days";
+    }
+}
+
+TEST(Secular, RepeatGroundTrackThrowsInsteadOfReturningAnUnconvergedValue) {
+    // The audit's reproducer returned 0.000 km: with e = 0.99 the perigee of a 12 h orbit is deep
+    // inside the Earth, the J2 node rate is so large that no semi-major axis satisfies the repeat
+    // condition, and the iteration ran away towards a = 0.
+    EXPECT_THROW((void)repeatGroundTrackSemiMajorAxis(2, 1, 0.99, 1.1), Error);
+    // Not an ellipse.
+    EXPECT_THROW((void)repeatGroundTrackSemiMajorAxis(2, 1, 1.0, 1.1), Error);
+    EXPECT_THROW((void)repeatGroundTrackSemiMajorAxis(2, 1, 1.5, 1.1), Error);
+    EXPECT_THROW((void)repeatGroundTrackSemiMajorAxis(2, 1, -0.1, 1.1), Error);
+    EXPECT_THROW((void)repeatGroundTrackSemiMajorAxis(2, 1, kNaN, 1.1), Error);
+    EXPECT_THROW((void)repeatGroundTrackSemiMajorAxis(2, 1, 0.1, kNaN), Error);
+    EXPECT_THROW((void)repeatGroundTrackSemiMajorAxis(0, 1, 0.1, 1.1), Error);
+    EXPECT_THROW((void)repeatGroundTrackSemiMajorAxis(2, -1, 0.1, 1.1), Error);
+}
+
+TEST(Secular, SunSynchronousInclinationRejectsOrbitsThatAreNotEllipses) {
+    EXPECT_THROW((void)sunSynchronousInclination(0.0), Error); // returned pi/2
+    EXPECT_THROW((void)sunSynchronousInclination(-7200.0 * km), Error);
+    EXPECT_THROW((void)sunSynchronousInclination(kNaN), Error);
+    EXPECT_THROW((void)sunSynchronousInclination(7200.0 * km, 1.5), Error); // returned an angle
+    EXPECT_THROW((void)sunSynchronousInclination(7200.0 * km, 1.0), Error);
+    EXPECT_THROW((void)sunSynchronousInclination(7200.0 * km, -0.1), Error);
+    EXPECT_THROW((void)sunSynchronousInclination(7200.0 * km, kNaN), Error);
+    // A valid orbit still has its solution: the node advances 2 pi in a tropical year.
+    const ZonalParameters zp;
+    const double          a = 7078.0 * km, e = 0.001;
+    const double          i = sunSynchronousInclination(a, e, zp);
+    EXPECT_NEAR(j2Rates(a, e, i, zp).raanDot * 365.242190 * 86400.0 / kTwoPi, 1.0, 1e-14);
+}
+
+TEST(Secular, PropagateSecularRejectsTheSameElementsAsThePropagatorClass) {
+    // a < 0 with e < 1 returned NaN angles from the free function while the class threw.
+    // clang-format off
+    const KeplerianElements invalid[] = {{-7000.0 * km, 0.1,  1.0, 0.0, 0.0, 0.0},
+                                         {0.0,          0.1,  1.0, 0.0, 0.0, 0.0},
+                                         {kNaN,         0.1,  1.0, 0.0, 0.0, 0.0},
+                                         {7000.0 * km,  -0.1, 1.0, 0.0, 0.0, 0.0},
+                                         {7000.0 * km,  1.0,  1.0, 0.0, 0.0, 0.0},
+                                         {-7000.0 * km, 1.2,  1.0, 0.0, 0.0, 0.0},
+                                         {7000.0 * km,  kNaN, 1.0, 0.0, 0.0, 0.0}};
+    // clang-format on
+    for (const KeplerianElements& el : invalid) {
+        EXPECT_THROW((void)propagateSecular(el, 100.0), Error) << "a=" << el.a << " e=" << el.e;
+        EXPECT_THROW(SecularPropagator{el}, Error) << "a=" << el.a << " e=" << el.e;
+    }
+    // A valid ellipse: the node moves at the J2 rate.
+    const ZonalParameters   zp;
+    const KeplerianElements el{7000.0 * km, 0.01, 1.0, 0.5, 1.0, 2.0};
+    const double            raan = propagateSecular(el, 1000.0, zp, SecularOrder::J2).raan;
+    EXPECT_NEAR(raan, 0.5 + j2Rates(el.a, el.e, el.i, zp).raanDot * 1000.0, 1e-15);
+}
