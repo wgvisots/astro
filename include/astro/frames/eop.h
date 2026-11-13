@@ -89,12 +89,14 @@ public:
     /// From records in any order (sorted here). Throws astro::Error if there
     /// are fewer than two records, if an epoch is not finite, or if two records
     /// have the same epoch (the message names it): the interpolation needs
-    /// distinct epochs.
+    /// distinct epochs. Also throws if an epoch is before 1960-01-01, where UTC
+    /// is undefined.
     explicit EopTable(std::vector<EopRecord> records, EopInterpolation interp = EopInterpolation::Lagrange4);
 
     /// IERS Rapid Service `finals2000A.all` / `finals2000A.data` / `finals2000A.daily`
     /// (IAU 2000A version, with dX/dY). Uses the Bulletin A columns; rows without
-    /// polar motion are skipped, missing LOD/dX/dY are taken as zero.
+    /// polar motion are skipped, missing LOD/dX/dY are taken as zero. Throws
+    /// astro::Error if the file cannot be opened, or as parseFinals2000A() does.
     [[nodiscard]] static EopTable loadFinals2000A(const std::string& path,
                                                   EopInterpolation   interp = EopInterpolation::Lagrange4);
     /// As loadFinals2000A(), from file contents already in memory. Throws
@@ -105,6 +107,7 @@ public:
     /// IERS EOP C04 series, either the classic "14" format
     /// (YYYY MM DD MJD x y UT1-UTC LOD dX dY ...) or the newer "20" format
     /// (YYYY MM DD HH MJD x y UT1-UTC dX dY xrt yrt LOD ...). Angles in arcsec.
+    /// Throws astro::Error if the file cannot be opened, or as parseC04() does.
     [[nodiscard]] static EopTable loadC04(const std::string& path,
                                           EopInterpolation   interp = EopInterpolation::Lagrange4);
     /// As loadC04(), from file contents already in memory. Throws astro::Error
@@ -113,7 +116,8 @@ public:
     [[nodiscard]] static EopTable parseC04(std::string_view content,
                                            EopInterpolation interp = EopInterpolation::Lagrange4);
 
-    /// Interpolated EOP. Throws astro::Error outside [firstMjd(), lastMjd()].
+    /// Interpolated EOP. Throws astro::Error outside [firstMjd(), lastMjd()],
+    /// and for an `mjdUtc` that is not a number (NaN).
     [[nodiscard]] EopValues at(double mjdUtc) const override;
 
     /// MJD (UTC) of the first / last record.

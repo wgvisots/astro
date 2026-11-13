@@ -48,7 +48,8 @@ class ItrsRotationSeries {
 public:
     /// Rotations for start + dt, 0 <= dt <= duration (seconds, as for Time::operator+).
     /// Throws astro::Error if duration is negative or not finite, nodeSpacing is not positive, or
-    /// the EOP do not cover the window.
+    /// the EOP do not cover the window. Also throws if the window starts before 1960, as
+    /// FrameTransformer does.
     ItrsRotationSeries(const Time&         start,
                        double              duration,
                        const EopProvider&  eop,
@@ -63,18 +64,20 @@ public:
     /// Rotation from GCRS to ITRS at start + dt: r_itrs = M r_gcrs. Throws astro::Error if dt is
     /// outside the window by more than 1 s.
     [[nodiscard]] Mat3 gcrsToItrsMatrix(double dt) const;
-    /// GCRS position to ITRS at start + dt.
+    /// GCRS position to ITRS at start + dt. Throws astro::Error as gcrsToItrsMatrix does.
     [[nodiscard]] Vec3 gcrsToItrs(double dt, const Vec3& r) const;
     /// GCRS position and velocity to ITRS at start + dt. The velocity is relative to the rotating
-    /// Earth (includes -omega x r), as for FrameTransformer::transform.
+    /// Earth (includes -omega x r), as for FrameTransformer::transform. Throws astro::Error as
+    /// gcrsToItrsMatrix does.
     [[nodiscard]] StateVector gcrsToItrs(double dt, const StateVector& s) const;
-    /// ITRS position and velocity to GCRS at start + dt (inverse of gcrsToItrs).
+    /// ITRS position and velocity to GCRS at start + dt (inverse of gcrsToItrs). Throws astro::Error
+    /// as gcrsToItrsMatrix does.
     [[nodiscard]] StateVector itrsToGcrs(double dt, const StateVector& s) const;
     /// Earth's rotation rate at start + dt (rad/s). It comes from the UT1 elapsed between nodes, so
     /// it is exactly the rate of the rotation above and includes the length-of-day variation.
     /// (FrameTransformer takes it from the EOP length of day instead. The two agree where the EOP
     /// give a length of day; the prediction rows of finals2000A leave it blank, which reads as
-    /// zero, and there this rate is the better one.)
+    /// zero, and there this rate is the better one.) Throws astro::Error as gcrsToItrsMatrix does.
     [[nodiscard]] double rotationRate(double dt) const;
 
 private:

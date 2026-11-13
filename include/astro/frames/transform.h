@@ -71,6 +71,8 @@ struct FrameOptions {
 /// constructor evaluates the full precession-nutation series.
 class FrameTransformer {
 public:
+    /// Evaluates the rotations at epoch `t`. Throws astro::Error if `eop` has no data at `t`, or if
+    /// `t` is before 1960, where UTC is undefined.
     /// @param t    epoch in any time scale (converted internally to TT, UT1, UTC)
     /// @param eop  Earth orientation data (e.g. EopTable, or ConstantEop{} for none)
     FrameTransformer(const Time& t, const EopProvider& eop, const FrameOptions& options = {});
@@ -149,13 +151,14 @@ private:
 /// and if t cannot be converted to TT.
 [[nodiscard]] Mat3 poleOfDateMatrix(Frame from, const Time& t);
 
-/// GCRS -> ITRS rotation matrix ("ECI to ECEF").
+/// GCRS -> ITRS rotation matrix ("ECI to ECEF"). Throws astro::Error as FrameTransformer does.
 [[nodiscard]] Mat3 gcrsToItrsMatrix(const Time& t, const EopProvider& eop, const FrameOptions& options = {});
 
 /// One-off conversions between GCRS, ITRS and TEME at epoch `t` (any time
 /// scale), with default FrameOptions. Velocities include the Earth-rotation
 /// term. Each call builds a FrameTransformer; reuse one for many conversions at
-/// the same epoch. Throws astro::Error if `eop` has no data at `t`.
+/// the same epoch. Throws astro::Error if `eop` has no data at `t`, or if `t`
+/// is before 1960, where UTC is undefined.
 /// @{
 [[nodiscard]] Vec3        gcrsToItrs(const Vec3& r, const Time& t, const EopProvider& eop);
 [[nodiscard]] Vec3        itrsToGcrs(const Vec3& r, const Time& t, const EopProvider& eop);
@@ -167,7 +170,8 @@ private:
 [[nodiscard]] StateVector gcrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
 /// @}
 
-/// Aliases using the common names: ECI = GCRS, ECEF = ITRS.
+/// Aliases using the common names: ECI = GCRS, ECEF = ITRS. They throw
+/// astro::Error as gcrsToItrs and itrsToGcrs do.
 /// @{
 [[nodiscard]] inline Vec3 eciToEcef(const Vec3& r, const Time& t, const EopProvider& eop) {
     return gcrsToItrs(r, t, eop);
