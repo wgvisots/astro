@@ -60,7 +60,9 @@ namespace astro {
 /// and a NaN M gives NaN.
 [[nodiscard]] double meanToParabolicAnomaly(double M) noexcept;
 
-/// Mean anomaly <-> true anomaly for any eccentricity.
+/// Mean anomaly <-> true anomaly for any eccentricity. Throws astro::Error as
+/// meanToEccentricAnomaly (e < 1) and meanToHyperbolicAnomaly (e > 1) do: for an e that is negative,
+/// infinite or NaN.
 [[nodiscard]] double meanToTrueAnomaly(double M, double e);
 /// True -> mean anomaly for any eccentricity (elliptic, parabolic or hyperbolic M).
 [[nodiscard]] double trueToMeanAnomaly(double nu, double e) noexcept;

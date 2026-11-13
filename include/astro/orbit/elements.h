@@ -62,7 +62,8 @@ struct KeplerianElements {
 /// Inertial position (m) and velocity (m/s) from elements; the inverse of stateToElements.
 /// Throws astro::Error if the semi-latus rectum is not positive (inconsistent a and e).
 [[nodiscard]] StateVector elementsToState(const KeplerianElements& el, double mu = constants::gmEarth);
-/// Elements from mean anomaly instead of true anomaly.
+/// Elements from mean anomaly instead of true anomaly. Throws astro::Error as meanToTrueAnomaly
+/// does: for an e that is negative, infinite or NaN.
 [[nodiscard]] KeplerianElements
 elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp, double M);
 

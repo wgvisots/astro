@@ -51,18 +51,22 @@ class ForceModel {
 public:
     virtual ~ForceModel() = default;
     /// Acceleration (m/s^2) at `t` for position r (m) and velocity v (m/s). Must be safe to call
-    /// concurrently if the propagator using it is shared between threads.
+    /// concurrently if the propagator using it is shared between threads. An implementation may
+    /// throw (ThirdBodyForce does, where its ephemeris has no data); the exception passes through
+    /// the propagation that called it.
     [[nodiscard]] virtual Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const = 0;
 
     /// Time derivative of acceleration() along the trajectory, d/dt a(t, r(t), v(t)), given the
     /// total acceleration acting on the body. The default is a central difference along
     /// (1, v, totalAcceleration) with a step of 1e-5 |r| / |v| seconds (about 0.01 s in LEO), which
     /// is accurate to roughly 1e-9 relative for orbital forces. Override it for an exact form.
+    /// The default throws what acceleration() throws.
     [[nodiscard]] virtual Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const;
 
     /// acceleration(t, r, v), and its partial derivatives with respect to position (dadr) and
     /// velocity (dadv), for the state transition matrix. The default uses central differences
     /// (12 extra acceleration evaluations); override it with an exact form where one exists.
+    /// The default throws what acceleration() throws.
     virtual Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const;
 };
 
@@ -103,9 +107,10 @@ public:
     /// position comes from `ephemeris` at `epoch` + t. Throws astro::Error if `ephemeris` is null.
     ThirdBodyForce(Body body, double muBody, std::shared_ptr<const Ephemeris> ephemeris, const Time& epoch);
     /// Tidal acceleration (m/s^2) on a satellite at geocentric r: the body's pull on the satellite
-    /// minus its pull on the Earth. v is unused.
+    /// minus its pull on the Earth. v is unused. Throws astro::Error if the ephemeris has no data
+    /// for the body at `epoch` + t (see Ephemeris::state).
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
-    /// Exact tidal gradient; no velocity dependence.
+    /// Exact tidal gradient; no velocity dependence. Throws astro::Error as acceleration() does.
     Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
 
 private:
@@ -171,7 +176,8 @@ public:
     /// Start from a 12-component state (position, velocity, acceleration, jerk). The trajectory
     /// starts from position and velocity; `mode` says what the input acceleration and jerk do.
     /// With HigherOrderMode::UnmodeledForce an UnmodeledAcceleration holding the residuals is
-    /// added to `forces`.
+    /// added to `forces`. Throws astro::Error as the constructor above does. An exception thrown
+    /// by a force model at the epoch passes through.
     NumericalPropagator(const Time&                                    epoch,
                         const StateVector12&                           initial,
                         std::vector<std::shared_ptr<const ForceModel>> forces,
@@ -183,10 +189,11 @@ public:
     /// pole is ~0.15 deg off z in 2026, which would cost ~270 m over 4 h in LEO). The frame itself
     /// is treated as inertial, frozen at the epoch; for of-date frames (MOD, TOD, TEME, CIRS) that
     /// drifts from the frame of each output time by ~0.2 m/h in LEO. EstimateTracker converts
-    /// outputs to the frame of their own time.
+    /// outputs to the frame of their own time. Throws astro::Error as poleOfDateMatrix does: for an
+    /// Earth-fixed `frame` (TIRS, PEF, ITRS), and if `epoch` cannot be converted to TT.
     [[nodiscard]] static NumericalPropagator
     j2j4(const Time& epoch, const StateVector& initial, Frame frame, const AdaptiveOptions& options = {});
-    /// As above, from a 12-component state.
+    /// As above, from a 12-component state. Throws astro::Error as the overload above does.
     [[nodiscard]] static NumericalPropagator j2j4(const Time&            epoch,
                                                   const StateVector12&   initial,
                                                   Frame                  frame,
@@ -215,24 +222,31 @@ public:
     // concurrently on a shared instance (provided its force models are thread-safe; the library's
     // are).
 
-    /// State dt seconds after the epoch (negative dt propagates backward).
+    /// State dt seconds after the epoch (negative dt propagates backward). Throws astro::Error
+    /// when the integration fails, as integrateRkf78Steps does: for a dt that is not finite,
+    /// unusable AdaptiveOptions, a state or an acceleration that stops being finite, an error that
+    /// stays too large at AdaptiveOptions::minStep, or more than AdaptiveOptions::maxSteps steps.
+    /// An exception thrown by a force model passes through.
     [[nodiscard]] StateVector propagate(double dt, AdaptiveStats* stats = nullptr) const;
-    /// State at time t (any scale).
+    /// State at time t (any scale). Throws astro::Error as propagate(dt) does, and if t cannot be
+    /// subtracted from the epoch (one of the two in UT1, or a UTC time before 1960; see Time).
     [[nodiscard]] StateVector propagate(const Time& t, AdaptiveStats* stats = nullptr) const {
         return propagate(t - epoch_, stats);
     }
-    /// States at several offsets (any order), integrating once in each direction.
+    /// States at several offsets (any order), integrating once in each direction. Throws
+    /// astro::Error as propagate(dt) does, for any of the offsets.
     [[nodiscard]] std::vector<StateVector> propagate(const std::vector<double>& dts,
                                                      AdaptiveStats*             stats = nullptr) const;
 
     /// 12-component state dt seconds after the epoch; acceleration and jerk come from the force
-    /// models (including any unmodeled acceleration).
+    /// models (including any unmodeled acceleration). Throws astro::Error as propagate(dt) does.
     [[nodiscard]] StateVector12 propagate12(double dt, AdaptiveStats* stats = nullptr) const;
-    /// 12-component state at time t (any scale).
+    /// 12-component state at time t (any scale). Throws astro::Error as propagate(t) does.
     [[nodiscard]] StateVector12 propagate12(const Time& t, AdaptiveStats* stats = nullptr) const {
         return propagate12(t - epoch_, stats);
     }
     /// 12-component states at several offsets (any order), integrating once in each direction.
+    /// Throws astro::Error as propagate(dt) does, for any of the offsets.
     [[nodiscard]] std::vector<StateVector12> propagate12(const std::vector<double>& dts,
                                                          AdaptiveStats*             stats = nullptr) const;
 
@@ -249,13 +263,17 @@ public:
     /// the rest or, if the grid spans the epoch, outwards from it once in each direction. So each
     /// output carries the error of the direct path to its own time, and an output at dt = 0 is the
     /// initial state exactly.
+    ///
+    /// Throws astro::Error if `start` is not finite or `step` is zero or not finite (an empty `out`
+    /// is accepted whatever they are), and as propagate(dt) does.
     void propagateGrid(double start, double step, std::span<StateVector> out, AdaptiveStats* stats = nullptr) const;
-    /// As propagateGrid, with acceleration and jerk from the force models at each output.
+    /// As propagateGrid, with acceleration and jerk from the force models at each output. Throws
+    /// astro::Error as propagateGrid does.
     void propagateGrid12(double start, double step, std::span<StateVector12> out, AdaptiveStats* stats = nullptr) const;
-    /// As propagateGrid, returning `count` states.
+    /// As propagateGrid, returning `count` states. Throws astro::Error as propagateGrid does.
     [[nodiscard]] std::vector<StateVector>
     propagateGrid(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
-    /// As propagateGrid12, returning `count` states.
+    /// As propagateGrid12, returning `count` states. Throws astro::Error as propagateGrid does.
     [[nodiscard]] std::vector<StateVector12>
     propagateGrid12(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
 
@@ -279,13 +297,17 @@ public:
     /// As in propagateGrid the integration only moves away from the epoch, so Q only accumulates:
     /// an output at dt = 0 has Phi = I and Q = 0 exactly (its covariance is P0), and on a grid that
     /// spans the epoch every Q is positive definite.
+    ///
+    /// Throws astro::Error as propagateGrid does, and if accelerationNoisePsd is negative or not
+    /// finite.
     void propagateGridWithCovariance(double                     start,
                                      double                     step,
                                      const Mat6&                P0,
                                      std::span<StateCovariance> out,
                                      double                     accelerationNoisePsd = 0.0,
                                      AdaptiveStats*             stats                = nullptr) const;
-    /// As above, returning `count` states and covariances.
+    /// As above, returning `count` states and covariances. Throws astro::Error as the overload
+    /// above does.
     [[nodiscard]] std::vector<StateCovariance> propagateGridWithCovariance(double         start,
                                                                            double         step,
                                                                            std::size_t    count,
@@ -294,7 +316,8 @@ public:
                                                                            AdaptiveStats* stats = nullptr) const;
 
     /// States and state transition matrices Phi(t, epoch) at dt = start + k * step, as for
-    /// propagateGridWithCovariance. states and stm must have the same size.
+    /// propagateGridWithCovariance. states and stm must have the same size. Throws astro::Error if
+    /// they differ in size, and as propagateGrid does.
     void propagateGridStm(double                 start,
                           double                 step,
                           std::span<StateVector> states,
@@ -310,13 +333,18 @@ public:
     /// seconds; the integration then stops. A zero of g at the epoch itself is not an event, so a
     /// trajectory that starts on the surface finds the impact, not the launch. Crossings that
     /// enter and leave within a quarter step can be missed (steps are ~100 s in LEO).
+    ///
+    /// Throws astro::Error if g is empty, if maxDt is not finite, if timeTolerance is not positive
+    /// and finite, if g returns a value that is not finite, and as propagate(dt) does. An exception
+    /// thrown by g passes through.
     [[nodiscard]] std::optional<PropagationEvent> propagateToEvent(const EventFunction& g,
                                                                    double               maxDt,
                                                                    Crossing             crossing      = Crossing::Any,
                                                                    double               timeTolerance = 1e-6,
                                                                    AdaptiveStats*       stats         = nullptr) const;
 
-    /// Acceleration and jerk of the force models at state s, t seconds after the epoch.
+    /// Acceleration and jerk of the force models at state s, t seconds after the epoch. An
+    /// exception thrown by a force model passes through.
     [[nodiscard]] StateVector12 withDerivatives(double t, const StateVector& s) const;
 
     /// Input acceleration minus the force models' at the epoch (zero for a 6-component start).

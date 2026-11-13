@@ -82,7 +82,7 @@ public:
     /// Throws astro::Error if the epoch or an element the theory uses is not finite (B*, the inclination, the
     /// right ascension of the node, the eccentricity, the argument of perigee, the mean anomaly, the mean motion),
     /// or if finite elements give a non-finite state at the epoch. So a propagator that was built never starts
-    /// from NaN.
+    /// from NaN. Also throws if the epoch cannot be expressed as UTC: one before 1960, or one given in UT1.
     ///
     /// The theory counts the epoch in days of 86400 s, as the element set gives it. On a day that ends with a
     /// leap second the count is taken from the time of day of `tle.epoch` over 86400 s, as the reference code
@@ -99,9 +99,12 @@ public:
     Sgp4& operator=(Sgp4&&) noexcept;
 
     /// TEME position (m) and velocity (m/s) `minutes` after the TLE epoch.
-    /// Throws Sgp4Error on propagation failure.
+    /// Throws Sgp4Error on propagation failure: for any code of the class description, 6 (decayed)
+    /// and 7 (`minutesSinceEpoch` is not finite) included.
     [[nodiscard]] StateVector propagate(double minutesSinceEpoch) const;
-    /// TEME state at a time (any scale).
+    /// TEME state at a time (any scale). Throws Sgp4Error as propagate(minutesSinceEpoch) does, and
+    /// astro::Error if t cannot be subtracted from the epoch (a UT1 time, or a UTC time before 1960;
+    /// see Time).
     [[nodiscard]] StateVector propagate(const Time& t) const;
     /// Non-throwing variant: returns the SGP4 error code (0 on success). For
     /// code 6 (decayed) the state is still filled in, as in Vallado's code. For

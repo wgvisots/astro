@@ -43,6 +43,7 @@ void stumpff(double psi, double& c2, double& c3) noexcept;
 /// (1e-13 of the state for steps up to a few revolutions; see docs/accuracy.md).
 ///
 /// Throws astro::Error if the state or dt is not finite, the position is zero, or mu is not positive.
+/// With dt = 0 the state is returned as given, unchecked.
 [[nodiscard]] StateVector propagateKepler(const StateVector& s0, double dt, double mu = constants::gmEarth);
 
 /// propagateKepler with the state transition matrix Phi(dt) = d(state at dt) / d(s0), in closed
@@ -52,12 +53,13 @@ void stumpff(double psi, double& c2, double& c3) noexcept;
 /// along-track drift). Exact to rounding and valid for any conic: equal to the integrated
 /// variational equations to ~1e-11, and symplectic to 6e-9 after a day in LEO and 1e-7 after a week
 /// (astro_study_propagation). The state is
-/// propagateKepler's, bit for bit. Phi(0) is the identity.
+/// propagateKepler's, bit for bit. Phi(0) is the identity. Throws astro::Error as propagateKepler does.
 [[nodiscard]] StateTransition propagateKeplerStm(const StateVector& s0, double dt, double mu = constants::gmEarth);
 
 /// Two-body state and covariance dt seconds after s0: P = Phi P0 Phi^T, Phi from propagateKeplerStm.
 /// P0 is the covariance of s0 (m^2, m^2/s, m^2/s^2) in the frame of s0. No process noise; for that,
 /// or for any force beyond the point mass, use NumericalPropagator::propagateGridWithCovariance.
+/// Throws astro::Error as propagateKepler does.
 [[nodiscard]] StateCovariance
 propagateKeplerWithCovariance(const StateVector& s0, const Mat6& P0, double dt, double mu = constants::gmEarth);
 
@@ -68,6 +70,9 @@ propagateKeplerWithCovariance(const StateVector& s0, const Mat6& P0, double dt, 
 ///  - UnmodeledForce: the residuals against the point mass are applied as a force linear in time,
 ///    integrated numerically with RKF7(8). If both residuals are exactly zero it uses universal
 ///    variables.
+///
+/// Throws astro::Error as the 6-component propagateKepler does or, where the unmodeled force is
+/// integrated, as NumericalPropagator::propagate does.
 [[nodiscard]] Propagation12 propagateKepler(const StateVector12& s0,
                                             double               dt,
                                             double               mu   = constants::gmEarth,
@@ -105,7 +110,8 @@ struct LambertSolution {
 ///
 /// Throws astro::Error if tof or mu is not positive and finite, if r1 or r2 is zero or not finite,
 /// or if r1 and r2 are collinear (sine of the angle between them below 1e-12: the plane is
-/// undefined).
+/// undefined). Also throws if no root is found for a number of revolutions that should have one: a
+/// guard against a failed iteration.
 [[nodiscard]] std::vector<LambertSolution> lambertIzzo(const Vec3& r1,
                                                        const Vec3& r2,
                                                        double      tof,
@@ -113,7 +119,8 @@ struct LambertSolution {
                                                        bool        prograde       = true,
                                                        int         maxRevolutions = 0);
 
-/// The Lambert solution without a complete revolution (the first of lambertIzzo's).
+/// The Lambert solution without a complete revolution (the first of lambertIzzo's). Throws
+/// astro::Error as lambertIzzo does.
 [[nodiscard]] LambertSolution
 lambert(const Vec3& r1, const Vec3& r2, double tof, double mu = constants::gmEarth, bool prograde = true);
 
