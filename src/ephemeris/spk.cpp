@@ -235,7 +235,26 @@ struct SpkEphemeris::Impl {
                 return *it;
             }
         }
-        throw Error("SPK: no segment for body " + std::to_string(target) + " at ET " + std::to_string(et));
+        // Nothing covers `et`: either the epoch is outside the body's coverage, or the kernel does not
+        // have the body at all.
+        const auto has = [&](int body) {
+            return std::any_of(segs.begin(), segs.end(), [&](const Segment& s) { return s.info.target == body; });
+        };
+        if (has(target)) {
+            throw Error("SPK: no segment for body " + std::to_string(target) + " at ET " + std::to_string(et));
+        }
+        std::string what = "SPK: no segment for body " + std::to_string(target) + " in " + path;
+        // A planet (NAIF id n99) and the barycenter of its system (id n) are different bodies, and a
+        // kernel may have only the barycenter: DE430 and DE440 have 4 but not 499 (Mars). One is never
+        // returned for the other, so say that the barycenter is there to be asked for.
+        const int barycenter = target / 100;
+        if (target % 100 == 99 && barycenter >= 1 && barycenter <= 9 && has(barycenter)) {
+            what += "; the kernel has the barycenter of that planet's system, body " + std::to_string(barycenter)
+                  + " (Body::" + std::string(toString(static_cast<Body>(barycenter)))
+                  + "), which is a different point: ask for it by name, or load a kernel that has body "
+                  + std::to_string(target);
+        }
+        throw Error(what);
     }
 
     // Segment state (km, km/s) of seg.target relative to seg.center.

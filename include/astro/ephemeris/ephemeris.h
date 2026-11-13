@@ -31,6 +31,12 @@
 namespace astro {
 
 /// Solar-system bodies, numbered with their NAIF integer IDs.
+///
+/// A planet and the barycenter of its system (Mars and MarsBarycenter, ...) are different bodies,
+/// and an ephemeris may have only one of them. The JPL DE430 and DE440 kernels have MarsBarycenter
+/// but not Mars: SpkEphemeris then throws astro::Error for Mars, it does not return the barycenter
+/// in its place. Ask for MarsBarycenter, which is within about 0.2 m of the center of Mars (Phobos
+/// and Deimos together have 2e-8 of the planet's mass), or load a kernel that has body 499.
 enum class Body : int {
     SolarSystemBarycenter = 0,
     MercuryBarycenter     = 1,

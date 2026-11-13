@@ -263,6 +263,26 @@ TEST(Spk, OlderNaifDafFileRecordIsAccepted) {
     }
 }
 
+TEST(Spk, MarsIsNotReplacedByItsBarycenter) {
+    // DE430 and DE440 (and this fixture, cut from DE440s) have the Mars system barycenter (NAIF id 4)
+    // but no segment for Mars itself (499). The reader must not hand back one for the other: the error
+    // has to say that body 499 is missing and that the kernel has Body::MarsBarycenter.
+    const SpkEphemeris spk(dataPath("de440s_2024q1_le.bsp"));
+    const Time         t    = tdb(2460330.5);
+    const std::string  mars = errorMessage([&] { (void)spk.state(Body::Mars, Body::Earth, t); });
+    EXPECT_TRUE(contains(mars, "no segment for body 499")) << mars;
+    EXPECT_TRUE(contains(mars, "body 4 (Body::MarsBarycenter)")) << mars;
+    EXPECT_NO_THROW((void)spk.state(Body::MarsBarycenter, Body::Earth, t));
+    // Venus (299): the fixture has neither Venus nor its barycenter (2), so there is nothing to offer.
+    const std::string venus = errorMessage([&] { (void)spk.state(Body::Venus, Body::Earth, t); });
+    EXPECT_TRUE(contains(venus, "no segment for body 299")) << venus;
+    EXPECT_FALSE(contains(venus, "Barycenter")) << venus;
+    // A body the kernel does have, asked for outside its coverage: the message is about the epoch.
+    const std::string moon = errorMessage([&] { (void)spk.state(Body::Moon, Body::Earth, tdb(2460500.5)); });
+    EXPECT_TRUE(contains(moon, "no segment for body 301 at ET")) << moon;
+    EXPECT_FALSE(contains(moon, "Barycenter")) << moon;
+}
+
 TEST(LowPrecision, SunAndMoonAgainstDe440) {
     const SpkEphemeris          spk(dataPath("de440s_2024q1_le.bsp"));
     const LowPrecisionEphemeris lp;

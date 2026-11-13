@@ -53,6 +53,11 @@ struct SpkSegmentInfo {
 /// listed by segments() and do no harm until one is needed for a state: state()
 /// and stateById() then throw astro::Error. A segment in another frame is never
 /// returned as if it were in the ICRF.
+///
+/// A body is resolved from its own segments only: nothing stands in for a body
+/// the kernel lacks. DE430 and DE440 have the Mars system barycenter
+/// (Body::MarsBarycenter, NAIF id 4) but not Mars (Body::Mars, id 499), so
+/// Body::Mars throws with those kernels, and the message names the barycenter.
 class SpkEphemeris final : public Ephemeris {
 public:
     /// Open the kernel at `path` and read its segment summaries. Throws astro::Error if the file
@@ -69,8 +74,9 @@ public:
     /// As stateById(), with the NAIF ids of `target` and `center` and the ephemeris time of `t`.
     [[nodiscard]] StateVector state(Body target, Body center, const Time& t) const override;
     /// State by NAIF id at an ephemeris time (TDB seconds past J2000); meters, m/s, ICRF axes.
-    /// Throws astro::Error if a body on the way from `target` to `center` has no segment covering
-    /// `et`, or if that segment is of an unsupported type or not in the J2000 frame.
+    /// Throws astro::Error if a body on the way from `target` to `center` is not in the kernel or
+    /// has no segment covering `et`, or if that segment is of an unsupported type or not in the
+    /// J2000 frame.
     [[nodiscard]] StateVector stateById(int target, int center, double et) const;
 
     /// Summaries of all segments, in file order.
