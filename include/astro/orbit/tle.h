@@ -72,6 +72,11 @@ struct Tle {
 
     /// Format back into the two 69-column lines (with checksums). The epoch is written as parse() reads it:
     /// the time of day as a fraction of 86400 s, also on a day that ends with a leap second.
+    ///
+    /// B* and the second derivative of the mean motion are written as the nearest value their fields can
+    /// hold: five digits and a power of ten from -9 to +9. Below 1e-10 the digits get leading zeros
+    /// (1e-11 is " 01000-9"), in steps of 1e-14, and below 5e-15 the field is zero. A value that rounds
+    /// above 0.99999e9, or is not finite, throws astro::Error naming the field.
     [[nodiscard]] std::string line1() const;
     [[nodiscard]] std::string line2() const;
     /// @}

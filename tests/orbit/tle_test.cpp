@@ -16,7 +16,9 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 
 #include "astro/core/angle.h"
@@ -71,6 +73,9 @@ void expectErrorNaming(F&& f, const std::string& name) {
             << "expected the message to name '" << name << "'; it was: " << e.what();
     }
 }
+
+const double kNan = std::numeric_limits<double>::quiet_NaN();
+const double kInf = std::numeric_limits<double>::infinity();
 
 } // namespace
 
@@ -132,6 +137,85 @@ TEST(Tle, ParseRejectsAnEpochDayThatIsNotInTheYear) {
     EXPECT_EQ(last.epoch.iso8601(3), "2008-12-31T23:59:59.999Z"); // 0.99999999 x 86400 s = 86399.999136 s
     const Tle first = Tle::parse(withField(kLine1, 19, "07001.00000000"), kLine2);
     EXPECT_EQ(first.epoch.iso8601(0), "2007-01-01T00:00:00Z");
+}
+
+// --- Writing B* and the second derivative of the mean motion --------------------------------------------------------
+
+TEST(Tle, Line1WritesExponentFieldsAtTheNearestValueTheFieldCanHold) {
+    // The field is a sign, five mantissa digits with "0." implied in front, and a signed one-digit exponent:
+    // +-0.NNNNN x 10^(+-N). Below 0.1e-9 the exponent stays at -9 and the mantissa gets leading zeros; the
+    // smallest step is 0.00001e-9 = 1e-14, and anything nearer to zero than half of that is written as zero.
+    struct Case {
+        double      value;
+        const char* field;
+        double      readBack;
+    };
+    // clang-format off
+    const Case cases[] = {
+        { 0.0,         " 00000-0",  0.0       },
+        { 1e-5,        " 10000-4",  1e-5      },
+        {-0.11606e-4,  "-11606-4", -0.11606e-4},
+        { 0.999996e-3, " 10000-2",  1e-3      }, // the rounding carries into the exponent
+        { 0.5,         " 50000+0",  0.5       },
+        { 12.0,        " 12000+2",  12.0      },
+        { 0.99999e9,   " 99999+9",  0.99999e9 }, // the largest value
+        { 1e-10,       " 10000-9",  1e-10     }, // the smallest value with a full mantissa
+        { 1e-11,       " 01000-9",  1e-11     },
+        { 3.2e-12,     " 00320-9",  3.2e-12   },
+        {-4.5e-11,     "-04500-9", -4.5e-11   },
+        { 1e-13,       " 00010-9",  1e-13     },
+        { 1.26e-13,    " 00013-9",  1.3e-13   }, // rounded to the last digit that is left
+        { 1e-14,       " 00001-9",  1e-14     }, // the smallest value
+        { 4e-15,       " 00000-0",  0.0       },
+        {-4e-15,       " 00000-0",  0.0       },
+        { 1e-320,      " 00000-0",  0.0       },
+    };
+    // clang-format on
+    for (const Case& c : cases) {
+        Tle tle                 = Tle::parse(kLine1, kLine2);
+        tle.bstar               = c.value;
+        tle.meanMotionDdot      = c.value;
+        const std::string line1 = tle.line1();
+        EXPECT_EQ(columns(line1, 54, 61), c.field) << "B* = " << c.value;
+        EXPECT_EQ(columns(line1, 45, 52), c.field) << "n-ddot = " << c.value;
+        // Reading the line back gives the value of the field, to the rounding of the two multiplications that
+        // form it (a relative 1e-15).
+        const Tle back = Tle::parse(line1, kLine2);
+        EXPECT_NEAR(back.bstar, c.readBack, 1e-14 * std::abs(c.readBack)) << "B* = " << c.value;
+        EXPECT_NEAR(back.meanMotionDdot, c.readBack, 1e-14 * std::abs(c.readBack)) << "n-ddot = " << c.value;
+    }
+}
+
+TEST(Tle, ExponentFieldsReadBackWithinHalfAStepOverTheirWholeRange) {
+    // "Nearest value" as a property: whatever is written, reading it back is within half a step of the last
+    // mantissa digit. For a value d.dddd x 10^p that step is 10^(p-4), and never less than 1e-14.
+    for (int power = -16; power <= 7; ++power) {
+        for (const double digits : {1.0, 1.00004, 1.00005001, 1.23456789, 5.55555, 9.99994, 9.99996}) {
+            for (const double sign : {1.0, -1.0}) {
+                const double value = sign * digits * std::pow(10.0, power);
+                const double step  = std::max(1e-14, std::pow(10.0, power - 4));
+                Tle          tle   = Tle::parse(kLine1, kLine2);
+                tle.bstar          = value;
+                tle.meanMotionDdot = value;
+                const Tle back     = Tle::parse(tle.line1(), kLine2);
+                // The 1e-9 allows for the rounding of the powers of ten here and in the reader.
+                EXPECT_LE(std::abs(back.bstar - value), 0.5 * step * (1.0 + 1e-9)) << "B* = " << value;
+                EXPECT_LE(std::abs(back.meanMotionDdot - value), 0.5 * step * (1.0 + 1e-9)) << "n-ddot = " << value;
+            }
+        }
+    }
+}
+
+TEST(Tle, Line1RefusesExponentFieldValuesTooLargeForTheField) {
+    // The largest value the field holds is 0.99999e9; from 0.999995e9 a value rounds beyond it.
+    for (const double value : {1e9, -1e9, 0.999996e9, 2.5e12, kInf, -kInf, kNan}) {
+        Tle tle   = Tle::parse(kLine1, kLine2);
+        tle.bstar = value;
+        expectErrorNaming([&] { (void)tle.line1(); }, "B*");
+        tle                = Tle::parse(kLine1, kLine2);
+        tle.meanMotionDdot = value;
+        expectErrorNaming([&] { (void)tle.line1(); }, "n-ddot");
+    }
 }
 
 // --- Reading number fields ------------------------------------------------------------------------------------------

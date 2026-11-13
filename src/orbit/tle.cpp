@@ -22,6 +22,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <sstream>
 
 #include "astro/core/angle.h"
@@ -191,22 +192,47 @@ Time parseEpoch(std::string_view yearField, std::string_view dayField) {
     return Time(JulianDate{midnight, (day - wholeDay) * tleDayPerUtcDay(midnight)}, TimeScale::UTC);
 }
 
-std::string formatExpField(double v) {
-    // Format as " 12345-6" (8 chars): sign, 5-digit mantissa, signed exponent digit.
-    if (v == 0.0) {
-        return " 00000-0";
+// Writes a "+NNNNN-N" field (see parseExpField) as the value nearest to `v` that the field can hold: five mantissa
+// digits and an exponent from -9 to +9. Below 0.1e-9 the exponent stays at -9 and the mantissa gets leading zeros,
+// down to the smallest step, 0.00001e-9 = 1e-14; a value nearer to zero than half a step is written as zero.
+// Throws astro::Error naming `what` if the value is not finite or rounds beyond the largest one, 0.99999e9.
+std::string formatExpField(double v, const char* what) {
+    if (!std::isfinite(v)) {
+        throw Error(std::string("Tle::line1: ") + what + " is not finite");
     }
-    const char sign = v < 0.0 ? '-' : ' ';
-    double     a    = std::abs(v);
-    int        ex   = static_cast<int>(std::floor(std::log10(a))) + 1;
-    long       mant = std::lround(a / std::pow(10.0, ex) * 1e5);
-    if (mant >= 100000) {
-        mant /= 10;
-        ++ex;
+    const double a    = std::abs(v);
+    const char*  zero = " 00000-0";
+    if (a == 0.0) {
+        return zero;
     }
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "%c%05ld%c%d", sign, mant % 100000, ex < 0 ? '-' : '+', std::abs(ex) % 10);
-    return buf;
+    // The C library rounds correctly to the digits asked for, here five significant ones: "d.dddde-XX". Taking the
+    // exponent from a logarithm instead can be off by one next to a power of ten.
+    char text[32];
+    std::snprintf(text, sizeof(text), "%.4e", a);
+    long mantissa = 10000 * (text[0] - '0') + std::strtol(text + 2, nullptr, 10);
+    int  exponent = static_cast<int>(std::strtol(text + 7, nullptr, 10)) + 1; // of 0.ddddd, not of d.dddd
+    if (exponent > 9) {
+        std::snprintf(text, sizeof(text), "%g", v);
+        throw Error(std::string("Tle::line1: ") + what + " " + text
+                    + " is too large for its field (the largest value is 0.99999e9)");
+    }
+    if (exponent < -9) {
+        // Fourteen decimals, of which the first nine are zeros and the last five are the mantissa.
+        std::snprintf(text, sizeof(text), "%.14f", a);
+        mantissa = std::strtol(text + 11, nullptr, 10);
+        exponent = -9;
+        if (mantissa == 0) {
+            return zero;
+        }
+    }
+    std::snprintf(text,
+                  sizeof(text),
+                  "%c%05ld%c%d",
+                  v < 0.0 ? '-' : ' ',
+                  mantissa,
+                  exponent < 0 ? '-' : '+',
+                  std::abs(exponent));
+    return text;
 }
 
 std::string withChecksum(std::string line) {
@@ -369,8 +395,8 @@ std::string Tle::line1() const {
                   year % 100,
                   day,
                   ndot.c_str(),
-                  formatExpField(meanMotionDdot).c_str(),
-                  formatExpField(bstar).c_str(),
+                  formatExpField(meanMotionDdot, "n-ddot").c_str(),
+                  formatExpField(bstar, "B*").c_str(),
                   ephemerisType,
                   elementSetNumber % 10000);
     return withChecksum(buf);
