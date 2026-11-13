@@ -238,6 +238,12 @@ public:
     /// degree-7 Hermite polynomial that matches position, velocity, acceleration and jerk at both
     /// ends of the step. The cost therefore hardly depends on `step`. Positions agree with
     /// propagate(dts) to about the integrator tolerance (micrometres in LEO with the defaults).
+    ///
+    /// The grid may lie anywhere relative to the epoch (dt = 0) and run in either direction. The
+    /// integration only ever moves away from the epoch: to the grid's nearest point and on through
+    /// the rest or, if the grid spans the epoch, outwards from it once in each direction. So each
+    /// output carries the error of the direct path to its own time, and an output at dt = 0 is the
+    /// initial state exactly.
     void propagateGrid(double start, double step, std::span<StateVector> out, AdaptiveStats* stats = nullptr) const;
     /// As propagateGrid, with acceleration and jerk from the force models at each output.
     void propagateGrid12(double start, double step, std::span<StateVector12> out, AdaptiveStats* stats = nullptr) const;
@@ -264,6 +270,10 @@ public:
     /// solar pressure, higher harmonics). 0 gives the purely deterministic propagation. Q is the
     /// noise accumulated between the epoch and t, so it adds uncertainty in both directions:
     /// propagating backward does not shrink the covariance.
+    ///
+    /// As in propagateGrid the integration only moves away from the epoch, so Q only accumulates:
+    /// an output at dt = 0 has Phi = I and Q = 0 exactly (its covariance is P0), and on a grid that
+    /// spans the epoch every Q is positive definite.
     void propagateGridWithCovariance(double                     start,
                                      double                     step,
                                      const Mat6&                P0,

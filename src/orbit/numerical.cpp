@@ -277,6 +277,54 @@ struct SepticHermite {
     }
 };
 
+/// How the grid t_k = start + k step (k < count, count >= 1) is covered by integrations that only
+/// ever move away from the epoch (t = 0), so that no output inherits the error of a longer path
+/// than its own distance from the epoch.
+///
+///  - The epoch is outside the grid, or at one of its ends: integrate to the grid point nearest
+///    the epoch (`pivot`), then sweep through the others.
+///  - The epoch is strictly inside: two sweeps from the epoch, one towards each end. `pivot` is the
+///    first index at or past the epoch in grid order; the indices below it belong to the sweep
+///    towards `start`.
+struct GridPlan {
+    double      start{0.0};
+    double      step{0.0};
+    std::size_t count{0};
+    bool        spansEpoch{false};
+    std::size_t pivot{0};
+
+    GridPlan(double gridStart, double gridStep, std::size_t gridCount) noexcept
+        : start(gridStart)
+        , step(gridStep)
+        , count(gridCount) {
+        const double end = time(count - 1);
+        spansEpoch       = (start < 0.0 && end > 0.0) || (start > 0.0 && end < 0.0);
+        if (!spansEpoch) {
+            pivot = std::abs(start) <= std::abs(end) ? 0 : count - 1;
+            return;
+        }
+        // The first index with t_k on the far side of the epoch from `start` (or at the epoch):
+        // estimated from the quotient, then settled with the same expression that gives the outputs.
+        const double estimate = std::ceil(-start / step);
+        pivot                 = estimate >= static_cast<double>(count - 1) ? count - 1
+                              : estimate <= 1.0                            ? 1
+                                                                           : static_cast<std::size_t>(estimate);
+        while (pivot < count - 1 && beforeEpoch(pivot)) {
+            ++pivot;
+        }
+        while (pivot > 1 && !beforeEpoch(pivot - 1)) {
+            --pivot;
+        }
+    }
+
+    [[nodiscard]] double time(std::size_t k) const noexcept { return start + step * static_cast<double>(k); }
+
+    /// True if t_k is on the same side of the epoch as `start` (only used when the grid spans it).
+    [[nodiscard]] bool beforeEpoch(std::size_t k) const noexcept {
+        return (time(k) < 0.0) == (start < 0.0) && time(k) != 0.0;
+    }
+};
+
 } // namespace
 
 template <class Emit>
@@ -300,37 +348,64 @@ void NumericalPropagator::grid(double start, double step, std::size_t count, Ada
         st                 = {};
     };
 
-    // Integrate (exactly) to the first output time.
-    OdeState<6> y{s0_.r.x, s0_.r.y, s0_.r.z, s0_.v.x, s0_.v.y, s0_.v.z};
-    if (start != 0.0) {
-        y = integrateRkf78<6>(f, 0.0, y, start, opt_, &st);
-        add();
-    }
-    emit(std::size_t{0}, start, toStateVector(y));
+    const GridPlan    plan(start, step, count);
+    const OdeState<6> y0{s0_.r.x, s0_.r.y, s0_.r.z, s0_.v.x, s0_.v.y, s0_.v.z};
 
-    if (count > 1) {
-        const double  dir    = step > 0.0 ? 1.0 : -1.0;
-        const double  tEnd   = start + step * static_cast<double>(count - 1);
-        std::size_t   k      = 1;
-        StateVector12 A      = withDerivatives(start, toStateVector(y));
+    // Integrate from (t0, ya) through the n grid points that begin at index `first`, ascending or
+    // descending: whichever leads away from t0. Outputs between steps are interpolated.
+    auto sweep = [&](double t0, const OdeState<6>& ya, std::size_t first, bool ascending, std::size_t n) {
+        if (n == 0) {
+            return;
+        }
+        const double  tLast  = plan.time(ascending ? first + (n - 1) : first - (n - 1));
+        const double  dir    = tLast > t0 ? 1.0 : -1.0;
+        std::size_t   k      = first;
+        std::size_t   left   = n;
+        auto          take   = [&] { k = --left == 0 ? k : (ascending ? k + 1 : k - 1); };
+        StateVector12 A      = withDerivatives(t0, toStateVector(ya));
         auto          onStep = [&](double ta, const OdeState<6>& /*ya*/, double tb, const OdeState<6>& yb) {
-            const StateVector12 B   = withDerivatives(tb, toStateVector(yb));
-            const double        h   = tb - ta;
-            const double        tk0 = start + step * static_cast<double>(k);
-            if (k < count && dir * (tk0 - tb) <= 0.0) {
+            const StateVector12 B = withDerivatives(tb, toStateVector(yb));
+            const double        h = tb - ta;
+            if (left > 0 && dir * (plan.time(k) - tb) <= 0.0) {
                 const SepticHermite poly(A, B, h);
-                for (; k < count; ++k) {
-                    const double tk = start + step * static_cast<double>(k);
+                while (left > 0) {
+                    const double tk = plan.time(k);
                     if (dir * (tk - tb) > 0.0) {
                         break;
                     }
                     emit(k, tk, tk == tb ? B.rv() : poly.at((tk - ta) / h));
+                    take();
                 }
             }
             A = B;
         };
-        (void)integrateRkf78Steps<6>(f, start, y, tEnd, onStep, opt_, &st);
+        const OdeState<6> yLast = integrateRkf78Steps<6>(f, t0, ya, tLast, onStep, opt_, &st);
         add();
+        while (left > 0) { // grid times that rounding has made equal to the sweep's last
+            emit(k, plan.time(k), toStateVector(yLast));
+            take();
+        }
+    };
+
+    if (!plan.spansEpoch) {
+        // To the grid point nearest the epoch (exactly), then through the others.
+        const double tp = plan.time(plan.pivot);
+        OdeState<6>  yp = y0;
+        if (tp != 0.0) {
+            yp = integrateRkf78<6>(f, 0.0, y0, tp, opt_, &st);
+            add();
+        }
+        emit(plan.pivot, tp, toStateVector(yp));
+        sweep(tp, yp, plan.pivot == 0 ? 1 : count - 2, plan.pivot == 0, count - 1);
+    } else {
+        // Outwards from the epoch, once towards each end. A grid point at the epoch is the epoch state.
+        std::size_t ahead = plan.pivot;
+        if (plan.time(ahead) == 0.0) {
+            emit(ahead, plan.time(ahead), s0_);
+            ++ahead;
+        }
+        sweep(0.0, y0, ahead, true, count - ahead);
+        sweep(0.0, y0, plan.pivot - 1, false, plan.pivot);
     }
     if (stats) {
         *stats = total;
@@ -590,45 +665,46 @@ void NumericalPropagator::variationalGrid(double         start,
         };
     };
 
-    OdeState<N> y{};
-    y[0] = s0_.r.x;
-    y[1] = s0_.r.y;
-    y[2] = s0_.r.z;
-    y[3] = s0_.v.x;
-    y[4] = s0_.v.y;
-    y[5] = s0_.v.z;
+    OdeState<N> y0{};
+    y0[0] = s0_.r.x;
+    y0[1] = s0_.r.y;
+    y0[2] = s0_.r.z;
+    y0[3] = s0_.v.x;
+    y0[4] = s0_.v.y;
+    y0[5] = s0_.v.z;
     for (std::size_t i = 0; i < 6; ++i) {
-        y[kPhi + 7 * i] = 1.0;
+        y0[kPhi + 7 * i] = 1.0;
     }
-    const double dir  = step > 0.0 ? 1.0 : -1.0;
-    const double tEnd = start + step * static_cast<double>(count - 1);
-    qs                = start != 0.0 ? (start > 0.0 ? 1.0 : -1.0) : dir;
-    if (start != 0.0) {
-        y = integrateRkf78<N>(f, 0.0, y, start, opt, &st);
-        add();
-    }
-    emit(std::size_t{0}, stateOf(y), unpack(y.data() + kPhi), noiseOf(y));
+    const GridPlan plan(start, step, count);
 
-    if (count > 1) {
-        std::size_t   k      = 1;
-        StateVector12 A      = withDerivatives(start, stateOf(y));
-        OdeState<N>   dA     = f(start, y);
-        OdeState<N>   ddA    = second(start, y, dA);
+    // As in grid(): from (t0, ys) through n grid points beginning at `first`, away from t0.
+    auto sweep = [&](double t0, const OdeState<N>& ys, std::size_t first, bool ascending, std::size_t n) {
+        if (n == 0) {
+            return;
+        }
+        const double  tLast  = plan.time(ascending ? first + (n - 1) : first - (n - 1));
+        const double  dir    = tLast > t0 ? 1.0 : -1.0;
+        std::size_t   k      = first;
+        std::size_t   left   = n;
+        auto          take   = [&] { k = --left == 0 ? k : (ascending ? k + 1 : k - 1); };
+        StateVector12 A      = withDerivatives(t0, stateOf(ys));
+        OdeState<N>   dA     = f(t0, ys);
+        OdeState<N>   ddA    = second(t0, ys, dA);
         auto          onStep = [&](double ta, const OdeState<N>& ya, double tb, const OdeState<N>& yb) {
             const StateVector12 B   = withDerivatives(tb, stateOf(yb));
             const OdeState<N>   dB  = f(tb, yb);
             const OdeState<N>   ddB = second(tb, yb, dB);
             const double        h   = tb - ta;
-            const double        tk0 = start + step * static_cast<double>(k);
-            if (k < count && dir * (tk0 - tb) <= 0.0) {
+            if (left > 0 && dir * (plan.time(k) - tb) <= 0.0) {
                 const SepticHermite poly(A, B, h);
-                for (; k < count; ++k) {
-                    const double tk = start + step * static_cast<double>(k);
+                while (left > 0) {
+                    const double tk = plan.time(k);
                     if (dir * (tk - tb) > 0.0) {
                         break;
                     }
                     if (tk == tb) {
                         emit(k, B.rv(), unpack(yb.data() + kPhi), noiseOf(yb));
+                        take();
                         continue;
                     }
                     // Quintic Hermite for Phi and Q from values, first and second derivatives.
@@ -644,25 +720,45 @@ void NumericalPropagator::variationalGrid(double         start,
                         yi[i] = H0 * ya[i] + H1 * dA[i] + H2 * ddA[i] + H3 * yb[i] + H4 * dB[i] + H5 * ddB[i];
                     }
                     emit(k, poly.at(tau), unpack(yi.data() + kPhi), noiseOf(yi));
+                    take();
                 }
             }
             A   = B;
             dA  = dB;
             ddA = ddB;
         };
-        if (start * tEnd < 0.0) {
-            // The grid crosses the epoch: integrate to t = 0, then switch the sign of the noise term
-            // and restart the derivatives from the other side.
-            y = integrateRkf78Steps<N>(f, start, y, 0.0, onStep, opt, &st);
-            add();
-            qs  = -qs;
-            dA  = f(0.0, y);
-            ddA = second(0.0, y, dA);
-            (void)integrateRkf78Steps<N>(f, 0.0, y, tEnd, onStep, opt, &st);
-        } else {
-            (void)integrateRkf78Steps<N>(f, start, y, tEnd, onStep, opt, &st);
-        }
+        const OdeState<N> yLast = integrateRkf78Steps<N>(f, t0, ys, tLast, onStep, opt, &st);
         add();
+        while (left > 0) { // grid times that rounding has made equal to the sweep's last
+            emit(k, stateOf(yLast), unpack(yLast.data() + kPhi), noiseOf(yLast));
+            take();
+        }
+    };
+
+    if (!plan.spansEpoch) {
+        // The whole grid lies on one side of the epoch: to its nearest point, then through the others.
+        const double tp   = plan.time(plan.pivot);
+        const double tFar = plan.time(plan.pivot == 0 ? count - 1 : 0);
+        qs                = (tp != 0.0 ? tp : tFar) < 0.0 ? -1.0 : 1.0;
+        OdeState<N> yp    = y0;
+        if (tp != 0.0) {
+            yp = integrateRkf78<N>(f, 0.0, y0, tp, opt, &st);
+            add();
+        }
+        emit(plan.pivot, stateOf(yp), unpack(yp.data() + kPhi), noiseOf(yp));
+        sweep(tp, yp, plan.pivot == 0 ? 1 : count - 2, plan.pivot == 0, count - 1);
+    } else {
+        // Outwards from the epoch, once towards each end, so that the noise only ever accumulates:
+        // integrating through the epoch would form Q near it as a difference of larger numbers.
+        std::size_t ahead = plan.pivot;
+        if (plan.time(ahead) == 0.0) {
+            emit(ahead, stateOf(y0), unpack(y0.data() + kPhi), noiseOf(y0));
+            ++ahead;
+        }
+        qs = plan.time(count - 1) > 0.0 ? 1.0 : -1.0;
+        sweep(0.0, y0, ahead, true, count - ahead);
+        qs = -qs;
+        sweep(0.0, y0, plan.pivot - 1, false, plan.pivot);
     }
     if (stats) {
         *stats = total;
