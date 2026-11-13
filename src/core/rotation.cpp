@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "../core/enum_io.h"
 #include "astro/core/error.h"
@@ -65,8 +66,20 @@ Mat3 axisAngleToMatrix(const Vec3& axis, double theta) noexcept {
 // ------------------------------------------------------------ Quat
 
 Quat Quat::fromAxisAngle(const Vec3& axis, double theta) noexcept {
-    const Vec3   n = astro::normalized(axis);
-    const double s = std::sin(0.5 * theta);
+    if (axis.x == 0.0 && axis.y == 0.0 && axis.z == 0.0) {
+        // No axis, so no rotation: the identity, as the header says. An angle that is not finite
+        // still gives not-a-number (NaN), as it does for every other axis.
+        constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+        return std::isfinite(theta) ? Quat{} : Quat{nan, nan, nan, nan};
+    }
+    // Unit vector along the axis. The axis is divided by its largest component first, so that
+    // squaring the components for the length can neither underflow nor overflow. Squared as given,
+    // an axis shorter than about 1e-162 has zero length and one longer than about 1e154 has infinite
+    // length; both left n = 0 and a result of (cos(theta/2), 0, 0, 0), which is not a rotation.
+    // std::fmax passes over a NaN component, but the NaN still reaches the result through `axis`.
+    const double largest = std::fmax(std::abs(axis.x), std::fmax(std::abs(axis.y), std::abs(axis.z)));
+    const Vec3   n       = astro::normalized(axis / largest);
+    const double s       = std::sin(0.5 * theta);
     return {std::cos(0.5 * theta), s * n.x, s * n.y, s * n.z};
 }
 

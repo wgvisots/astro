@@ -21,6 +21,7 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <string>
 
 #include "astro/core/angle.h"
 #include "test_util.h"
@@ -33,12 +34,35 @@ using astro::test::expectVecNear;
 namespace {
 
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+constexpr double kInf = std::numeric_limits<double>::infinity();
 
 void expectAllNaN(const Quat& q) {
     EXPECT_TRUE(std::isnan(q.w)) << "w = " << q.w;
     EXPECT_TRUE(std::isnan(q.x)) << "x = " << q.x;
     EXPECT_TRUE(std::isnan(q.y)) << "y = " << q.y;
     EXPECT_TRUE(std::isnan(q.z)) << "z = " << q.z;
+}
+
+void expectAllNaN(const Mat3& m) {
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            EXPECT_TRUE(std::isnan(m(i, j))) << "(" << i << "," << j << ") = " << m(i, j);
+        }
+    }
+}
+
+void expectQuatNear(const Quat& a, const Quat& b, double tol, const std::string& what = "") {
+    EXPECT_NEAR(a.w, b.w, tol) << what << " w";
+    EXPECT_NEAR(a.x, b.x, tol) << what << " x";
+    EXPECT_NEAR(a.y, b.y, tol) << what << " y";
+    EXPECT_NEAR(a.z, b.z, tol) << what << " z";
+}
+
+/// Frame rotation by `theta` about the unit vector `n`, from Rodrigues' formula in its passive form:
+/// A = cos(theta) I + (1 - cos(theta)) n n^T - sin(theta) [n x]. For n = z this is R3(theta).
+Mat3 rodrigues(const Vec3& n, double theta) {
+    const double c = std::cos(theta), s = std::sin(theta);
+    return c * Mat3::identity() + (1.0 - c) * outer(n, n) - s * Mat3::skew(n);
 }
 
 } // namespace
@@ -107,6 +131,62 @@ TEST(Quat, MatrixRoundTripAndTransform) {
     }
 }
 
+// The axis may have any length: only its direction counts. The lengths here run from the smallest
+// double (2^-1074) to near the largest. The axis is (3, -4, 12) scaled by a power of two, so its unit
+// vector is (3, -4, 12) / 13 exactly. Truth: the quaternion (cos(theta/2), sin(theta/2) n), and
+// Rodrigues' formula for the matrix. Before the fix the components were squared as given, which
+// underflows below about 1e-162 and overflows above about 1e154, and the result was
+// (cos(theta/2), 0, 0, 0): not a rotation.
+TEST(Quat, AxisOfAnyLengthIsNormalized) {
+    const Vec3 n{3.0 / 13.0, -4.0 / 13.0, 12.0 / 13.0};
+    for (int power : {-1074, -1000, -600, -300, -1, 0, 300, 600, 1019}) {
+        const Vec3 axis{std::ldexp(3.0, power), std::ldexp(-4.0, power), std::ldexp(12.0, power)};
+        for (double theta : {1.0, -2.5, 3.0}) {
+            const std::string what = "axis scaled by 2^" + std::to_string(power) + ", theta " + std::to_string(theta);
+            const double      c = std::cos(0.5 * theta), s = std::sin(0.5 * theta);
+            // Tolerances. Quaternion: two rounding errors of 1.1e-16, one in the unit vector and one in
+            // the product. Matrix: each element is a sum of four squares or products of those
+            // components, and the reference has its own rounding; 5.6e-16 was the worst seen over all
+            // angles, 1e-15 allows for a different compiler.
+            expectQuatNear(Quat::fromAxisAngle(axis, theta), Quat{c, s * n.x, s * n.y, s * n.z}, 2.3e-16, what);
+            expectMatNear(axisAngleToMatrix(axis, theta), rodrigues(n, theta), 1e-15, what.c_str());
+        }
+    }
+    // The shortest axis there is: the smallest double, along -z.
+    expectMatNear(axisAngleToMatrix({0.0, 0.0, -5e-324}, 1.0), R3(-1.0), 1e-15, "smallest axis");
+}
+
+// A zero axis defines no rotation. Both functions are noexcept, so the documented result is the
+// identity. (Before the fix: cos(theta/2)^2 times the identity, which is the zero matrix for theta = pi.)
+TEST(Quat, ZeroAxisGivesTheIdentity) {
+    for (double theta : {0.0, 1.0, constants::pi, -7.0}) {
+        EXPECT_EQ(Quat::fromAxisAngle({0.0, 0.0, 0.0}, theta), Quat{}) << theta;
+        EXPECT_EQ(Quat::fromAxisAngle({-0.0, 0.0, -0.0}, theta), Quat{}) << theta;
+        EXPECT_EQ(axisAngleToMatrix({0.0, 0.0, 0.0}, theta), Mat3::identity()) << theta;
+    }
+}
+
+// Not-a-number (NaN) or infinity in the axis or in the angle gives NaN, never a finite matrix.
+TEST(Quat, AxisAngleKeepsNaN) {
+    for (const Vec3& axis : {
+             Vec3{kNaN, 0.0,   0.0 },
+             Vec3{0.0,  kNaN,  0.0 },
+             Vec3{0.0,  1.0,   kNaN},
+             Vec3{kNaN, kNaN,  kNaN},
+             Vec3{0.0,  0.0,   kInf},
+             Vec3{1.0,  -kInf, 2.0 }
+    }) {
+        const Quat q = Quat::fromAxisAngle(axis, 1.0);
+        EXPECT_TRUE(std::isnan(q.x) && std::isnan(q.y) && std::isnan(q.z)) << axis << " -> " << q.vec();
+        expectAllNaN(axisAngleToMatrix(axis, 1.0));
+    }
+    for (double theta : {kNaN, kInf, -kInf}) {
+        expectAllNaN(Quat::fromAxisAngle({0.0, 0.0, 1.0}, theta));
+        expectAllNaN(Quat::fromAxisAngle({0.0, 0.0, 0.0}, theta));
+        expectAllNaN(axisAngleToMatrix({0.0, 0.0, 0.0}, theta));
+    }
+}
+
 // A quaternion with a not-a-number (NaN) component is not a rotation, and it is not the zero quaternion:
 // normalising it must give NaN, not the identity (which the caller would take for a valid attitude).
 TEST(Quat, NormalizedKeepsNaN) {
@@ -132,12 +212,7 @@ TEST(Quat, NaNInGivesNaNOut) {
     const Quat identity = Quat{};
     for (const Mat3& m : {offDiagonal, onDiagonal}) {
         expectAllNaN(Quat::fromMatrix(m));
-        const Mat3 o = orthonormalize(m);
-        for (std::size_t i = 0; i < 3; ++i) {
-            for (std::size_t j = 0; j < 3; ++j) {
-                EXPECT_TRUE(std::isnan(o(i, j))) << "(" << i << "," << j << ") = " << o(i, j);
-            }
-        }
+        expectAllNaN(orthonormalize(m));
     }
     expectAllNaN(slerp(identity, Quat{kNaN, 0.0, 0.0, 1.0}, 0.5));
     expectAllNaN(slerp(Quat{1.0, 0.0, kNaN, 0.0}, identity, 0.5));

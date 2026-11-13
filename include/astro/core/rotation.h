@@ -44,7 +44,9 @@ namespace astro {
 /// Passive rotation about coordinate axis `axis` (1, 2 or 3).
 [[nodiscard]] Mat3 rotationAboutAxis(int axis, double theta);
 
-/// Passive rotation by `theta` about an arbitrary (not necessarily unit) axis.
+/// Passive rotation by `theta` about an arbitrary axis. Only the direction of `axis` is used: it may
+/// have any length except zero. A zero axis defines no rotation and gives the identity matrix.
+/// Not-a-number (NaN) or infinity in `axis` or `theta` gives a matrix of NaN.
 [[nodiscard]] Mat3 axisAngleToMatrix(const Vec3& axis, double theta) noexcept;
 
 /// Unit quaternion, scalar first: q = w + x i + y j + z k (Hamilton algebra).
@@ -69,7 +71,9 @@ struct Quat {
         , y(y_)
         , z(z_) {}
 
-    /// Frame rotation by `theta` (rad) about `axis` (normalized internally; need not be unit).
+    /// Frame rotation by `theta` (rad) about `axis`. Only the direction of `axis` is used (it is
+    /// normalized internally): it may have any length except zero. A zero axis defines no rotation
+    /// and gives the identity quaternion. Not-a-number (NaN) or infinity in `axis` or `theta` gives NaN.
     [[nodiscard]] static Quat fromAxisAngle(const Vec3& axis, double theta) noexcept;
     /// Quaternion from a passive rotation (direction cosine) matrix. Uses Shepperd's
     /// method; the result has w >= 0.
