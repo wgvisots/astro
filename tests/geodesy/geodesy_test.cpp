@@ -291,5 +291,71 @@ TEST(Helmert, TransformAndInverse) {
     },
         h,
         2020.0);
-    EXPECT_NEAR(sv.v.x, 0.011 + 1e-9 * 0.01, 1e-12);
+    // A velocity of 0.01 m/s gains the translation rate, 0.001 m per Julian year, and the scale term.
+    EXPECT_NEAR(sv.v.x, 0.01 + 0.001 / (365.25 * 86400.0) + 1e-9 * 0.01, 1e-16);
+}
+
+TEST(Helmert, VelocityIsTheTimeDerivativeOfThePositionInMetresPerSecond) {
+    // A station moving at centimetres per year, and a 14-parameter transformation with every parameter
+    // and every rate non-zero. Positions are in m, velocities in m/s, rates per Julian year.
+    constexpr double           secondsPerYear = 365.25 * 86400.0;
+    const HelmertTimeDependent h{
+        {{0.1, -0.2, 0.3}, {mas2rad(1.0), mas2rad(-2.0), mas2rad(3.0)}, 5e-9        },
+        {0.01,             -0.02,                                       0.03        },
+        {mas2rad(0.1),     mas2rad(-0.2),                               mas2rad(0.3)},
+        1e-10,
+        2010.0
+    };
+    const StateVector x{
+        {4.0e6, 3.0e6, 3.5e6},
+        Vec3{0.02,  -0.01, 0.015}
+        / secondsPerYear
+    };
+    const double year = 2020.0;
+    // Truth, written out from the definition X2 = X1 + T + s X1 + r x X1 (position-vector convention):
+    // the transformed position `t` seconds after `year`, with the station moving and the parameters
+    // changing at their rates.
+    const auto position = [&](double t) {
+        const double years = (year - h.epoch) + t / secondsPerYear;
+        const Vec3   x1    = x.r + x.v * t;
+        const Vec3   T     = h.p.t + h.tRate * years;
+        const Vec3   r     = h.p.r + h.rRate * years;
+        const double s     = h.p.s + h.sRate * years;
+        return x1 + T + s * x1 + cross(r, x1);
+    };
+    const StateVector y = helmertTransform(x, h, year);
+    expectVecNear(y.r, position(0.0), 5e-9, "position"); // a few units in the last place of 4e6 m
+    // The position is a quadratic in t, so the central difference over +-1 year is its derivative
+    // exactly, but for rounding: positions of 5e6 m carry 1e-9 m, which over 6.3e7 s is 2e-17 m/s.
+    // The velocity itself is 7e-10 m/s, and the smallest rate term (the scale rate) 1e-11 m/s.
+    const Vec3 velocity = (position(secondsPerYear) - position(-secondsPerYear)) / (2.0 * secondsPerYear);
+    expectVecNear(y.v, velocity, 1e-16, "velocity");
+
+    // The coordinate-frame convention with the opposite rotation signs is the same transformation.
+    HelmertTimeDependent cf = h;
+    cf.p.convention         = HelmertConvention::CoordinateFrame;
+    cf.p.r                  = -h.p.r;
+    cf.rRate                = -h.rRate;
+    EXPECT_EQ(helmertTransform(x, cf, year).r, y.r);
+    EXPECT_EQ(helmertTransform(x, cf, year).v, y.v);
+
+    // Without rates the position is the 7-parameter result. EPSG Guidance Note 7-2, position vector
+    // transformation, WGS 72 to WGS 84: tZ = 4.5 m, rZ = 0.554 arcsec, dS = 0.219 ppm. The result is
+    // published to 1 cm.
+    const HelmertTimeDependent wgs72{
+        {{0.0, 0.0, 4.5}, {0.0, 0.0, arcsec2rad(0.554)}, 0.219e-6},
+        {},
+        {},
+        0.0,
+        1984.0
+    };
+    const StateVector w = helmertTransform(
+        StateVector{
+            {3657660.66, 255768.55, 5201382.11},
+            {}
+    },
+        wgs72,
+        2000.0);
+    expectVecNear(w.r, {3657660.78, 255778.43, 5201387.75}, 0.01, "EPSG");
+    EXPECT_EQ(w.v, Vec3{});
 }
