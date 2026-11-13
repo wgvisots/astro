@@ -25,6 +25,7 @@ the end of the page).
 | Low-precision Sun / Moon | DE440 | tested 0.01 deg / 0.1 deg; measured 1950-2050: Sun < 30", 6e-5 in distance; Moon < 6', 0.14% |
 | SGP4 / SDP4 | Vallado's verification set, all cases [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/) | 1 mm, 1 um/s (largest difference measured: 0.12 mm) |
 | Kepler, elements, Lambert | Vallado Examples 2-4, 2-5, 7-5; Curtis Example 5.2 [Curtis](https://shop.elsevier.com/books/orbital-mechanics-for-engineering-students/curtis/978-0-12-824025-0) | about the printed precision (Kepler 1 m, 1 mm/s; Lambert 2 mm/s and 0.06 m/s) |
+| Two-body propagation (`propagateKepler`), every conic | extended-precision universal variables solved by bisection: e from 0 to 50, both sides of e = 1, steps of 0.01 s to 1e5 s | 1e-12 of the state (largest measured: 1.5e-13) |
 | Numerical J2/J4 | energy integral; Brouwer secular rates | energy 1e-10 over 10 days; node rate 0.3% |
 | State transition matrix | finite differences of propagations; symplectic identity | 1e-6 relative; 1e-8 |
 | Interpolated STM between steps | integration to the exact time | 2e-8 (default tolerance), 2e-6 (relTol 1e-9) |

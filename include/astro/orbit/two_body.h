@@ -29,11 +29,20 @@
 /// Two-body (Keplerian) propagation and Lambert's problem.
 namespace astro {
 
-/// Stumpff functions c2(psi), c3(psi).
+/// Stumpff functions c2(psi) = (1 - cos sqrt(psi)) / psi and c3(psi) = (sqrt(psi) - sin sqrt(psi)) / psi^(3/2),
+/// continued to psi <= 0 (hyperbolic functions). Accurate to a few rounding errors for every psi: by
+/// their power series for |psi| < 1, where the closed forms cancel.
 void stumpff(double psi, double& c2, double& c3) noexcept;
 
 /// Propagate a two-body state by dt seconds using universal variables
-/// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits.
+/// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits, any dt of
+/// either sign, and any step size down to rounding.
+///
+/// The universal Kepler equation is solved by the Laguerre-Conway iteration inside a bracket, so it
+/// always ends; the result is within a few rounding errors of the equation's own conditioning
+/// (1e-13 of the state for steps up to a few revolutions; see docs/accuracy.md).
+///
+/// Throws astro::Error if the state or dt is not finite, the position is zero, or mu is not positive.
 [[nodiscard]] StateVector propagateKepler(const StateVector& s0, double dt, double mu = constants::gmEarth);
 
 /// propagateKepler with the state transition matrix Phi(dt) = d(state at dt) / d(s0), in closed
