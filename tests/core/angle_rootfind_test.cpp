@@ -138,6 +138,92 @@ TEST(Angle, DmsAndHmsToRadTakeTheSignOfTheFirstArgument) {
     EXPECT_EQ(dmsToRad(-5, -30, -0.0), deg2rad(-5.5));
 }
 
+// Every form the grammar in angle.h allows. Truth: the same angle written as a decimal number of hours or
+// degrees. The parser adds the fields in the same order, so the two agree to a rounding error or two
+// (EXPECT_DOUBLE_EQ allows four).
+TEST(Angle, ParseAcceptsTheDocumentedSexagesimalForms) {
+    const double hms = deg2rad(15.0 * (12.0 + 34.0 / 60.0 + 56.7 / 3600.0));
+    for (const char* text : {"12:34:56.7",
+                             "12 34 56.7",
+                             "12h34m56.7s",
+                             "12h 34m 56.7s",
+                             "12 h 34 m 56.7 s",
+                             "12H34M56.7S",
+                             "12,34,56.7",
+                             "12: 34: 56.7",
+                             "12h34:56.7",
+                             "  12:34:56.7\t",
+                             "+12:34:56.7",
+                             "+ 12 34 56.7",
+                             "012:034:056.700"}) {
+        EXPECT_DOUBLE_EQ(parseHms(text), hms) << text;
+    }
+    const double dms = deg2rad(-(5.0 + 6.0 / 60.0 + 7.25 / 3600.0));
+    for (const char* text : {"-5:06:07.25",
+                             "-05 06 07.25",
+                             "- 5  6  7.25",
+                             "-5d6m7.25s",
+                             "-5D 6M 7.25S",
+                             "-5d6'7.25\"",
+                             "-5\xC2\xB0"
+                             "6'7.25\"", // degree sign in UTF-8
+                             "-5\xB0"
+                             "6'7.25\"", // degree sign in ISO 8859-1 (Latin-1)
+                             "-5\xC2\xB0 6' 7.25\" "}) {
+        EXPECT_DOUBLE_EQ(parseDms(text), dms) << text;
+    }
+    // One or two fields; only the last may have a fraction, and it may end or begin with the point.
+    EXPECT_DOUBLE_EQ(parseDms("12.5"), deg2rad(12.5));
+    EXPECT_DOUBLE_EQ(parseDms("12.5d"), deg2rad(12.5));
+    EXPECT_DOUBLE_EQ(parseDms("12."), deg2rad(12.0));
+    EXPECT_DOUBLE_EQ(parseDms(".5"), deg2rad(0.5));
+    EXPECT_DOUBLE_EQ(parseDms("12:30.5"), deg2rad(12.0 + 30.5 / 60.0));
+    EXPECT_DOUBLE_EQ(parseDms("12d30'"), deg2rad(12.5));
+    EXPECT_DOUBLE_EQ(parseHms("12.5h"), deg2rad(187.5));
+    EXPECT_DOUBLE_EQ(parseHms("12h30"), deg2rad(187.5));
+    // The first field has no upper limit; minutes and seconds just below 60 are in range.
+    EXPECT_DOUBLE_EQ(parseDms("360:00:00"), deg2rad(360.0));
+    EXPECT_DOUBLE_EQ(parseHms("24:00:00"), twoPi);
+    EXPECT_DOUBLE_EQ(parseDms("0:59:59.999"), deg2rad(59.0 / 60.0 + 59.999 / 3600.0));
+    // The sign applies to the whole angle, including an angle between 0 and -1.
+    EXPECT_DOUBLE_EQ(parseDms("-0:30"), deg2rad(-0.5));
+    EXPECT_TRUE(sameBits(parseDms("-0"), -0.0));
+}
+
+// Each string breaks one rule of the grammar in angle.h, and must throw as other malformed text does.
+// Before the parser was made strict, most of these returned a number (or NaN, or infinity).
+TEST(Angle, ParseRejectsMalformedSexagesimalText) {
+    for (const char* text : {
+             "nan",         "NaN",        "inf",     "-inf",        "infinity", // not numbers
+             "1e2",         "1:2e1:3",    "1:2:3e1", "1E2",         "0x10",     // exponents, hexadecimal
+             "5::30",       ":5:30",      "5:30:",   "5: :30",      "5,,30",    // an empty field
+             "12.5:30",     "12:30.5:30", "12.5 30", "12.5.5",                  // a fraction before the last field
+             "5:-30",       "--5",        "+-5",     "5 +30",       "5-",       // a sign that is not in front
+             "12:34:56.7x", "12x",        "x12",     "12:34:56.7\n"             // stray characters
+         }) {
+        EXPECT_THROW((void)parseDms(text), Error) << "parseDms(\"" << text << "\")";
+        EXPECT_THROW((void)parseHms(text), Error) << "parseHms(\"" << text << "\")";
+    }
+    for (const char* text : {"", " ", "+", "-", ".", "12:.", "1 2 3 4", "1:2:3:4", "12:60:00", "12:00:60"}) {
+        EXPECT_THROW((void)parseDms(text), Error) << "parseDms(\"" << text << "\")";
+        EXPECT_THROW((void)parseHms(text), Error) << "parseHms(\"" << text << "\")";
+    }
+    // A unit mark must fit the quantity: no degrees or arc marks in hours, no hours in degrees.
+    for (const char* text : {"12d", "12D", "12\xC2\xB0", "12\xB0", "12h30'", "12h30m15\"", "12d30m"}) {
+        EXPECT_THROW((void)parseHms(text), Error) << "parseHms(\"" << text << "\")";
+    }
+    for (const char* text : {"12h", "12H", "12h30m", "12h30'"}) {
+        EXPECT_THROW((void)parseDms(text), Error) << "parseDms(\"" << text << "\")";
+    }
+    // A unit mark must fit its field: the first number is hours or degrees, the second minutes, ...
+    for (const char* text : {"30m", "15s", "12h30h", "12h30s", "12m30s", "12:30:15m", "12h:30", "12hh", "h"}) {
+        EXPECT_THROW((void)parseHms(text), Error) << "parseHms(\"" << text << "\")";
+    }
+    for (const char* text : {"30m", "30'", "15\"", "12d30d", "12d30\"", "12'30\"", "12:30:15'", "12\xC2", "d"}) {
+        EXPECT_THROW((void)parseDms(text), Error) << "parseDms(\"" << text << "\")";
+    }
+}
+
 TEST(Angle, Sexagesimal) {
     EXPECT_NEAR(parseHms("12:00:00"), pi, 1e-15);
     EXPECT_NEAR(parseHms("06h30m"), deg2rad(97.5), 1e-15);

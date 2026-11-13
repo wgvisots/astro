@@ -18,11 +18,11 @@
 
 #include "astro/core/angle.h"
 
-#include <cctype>
+#include <array>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
-#include <vector>
+#include <system_error>
 
 #include "astro/core/error.h"
 
@@ -108,64 +108,140 @@ Sexagesimal decompose(double units, int decimals) {
     return out;
 }
 
-bool isSeparator(char c) {
-    return c == ' ' || c == ':' || c == 'h' || c == 'H' || c == 'd' || c == 'D' || c == 'm' || c == 'M' || c == 's'
-        || c == 'S' || c == '\'' || c == '"' || c == '\t' || c == ',';
+// What the first field of a sexagesimal string counts: it decides which unit marks are allowed.
+enum class Whole {
+    Hours,
+    Degrees
+};
+
+// A unit mark found in the text: the field it labels and the number of bytes it takes.
+struct UnitMark {
+    std::size_t field{0};  // 0 = hours or degrees, 1 = minutes, 2 = seconds
+    std::size_t length{0}; // 0 if there is no unit mark here
+    bool        allowed{true};
+};
+
+// The unit mark at the start of `rest`, if there is one. Hours take 'h', 'm', 's'. Degrees take 'd' or
+// the degree sign, then 'm' or an apostrophe, then 's' or a double quote. A mark of the other quantity
+// (degrees in an hours string, say) is found but flagged as not allowed, so that it is reported as an
+// error instead of being read as something else.
+UnitMark unitMarkAt(std::string_view rest, Whole whole) {
+    if (rest.empty()) {
+        return {};
+    }
+    const bool hours = whole == Whole::Hours;
+    const auto c     = static_cast<unsigned char>(rest[0]);
+    switch (c) {
+    case 'h':
+    case 'H':  return {0, 1, hours};
+    case 'd':
+    case 'D':  return {0, 1, !hours};
+    case 0xB0: return {0, 1, !hours}; // degree sign in ISO 8859-1 (Latin-1)
+    case 0xC2:                        // degree sign in UTF-8 is the two bytes C2 B0
+        return rest.size() > 1 && static_cast<unsigned char>(rest[1]) == 0xB0 ? UnitMark{0, 2, !hours} : UnitMark{};
+    case 'm':
+    case 'M':  return {1, 1, true};
+    case '\'': return {1, 1, !hours};
+    case 's':
+    case 'S':  return {2, 1, true};
+    case '"':  return {2, 1, !hours};
+    default:   return {};
+    }
 }
 
-// Parses one-to-three numeric fields with an optional sign. Returns value in "whole" units.
-double parseSexagesimal(std::string_view text) {
-    std::size_t pos = 0;
-    // Strip UTF-8 degree sign (0xC2 0xB0) by treating its bytes as separators.
-    auto skipSeps = [&]() {
-        while (pos < text.size()) {
-            const auto uc = static_cast<unsigned char>(text[pos]);
-            if (isSeparator(text[pos]) || uc == 0xC2 || uc == 0xB0) {
-                ++pos;
-            } else {
-                break;
-            }
+[[noreturn]] void failSexagesimal(const char* what, std::string_view text) {
+    throw Error(std::string(what) + ": '" + std::string(text) + "'");
+}
+
+// Parses the grammar documented at parseHms in angle.h: an optional sign, then one to three numbers
+// with exactly one separator between each pair. Returns the value in whole units (hours or degrees).
+//
+// The numbers are checked character by character before they are converted, so only plain decimal
+// digits get through. (Handing each field to std::from_chars and skipping any run of separator
+// characters, as this did, let through "nan", "inf", exponents, empty fields such as "5::30", a fraction
+// in any field, so that "12.5:30" was 13, and any unit letter anywhere.)
+double parseSexagesimal(std::string_view text, Whole whole) {
+    std::size_t pos        = 0;
+    const auto  atEnd      = [&] { return pos == text.size(); };
+    const auto  skipBlanks = [&] {
+        const std::size_t start = pos;
+        while (!atEnd() && (text[pos] == ' ' || text[pos] == '\t')) {
+            ++pos;
         }
+        return pos != start;
     };
-    while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) {
-        ++pos;
-    }
+    const auto skipDigits = [&] {
+        const std::size_t start = pos;
+        while (!atEnd() && text[pos] >= '0' && text[pos] <= '9') {
+            ++pos;
+        }
+        return pos - start;
+    };
+
+    skipBlanks();
     bool negative = false;
-    if (pos < text.size() && (text[pos] == '-' || text[pos] == '+')) {
+    if (!atEnd() && (text[pos] == '-' || text[pos] == '+')) {
         negative = text[pos] == '-';
         ++pos;
+        skipBlanks();
     }
-    std::vector<double> fields;
-    while (pos < text.size()) {
-        skipSeps();
-        if (pos >= text.size()) {
-            break;
+
+    std::array<double, 3> fields{};
+    std::size_t           count       = 0;
+    bool                  hadFraction = false;
+    while (!atEnd()) {
+        // A number: digits, with an optional fraction.
+        const std::size_t begin  = pos;
+        std::size_t       digits = skipDigits();
+        const bool        point  = !atEnd() && text[pos] == '.';
+        if (point) {
+            ++pos;
+            digits += skipDigits();
         }
-        double      v     = 0.0;
-        const char* begin = text.data() + pos;
-        const char* end   = text.data() + text.size();
-        auto [ptr, ec]    = std::from_chars(begin, end, v);
-        if (ec != std::errc{} || ptr == begin || v < 0.0) {
-            throw Error("malformed sexagesimal string: '" + std::string(text) + "'");
+        if (digits == 0) {
+            failSexagesimal("malformed sexagesimal string", text);
         }
-        fields.push_back(v);
-        pos = static_cast<std::size_t>(ptr - text.data());
-    }
-    if (fields.empty() || fields.size() > 3) {
-        throw Error("sexagesimal string must have 1-3 fields: '" + std::string(text) + "'");
-    }
-    for (std::size_t i = 1; i < fields.size(); ++i) {
-        if (fields[i] >= 60.0) {
-            throw Error("sexagesimal minutes/seconds must be < 60: '" + std::string(text) + "'");
+        if (count == fields.size()) {
+            failSexagesimal("sexagesimal string must have 1-3 fields", text);
         }
+        if (hadFraction) {
+            failSexagesimal("only the last field of a sexagesimal string may have a fraction", text);
+        }
+        hadFraction = point;
+        const std::from_chars_result converted =
+            std::from_chars(text.data() + begin, text.data() + pos, fields[count], std::chars_format::fixed);
+        if (converted.ec != std::errc{}) {
+            failSexagesimal("malformed sexagesimal string", text); // more digits than a double can hold
+        }
+        if (count > 0 && fields[count] >= 60.0) {
+            failSexagesimal("sexagesimal minutes/seconds must be < 60", text);
+        }
+
+        // What follows the number: its unit mark, or one ':' or ',', or blanks alone. Blanks may
+        // surround a mark or a separator, but two separators in a row would be an empty field.
+        const bool     blanks = skipBlanks();
+        const UnitMark mark   = unitMarkAt(text.substr(pos), whole);
+        if (mark.length > 0) {
+            if (!mark.allowed || mark.field != count) {
+                failSexagesimal("sexagesimal unit mark is of the wrong kind or out of place", text);
+            }
+            pos += mark.length;
+            skipBlanks();
+        } else if (!atEnd() && (text[pos] == ':' || text[pos] == ',')) {
+            ++pos;
+            skipBlanks();
+            if (atEnd()) {
+                failSexagesimal("malformed sexagesimal string", text); // nothing after the separator
+            }
+        } else if (!atEnd() && !blanks) {
+            failSexagesimal("malformed sexagesimal string", text); // a character that cannot follow a number
+        }
+        ++count;
     }
-    double v = fields[0];
-    if (fields.size() > 1) {
-        v += fields[1] / 60.0;
+    if (count == 0) {
+        failSexagesimal("sexagesimal string must have 1-3 fields", text);
     }
-    if (fields.size() > 2) {
-        v += fields[2] / 3600.0;
-    }
+    const double v = fields[0] + fields[1] / 60.0 + fields[2] / 3600.0;
     return negative ? -v : v;
 }
 
@@ -190,11 +266,11 @@ Sexagesimal radToDms(double rad, int decimals) noexcept {
 }
 
 double parseHms(std::string_view text) {
-    return parseSexagesimal(text) * 15.0 * constants::degToRad;
+    return parseSexagesimal(text, Whole::Hours) * 15.0 * constants::degToRad;
 }
 
 double parseDms(std::string_view text) {
-    return parseSexagesimal(text) * constants::degToRad;
+    return parseSexagesimal(text, Whole::Degrees) * constants::degToRad;
 }
 
 std::string formatHms(double rad, int decimals, char sep) {

@@ -93,12 +93,28 @@ struct Sexagesimal {
 /// Decompose radians into degrees/arcminutes/arcseconds.
 [[nodiscard]] Sexagesimal radToDms(double rad, int decimals = 2) noexcept;
 
-/// Parse an hours/minutes/seconds string into radians. Accepts separators made of spaces,
-/// ':', 'h', 'd', 'm', 's', '\'', '"', and the degree sign; one to three fields;
-/// a leading '+' or '-'. E.g. "12:34:56.7", "-05d30m00s", "12h 30m".
-/// Throws astro::Error on malformed input.
+/// Parse an hours/minutes/seconds string into radians, e.g. "12:34:56.7", "12h 34m 56.7s", "12 34.5".
+///
+/// The text holds one, two or three numbers: hours, then minutes, then seconds.
+/// - A '+' or '-' may come first. It applies to the whole angle, so "-0:30" is minus half an hour.
+/// - A number is plain decimal digits. Only the last number may have a fraction ("12:34.5" is 12 h
+///   34.5 min; "12.5:30" is an error). Minutes and seconds must be below 60; the first number has no limit.
+/// - Between two numbers there is exactly one separator: a ':', a ',', a unit mark, or blank space.
+/// - A number may be followed by its unit mark: 'h' after hours, 'm' after minutes, 's' after seconds,
+///   in either case.
+/// - Spaces and tabs may begin or end the text, follow the sign, and surround a separator or a unit mark.
+///
+/// Throws astro::Error for anything else: an empty string or an empty field ("5::30"), a fourth
+/// number, an exponent ("1e2"), "nan" or "inf", a sign that is not in front, a unit mark on the wrong
+/// number ("30m" alone) or of the wrong quantity ("12d", or an arc mark such as "12h30'"), and any
+/// other character (a line end included).
 [[nodiscard]] double parseHms(std::string_view text);
-/// Parse a degrees/arcminutes/arcseconds string into radians; same syntax and errors as parseHms.
+/// Parse a degrees/arcminutes/arcseconds string into radians, e.g. "-05:30:00", "-05d30m00s",
+/// "+45d 15' 36.2\"".
+///
+/// The grammar and the errors are those of parseHms, with these unit marks: 'd' or the degree sign
+/// (UTF-8 or ISO 8859-1) after degrees, 'm' or an apostrophe after arcminutes, 's' or a double quote after
+/// arcseconds. An hours mark ("12h") is an error.
 [[nodiscard]] double parseDms(std::string_view text);
 
 /// Format as "HH:MM:SS.sss" (sep=':').
