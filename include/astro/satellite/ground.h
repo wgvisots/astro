@@ -33,7 +33,11 @@ namespace astro {
 /// normal through the satellite) of an ITRS position; h is the altitude.
 [[nodiscard]] Geodetic subSatellitePoint(const Vec3& satItrs, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
-/// Sub-satellite points at times start, start+step, ..., end.
+/// Sub-satellite points at times start, start+step, ..., end (`end` is the last
+/// point even when it is not a whole number of steps from `start`). An empty window
+/// (end == start) gives the one point at `start`. Throws astro::Error if `end` is
+/// before `start`, if either time is NaN, if `step` is not positive and finite, or
+/// if the window holds more than 2e9 steps.
 [[nodiscard]] std::vector<Geodetic> groundTrack(const std::function<Vec3(const Time&)>& satItrs,
                                                 const Time&                             start,
                                                 const Time&                             end,

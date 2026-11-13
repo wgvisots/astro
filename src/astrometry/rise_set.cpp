@@ -23,6 +23,7 @@
 
 #include "../core/enum_io.h"
 #include "astro/core/angle.h"
+#include "astro/core/error.h"
 #include "astro/core/rootfind.h"
 #include "astro/frames/precession_nutation.h"
 
@@ -33,10 +34,22 @@ std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&
                                           const Time&                               end,
                                           double                                    threshold,
                                           double                                    step) {
+    const double span = end - start;
+    if (!std::isfinite(span) || span < 0.0) {
+        throw Error("findElevationEvents: start and end must be finite, with end not before start");
+    }
+    if (!(step > 0.0) || !std::isfinite(step)) {
+        throw Error("findElevationEvents: step must be positive and finite");
+    }
+    if (std::isnan(threshold)) {
+        throw Error("findElevationEvents: threshold must not be NaN");
+    }
+    if (!(span / step <= 2e9)) { // the count of steps is kept in an int
+        throw Error("findElevationEvents: the window holds more than 2e9 steps");
+    }
     std::vector<SkyEvent> events;
-    const double          span = end - start;
-    if (span <= 0.0 || step <= 0.0) {
-        return events;
+    if (span == 0.0) {
+        return events; // an empty window holds no event
     }
     const int    n = std::max(2, static_cast<int>(std::ceil(span / step)));
     const double h = span / n;

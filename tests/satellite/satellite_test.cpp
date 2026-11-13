@@ -17,8 +17,11 @@
  **********************************************************************/
 
 #include <cmath>
+#include <limits>
+#include <string>
 
 #include "astro/core/angle.h"
+#include "astro/core/error.h"
 #include "astro/ephemeris/low_precision.h"
 #include "astro/frames/transform.h"
 #include "astro/geodesy/local.h"
@@ -339,6 +342,84 @@ TEST(Ground, FootprintAboutAPoleIsAnEvenlySpacedParallel) {
             EXPECT_NEAR(wrapPi(nearby[i].lon - ring[i].lon), 0.0, 1e-8);
         }
     }
+}
+
+namespace {
+
+/// The message of the astro::Error that `call` throws, or "no error" if it throws nothing.
+template <class Call>
+std::string errorMessage(Call&& call) {
+    try {
+        call();
+    } catch (const Error& e) {
+        return e.what();
+    }
+    return "no error";
+}
+
+/// Whether `call` throws an astro::Error whose message names both `function` and `what`.
+template <class Call>
+testing::AssertionResult throwsNaming(Call&& call, const std::string& function, const std::string& what) {
+    const std::string message = errorMessage(call);
+    if (message.find(function) != std::string::npos && message.find(what) != std::string::npos) {
+        return testing::AssertionSuccess();
+    }
+    return testing::AssertionFailure() << "got \"" << message << "\"";
+}
+
+constexpr double kNan = std::numeric_limits<double>::quiet_NaN();
+constexpr double kInf = std::numeric_limits<double>::infinity();
+
+} // namespace
+
+TEST(Passes, BadWindowOrStepThrows) {
+    const StraightPass p;
+    const auto         sat = p.state();
+    const Time         a = p.peak - 600.0, b = p.peak + 600.0;
+    // The satellite is up at `b`: the old code returned a "pass" from b back to a.
+    EXPECT_TRUE(throwsNaming([&] { (void)findPasses(sat, p.site, b, a); }, "findPasses", "end"));
+    for (double step : {0.0, -60.0, kNan, kInf}) {
+        EXPECT_TRUE(throwsNaming([&] { (void)findPasses(sat, p.site, a, b, 0.0, step); }, "findPasses", "step"))
+            << step;
+    }
+    EXPECT_TRUE(throwsNaming([&] { (void)findPasses(sat, p.site, a, b, kNan); }, "findPasses", "minElevation"));
+    // More steps than can be counted.
+    EXPECT_THROW((void)findPasses(sat, p.site, a, a + 1e9, 0.0, 1e-3), Error);
+    // An empty window holds no pass, even at a moment when the satellite is up.
+    EXPECT_TRUE(findPasses(sat, p.site, p.peak, p.peak).empty());
+}
+
+TEST(Eclipse, BadWindowOrStepThrows) {
+    const double      r  = constants::wgs84A + 500 * km;
+    const StateVector s0 = elementsToState({r, 0.0, 0.0, 0.0, 0.0, 0.0});
+    const Time        t0;
+    auto              sat = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
+    auto              sun = [](const Time&) { return Vec3{constants::au, 0, 0}; };
+    const Time        mid = t0 + 0.5 * orbitalPeriod(r); // behind the Earth: in eclipse
+    ASSERT_EQ(shadow(sat(mid), sun(mid)).state, ShadowState::Umbra);
+    EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, mid, t0); }, "findEclipses", "end"));
+    for (double step : {0.0, -30.0, kNan, kInf}) {
+        EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, t0, mid, step); }, "findEclipses", "step")) << step;
+    }
+    EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, t0, t0 + 1e9, 1e-3); }, "findEclipses", "step"));
+    // An empty window holds no eclipse, even at a moment in the umbra.
+    EXPECT_TRUE(findEclipses(sat, sun, mid, mid).empty());
+}
+
+TEST(Ground, GroundTrackBadWindowOrStepThrows) {
+    auto       geo = [](const Time&) { return Vec3{42164.17 * km, 0, 0}; };
+    const Time t0;
+    EXPECT_TRUE(throwsNaming([&] { (void)groundTrack(geo, t0 + 3600.0, t0, 600.0); }, "groundTrack", "end"));
+    for (double step : {0.0, -600.0, kNan, kInf}) {
+        EXPECT_TRUE(throwsNaming([&] { (void)groundTrack(geo, t0, t0 + 3600.0, step); }, "groundTrack", "step"))
+            << step;
+    }
+    EXPECT_TRUE(throwsNaming([&] { (void)groundTrack(geo, t0, t0 + 1e9, 1e-3); }, "groundTrack", "step"));
+    // start, start + step, ..., and `end` itself when it is not a whole number of steps from start.
+    EXPECT_EQ(groundTrack(geo, t0, t0 + 3600.0, 600.0).size(), 7u);
+    EXPECT_EQ(groundTrack(geo, t0, t0 + 3700.0, 600.0).size(), 8u);
+    // An empty window is the one point at `start`.
+    EXPECT_EQ(groundTrack(geo, t0, t0, 600.0).size(), 1u);
 }
 
 TEST(OrbitalFrames, DefinitionsAndRelativeMotion) {

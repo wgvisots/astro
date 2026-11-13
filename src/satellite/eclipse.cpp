@@ -22,6 +22,7 @@
 #include <cmath>
 
 #include "../core/enum_io.h"
+#include "astro/core/error.h"
 #include "astro/core/rootfind.h"
 
 namespace astro {
@@ -99,11 +100,20 @@ std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>
                                           double                                  step,
                                           ShadowModel                             model,
                                           double                                  re) {
-    const double                 rs   = constants::sunRadius;
-    const double                 span = end - start;
+    const double rs   = constants::sunRadius;
+    const double span = end - start;
+    if (!std::isfinite(span) || span < 0.0) {
+        throw Error("findEclipses: start and end must be finite, with end not before start");
+    }
+    if (!(step > 0.0) || !std::isfinite(step)) {
+        throw Error("findEclipses: step must be positive and finite");
+    }
+    if (!(span / step <= 2e9)) { // the count of steps is kept in an int
+        throw Error("findEclipses: the window holds more than 2e9 steps");
+    }
     std::vector<EclipseInterval> out;
-    if (span <= 0.0) {
-        return out;
+    if (span == 0.0) {
+        return out; // an empty window holds no eclipse
     }
     auto fp = [&](double s) {
         const Time t = start + s;

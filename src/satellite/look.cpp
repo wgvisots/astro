@@ -21,6 +21,7 @@
 #include <cmath>
 
 #include "astro/astrometry/rise_set.h"
+#include "astro/core/error.h"
 #include "astro/frames/transform.h"
 #include "astro/geodesy/local.h"
 
@@ -48,12 +49,28 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
                              double                   minElevation,
                              double                   step,
                              const Ellipsoid&         ell) {
-    auto              elevation = [&](const Time& t) { return lookAngles(sat(t), site, ell).el; };
-    const auto        events    = findElevationEvents(elevation, start, end, minElevation, step);
+    const double span = end - start;
+    if (!std::isfinite(span) || span < 0.0) {
+        throw Error("findPasses: start and end must be finite, with end not before start");
+    }
+    if (!(step > 0.0) || !std::isfinite(step)) {
+        throw Error("findPasses: step must be positive and finite");
+    }
+    if (std::isnan(minElevation)) {
+        throw Error("findPasses: minElevation must not be NaN");
+    }
+    if (!(span / step <= 2e9)) { // the limit of findElevationEvents
+        throw Error("findPasses: the window holds more than 2e9 steps");
+    }
     std::vector<Pass> passes;
-    const double      elStart = elevation(start);
-    bool              open    = elStart > minElevation;
-    Pass              cur;
+    if (span == 0.0) {
+        return passes; // an empty window holds no pass
+    }
+    auto         elevation = [&](const Time& t) { return lookAngles(sat(t), site, ell).el; };
+    const auto   events    = findElevationEvents(elevation, start, end, minElevation, step);
+    const double elStart   = elevation(start);
+    bool         open      = elStart > minElevation;
+    Pass         cur;
     if (open) {
         // A pass cut by the start of the window. Its maximum within the window is the elevation at
         // the start, unless a transit inside the window is higher (the pass was still rising).

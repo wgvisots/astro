@@ -20,6 +20,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include "astro/astrometry/apparent.h"
@@ -27,6 +28,7 @@
 #include "astro/astrometry/rise_set.h"
 #include "astro/astrometry/spherical.h"
 #include "astro/core/angle.h"
+#include "astro/core/error.h"
 #include "astro/core/rootfind.h"
 #include "astro/ephemeris/low_precision.h"
 #include "astro/ephemeris/spk.h"
@@ -393,6 +395,53 @@ TEST(RiseSet, SolarTransitNextToMidnightUtcIsFoundInDailyWindows) {
     }
     EXPECT_EQ(lost, 0u) << "of " << expected.size() << " transits";
     EXPECT_EQ(found.size(), expected.size());
+}
+
+TEST(RiseSet, BadWindowOrStepThrows) {
+    const Time t0   = Time::fromIso8601("2024-03-01T00:00:00Z");
+    const auto el   = cosineElevation(t0 + 43200.0, 86400.0);
+    const auto find = [&](const Time& start, const Time& end, double threshold, double step) {
+        return findElevationEvents(el, start, end, threshold, step);
+    };
+    // The message of the astro::Error thrown, or "no error".
+    const auto message = [&](const Time& start, const Time& end, double threshold, double step) -> std::string {
+        try {
+            (void)find(start, end, threshold, step);
+        } catch (const Error& e) {
+            return e.what();
+        }
+        return "no error";
+    };
+    const auto mentions = [](const std::string& text, const char* word) {
+        return text.find(word) != std::string::npos;
+    };
+    const double nan = std::numeric_limits<double>::quiet_NaN(), inf = std::numeric_limits<double>::infinity();
+    // The window as given is searched normally: two crossings of 0.5 and the transit between them.
+    EXPECT_EQ(find(t0, t0 + 86400.0, 0.5, 600.0).size(), 3u);
+    // End before start.
+    EXPECT_TRUE(mentions(message(t0 + 86400.0, t0, 0.5, 600.0), "end")) << message(t0 + 86400.0, t0, 0.5, 600.0);
+    // A step that is zero, negative, NaN or infinite.
+    for (double step : {0.0, -1.0, nan, inf}) {
+        EXPECT_TRUE(mentions(message(t0, t0 + 86400.0, 0.5, step), "step")) << step;
+    }
+    // More steps than can be counted (1e12).
+    EXPECT_TRUE(mentions(message(t0, t0 + 1e9, 0.5, 1e-3), "step")) << message(t0, t0 + 1e9, 0.5, 1e-3);
+    // A threshold that is NaN.
+    EXPECT_TRUE(mentions(message(t0, t0 + 86400.0, nan, 600.0), "threshold"));
+    // An empty window holds no event.
+    EXPECT_TRUE(find(t0, t0, 0.5, 600.0).empty());
+    // A step longer than the window is not an error: the window is still sampled at its ends and its
+    // middle. Here the middle is the peak.
+    const auto coarse = find(t0, t0 + 86400.0, 0.5, 1e9);
+    ASSERT_EQ(coarse.size(), 3u);
+    EXPECT_EQ(coarse[1].type, SkyEventType::Transit);
+    // The wrappers pass the window on.
+    const LowPrecisionEphemeris eph;
+    const ConstantEop           eop;
+    const Geodetic              site{deg2rad(51.4769), deg2rad(-0.0005), 0.0};
+    EXPECT_THROW((void)sunRiseSet(site, t0 + 86400.0, t0, eop, eph), Error);
+    EXPECT_THROW((void)twilight(Twilight::Civil, site, t0 + 86400.0, t0, eop, eph), Error);
+    EXPECT_THROW((void)moonRiseSet(site, t0 + 86400.0, t0, eop, eph), Error);
 }
 
 TEST(Sidereal, LocalSiderealTimeAndHourAngle) {
