@@ -136,15 +136,21 @@ struct MinimizeResult {
     double fx; ///< f(x)
 };
 
-/// Brent's method minimizer of f on [a, b] (no derivatives). Finds a local minimum.
+/// Brent's method minimizer of f on the interval between a and b, which may be given in either
+/// order (no derivatives). Finds a local minimum.
 /// Note: x accuracy is limited to about sqrt(machine epsilon) * |x| regardless of tol.
 template <class F>
 [[nodiscard]] MinimizeResult brentMinimize(F&& f, double a, double b, double tol = 1e-10, int maxIter = 200) {
     constexpr double golden = 0.3819660112501051; // (3 - sqrt(5)) / 2
     constexpr double zeps   = 1e-14;
-    double           x = a + golden * (b - a), w = x, v = x;
-    double           fx = f(x), fw = fx, fv = fx;
-    double           d = 0.0, e = 0.0;
+    // Everything below takes a as the lower end. With a > b the first convergence test, which
+    // subtracts half of (b - a), was met at once and the first trial point was returned.
+    if (a > b) {
+        std::swap(a, b);
+    }
+    double x = a + golden * (b - a), w = x, v = x;
+    double fx = f(x), fw = fx, fv = fx;
+    double d = 0.0, e = 0.0;
     for (int it = 0; it < maxIter; ++it) {
         const double xm   = 0.5 * (a + b);
         const double tol1 = tol * std::abs(x) + zeps;

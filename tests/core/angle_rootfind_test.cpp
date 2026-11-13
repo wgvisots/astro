@@ -305,3 +305,30 @@ TEST(RootFind, BrentMinimize) {
     EXPECT_NEAR(r.x, 1.234, 5e-8); // minimizers are limited to ~sqrt(eps) in x
     EXPECT_NEAR(r.fx, 3.0, 1e-14);
 }
+
+// The two ends of the interval may be given in either order. Truth: the minimum of the parabola, at
+// x = 1.234 in closed form; and since [b, a] is the same interval as [a, b], the same answer from the
+// same number of evaluations. Before the fix a reversed interval returned its first trial point
+// (x = 2.36 for [10, -10]) after one evaluation.
+TEST(RootFind, BrentMinimizeAcceptsAReversedInterval) {
+    int        calls = 0;
+    const auto f     = [&](double x) {
+        ++calls;
+        return (x - 1.234) * (x - 1.234) + 3.0;
+    };
+    for (const auto& [lo, hi] : {
+             std::pair{-10.0, 10.0},
+             std::pair{1.0,   5.0 },
+             std::pair{-3.0,  1.3 }
+    }) {
+        calls                             = 0;
+        const MinimizeResult ordered      = brentMinimize(f, lo, hi);
+        const int            orderedCalls = calls;
+        calls                             = 0;
+        const MinimizeResult reversed     = brentMinimize(f, hi, lo);
+        EXPECT_NEAR(reversed.x, 1.234, 5e-8) << "[" << hi << ", " << lo << "]"; // sqrt(eps) limit, as above
+        EXPECT_NEAR(reversed.fx, 3.0, 1e-14);
+        EXPECT_EQ(reversed.x, ordered.x);
+        EXPECT_EQ(calls, orderedCalls);
+    }
+}
