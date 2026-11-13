@@ -29,6 +29,7 @@
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
 #include "astro/time/leap_seconds.h"
+#include "tle_detail.h"
 
 namespace astro {
 
@@ -162,22 +163,6 @@ double parseExpField(std::string_view s, const char* what) {
     return s[0] == '-' ? -value : value;
 }
 
-// The epoch of an element set is a day of the year and a fraction of an 86400 s day, counted from 0h UTC, whatever
-// the length of that day. The sets are produced from, and read back into, a Julian date that knows nothing of leap
-// seconds (in the reference code, twoline2rv turns the fraction into hours, minutes and seconds of a 24 h day).
-// astro::Time holds UTC differently: as a quasi-Julian date whose day fraction is the time of day over the length
-// of *that* day, which is 86401 s when the day ends with a leap second (see time.h). The two fractions differ by
-// up to 1 s on such a day, 7.7 km along the track in low Earth orbit.
-//
-// This is the factor between them for the UTC day that starts at the Julian date `midnight`: (86400 s) / (length of
-// the day). 12:00:00 is 43200 s into any day, so it is twice the quasi-Julian fraction of noon. It is exactly 1 on
-// an ordinary day. (Sgp4 needs the same factor and has a copy of this function.)
-double tleDayPerUtcDay(double midnight) {
-    int year = 0, month = 0, day = 0;
-    dateFromJulianDayNumber(std::llround(midnight + 0.5), year, month, day);
-    return 2.0 * Time::fromCalendar(TimeScale::UTC, year, month, day, 12).jd().jd2;
-}
-
 // The epoch from the two-digit year (columns 19-20) and the day of the year with its fraction (columns 21-32).
 Time parseEpoch(std::string_view yearField, std::string_view dayField) {
     const int    yy   = toInt(yearField, "epoch year");
@@ -210,7 +195,7 @@ Time parseEpoch(std::string_view yearField, std::string_view dayField) {
         throw Error(text);
     }
     const double midnight = static_cast<double>(julianDayNumber(year, 1, 1)) - 0.5 + (wholeDay - 1.0);
-    return Time(JulianDate{midnight, (day - wholeDay) * tleDayPerUtcDay(midnight)}, TimeScale::UTC);
+    return Time(JulianDate{midnight, (day - wholeDay) * detail::tleDayPerUtcDay(midnight)}, TimeScale::UTC);
 }
 
 // Writes a "+NNNNN-N" field (see parseExpField) as the value nearest to `v` that the field can hold: five mantissa
@@ -307,7 +292,7 @@ std::string ndotField(double v) {
 }
 
 // The epoch field: the two-digit year, the day of the year, and the time of day as a fraction of 86400 s to eight
-// decimals (see tleDayPerUtcDay).
+// decimals (see detail::tleDayPerUtcDay in tle_detail.h).
 std::string epochField(const Time& epoch) {
     if (!std::isfinite(epoch.jd().jd1 + epoch.jd().jd2)) {
         throw Error("Tle::line1: epoch is not finite");
@@ -315,7 +300,7 @@ std::string epochField(const Time& epoch) {
     const JulianDate utc  = epoch.to(TimeScale::UTC).jd();
     int              year = 0, month = 0, dayOfMonth = 0;
     dateFromJulianDayNumber(std::llround(utc.jd1 + 0.5), year, month, dayOfMonth);
-    const double perUtcDay = tleDayPerUtcDay(utc.jd1);
+    const double perUtcDay = detail::tleDayPerUtcDay(utc.jd1);
     const double fraction  = utc.jd2 / perUtcDay; // of 86400 s; it reaches 1 and goes on during a leap second
     int          day       = dayOfYear(year, month, dayOfMonth);
     long long    units     = std::llround(fraction * 1e8); // of 1e-8 day (0.864 ms), the resolution of the field

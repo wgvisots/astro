@@ -62,6 +62,7 @@ approximation.
 (`HelmertParams`: translation, rotation, scale) between terrestrial frames
 [IERS Conventions (2010), ch. 4](https://www.iers.org/TN36). `HelmertTimeDependent` holds the 14-parameter form (the
 parameters at an epoch plus their rates); its `at(year)` gives the 7 parameters for a date, and a
-`helmertTransform` overload moves a position and velocity. Published parameter sets use either
+`helmertTransform` overload moves a position and velocity (velocity in m/s; the published rates are
+per year and are converted). Published parameter sets use either
 the position-vector or the coordinate-frame sign convention for the rotations; set
 `HelmertParams::convention` to match.

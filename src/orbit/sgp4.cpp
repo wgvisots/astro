@@ -28,6 +28,7 @@
 #include <string>
 
 #include "../core/enum_io.h"
+#include "tle_detail.h"
 
 namespace astro {
 
@@ -67,17 +68,6 @@ void requireFinite(double value, const char* name) {
     if (!std::isfinite(value)) {
         throw Error(std::string("Sgp4: ") + name + " is not finite");
     }
-}
-
-// (86400 s) / (length of the UTC day that starts at the Julian date `midnight`): the factor between the day fraction
-// of astro::Time, which is the time of day over the length of that day (86401 s when it ends with a leap second),
-// and the day fraction of an element set, which is always of 86400 s. 12:00:00 is 43200 s into any day, so the factor
-// is twice the fraction at which astro::Time puts noon. It is exactly 1 on an ordinary day. (A copy of the function
-// in tle.cpp, which reads and writes the epoch field with it.)
-double tleDayPerUtcDay(double midnight) {
-    int year = 0, month = 0, day = 0;
-    dateFromJulianDayNumber(std::llround(midnight + 0.5), year, month, day);
-    return 2.0 * Time::fromCalendar(TimeScale::UTC, year, month, day, 12).jd().jd2;
 }
 
 // Outputs of dscom needed later.
@@ -975,7 +965,7 @@ Sgp4::Sgp4(const Tle& tle, Sgp4Gravity gravity, Sgp4OpsMode mode)
     // The reference implementation counts the epoch in days of 86400 s, straight from the day fraction of the
     // element set, so the fraction of a UTC day that ends with a leap second is put back on that footing (the
     // factor is exactly 1 on any other day).
-    const double dayFraction = jd.jd2 / tleDayPerUtcDay(jd.jd1);
+    const double dayFraction = jd.jd2 / detail::tleDayPerUtcDay(jd.jd1);
     // Deliberately reproduce the reference implementation's arithmetic, which sums the two JD parts into one
     // double before subtracting (jdsatepoch + jdsatepochF - 2433281.5). The resulting ~1e-10 day rounding
     // reaches the lunar-solar terms, and matching it gives sub-millimeter agreement with Vallado's test output
