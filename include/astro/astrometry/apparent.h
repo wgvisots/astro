@@ -54,7 +54,8 @@ struct ObserverEphemeris {
 /// Ephemeris of the geocenter, plus an optional geocentric observer offset
 /// (GCRS position/velocity). If the ephemeris cannot supply the solar-system
 /// barycenter (e.g. LowPrecisionEphemeris), heliocentric is used in its place
-/// (~13 m/s error in velocity, ~0.01 arcsec in aberration).
+/// (~13 m/s error in velocity, ~0.01 arcsec in aberration). Throws
+/// astro::Error if `eph` cannot give the Earth relative to the Sun at `t`.
 [[nodiscard]] ObserverEphemeris
 observerEphemeris(const Time& t, const Ephemeris& eph, const StateVector& geocentricOffset = {});
 
@@ -69,16 +70,21 @@ lightDeflection(const Vec3& p, const Vec3& q, const Vec3& e, double emAu, double
 [[nodiscard]] Vec3 aberration(const Vec3& p, const Vec3& vOverC, double sunDistanceAu) noexcept;
 
 /// Star position (ICRS, at time t) after space motion: barycentric unit vector or, if
-/// the parallax is known, barycentric position in meters.
+/// the parallax is known, barycentric position in meters. Throws astro::Error if `t`
+/// cannot be converted to TDB: a UTC time before 1960, or a UT1 time.
 [[nodiscard]] Vec3 starBarycentricPosition(const CatalogStar& star, const Time& t);
 
 /// Apparent (proper) direction of a star for an observer, GCRS axes (unit vector).
+/// Throws astro::Error as starBarycentricPosition does.
 [[nodiscard]] Vec3 starApparentDirection(const CatalogStar& star, const Time& t, const ObserverEphemeris& obs);
-/// Geocentric apparent RA/Dec in the GCRS.
+/// Geocentric apparent RA/Dec in the GCRS. Throws astro::Error as
+/// starBarycentricPosition and observerEphemeris do.
 [[nodiscard]] RaDec starApparentGcrs(const CatalogStar& star, const Time& t, const Ephemeris& eph);
 
 /// Observed azimuth / elevation of a star from a site. With `atm` null, the
-/// elevation is unrefracted; range is set to 0 (unknown) for stars.
+/// elevation is unrefracted; range is set to 0 (unknown) for stars. Throws
+/// astro::Error if `eop` has no data at `t` or `t` is before 1960 (see
+/// FrameTransformer), and as starApparentGcrs does.
 [[nodiscard]] Aer starObserved(const CatalogStar& star,
                                const Time&        t,
                                const Geodetic&    site,
@@ -88,6 +94,9 @@ lightDeflection(const Vec3& p, const Vec3& q, const Vec3& e, double emAu, double
 
 /// Observed azimuth / elevation / range of a solar-system body from a site,
 /// including light time and aberration (light deflection is neglected, < 2 arcsec).
+/// Throws astro::Error if `eop` has no data at `t` or `t` is before 1960 (see
+/// FrameTransformer), as observerEphemeris does, and if `eph` has no data for
+/// `body` at `t` less the light time.
 [[nodiscard]] Aer bodyObserved(Body               body,
                                const Time&        t,
                                const Geodetic&    site,
@@ -103,7 +112,8 @@ lightDeflection(const Vec3& p, const Vec3& q, const Vec3& e, double emAu, double
 
 /// Local mean / apparent sidereal time (rad, [0, 2pi)) at east longitude `lon`
 /// (rad): GMST (IAU 2006) / GAST (IAU 2006/2000A) plus `lon`. `t` may be in any
-/// time scale; throws astro::Error if `eop` has no data at `t`.
+/// time scale; throws astro::Error if `eop` has no data at `t`, or if `t` is
+/// before 1960 (see FrameTransformer).
 /// @{
 [[nodiscard]] double localMeanSiderealTime(const Time& t, const EopProvider& eop, double lon);
 [[nodiscard]] double localApparentSiderealTime(const Time& t, const EopProvider& eop, double lon);
