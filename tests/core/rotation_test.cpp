@@ -18,6 +18,8 @@
 
 #include "astro/core/rotation.h"
 
+#include <cmath>
+#include <limits>
 #include <random>
 
 #include "astro/core/angle.h"
@@ -27,6 +29,19 @@ using namespace astro;
 using astro::test::expectMatNear;
 using astro::test::expectOrthonormal;
 using astro::test::expectVecNear;
+
+namespace {
+
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
+void expectAllNaN(const Quat& q) {
+    EXPECT_TRUE(std::isnan(q.w)) << "w = " << q.w;
+    EXPECT_TRUE(std::isnan(q.x)) << "x = " << q.x;
+    EXPECT_TRUE(std::isnan(q.y)) << "y = " << q.y;
+    EXPECT_TRUE(std::isnan(q.z)) << "z = " << q.z;
+}
+
+} // namespace
 
 TEST(Rotation, PassiveConvention) {
     // Rotating the frame +90 deg about z: the old x axis appears at -y in the new frame.
@@ -90,6 +105,43 @@ TEST(Quat, MatrixRoundTripAndTransform) {
         expectVecNear(q.transform(v), A * v, 1e-13);
         expectVecNear(q.rotate(v), A.transpose() * v, 1e-13);
     }
+}
+
+// A quaternion with a not-a-number (NaN) component is not a rotation, and it is not the zero quaternion:
+// normalising it must give NaN, not the identity (which the caller would take for a valid attitude).
+TEST(Quat, NormalizedKeepsNaN) {
+    for (const Quat& q : {
+             Quat{kNaN, 0.0,  0.0,  1.0 },
+             Quat{1.0,  kNaN, 0.0,  0.0 },
+             Quat{1.0,  0.0,  0.0,  kNaN},
+             Quat{kNaN, kNaN, kNaN, kNaN}
+    }) {
+        expectAllNaN(q.normalized());
+    }
+    // The zero quaternion keeps its documented result, the identity.
+    EXPECT_EQ(Quat(0.0, 0.0, 0.0, 0.0).normalized(), Quat{});
+    EXPECT_EQ(Quat(0.0, 3.0, 0.0, -4.0).normalized(), Quat(0.0, 0.6, 0.0, -0.8));
+}
+
+// The functions that finish by normalising a quaternion must pass NaN on in the same way.
+TEST(Quat, NaNInGivesNaNOut) {
+    Mat3 offDiagonal    = Mat3::identity();
+    offDiagonal(0, 1)   = kNaN;
+    Mat3 onDiagonal     = Mat3::identity();
+    onDiagonal(1, 1)    = kNaN;
+    const Quat identity = Quat{};
+    for (const Mat3& m : {offDiagonal, onDiagonal}) {
+        expectAllNaN(Quat::fromMatrix(m));
+        const Mat3 o = orthonormalize(m);
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                EXPECT_TRUE(std::isnan(o(i, j))) << "(" << i << "," << j << ") = " << o(i, j);
+            }
+        }
+    }
+    expectAllNaN(slerp(identity, Quat{kNaN, 0.0, 0.0, 1.0}, 0.5));
+    expectAllNaN(slerp(Quat{1.0, 0.0, kNaN, 0.0}, identity, 0.5));
+    expectAllNaN(slerp(identity, Quat{0.0, 0.0, 0.0, 1.0}, kNaN));
 }
 
 TEST(Quat, Slerp) {

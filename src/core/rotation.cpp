@@ -122,7 +122,8 @@ double Quat::norm() const noexcept {
 
 Quat Quat::normalized() const noexcept {
     const double n = norm();
-    return n > 0.0 ? Quat{w / n, x / n, y / n, z / n} : Quat{};
+    // Test for zero, not for n > 0: a NaN norm fails every comparison and must not be taken for zero.
+    return n == 0.0 ? Quat{} : Quat{w / n, x / n, y / n, z / n};
 }
 
 Vec3 Quat::transform(const Vec3& v) const noexcept {

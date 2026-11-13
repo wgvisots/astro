@@ -84,7 +84,8 @@ struct Quat {
     [[nodiscard]] constexpr Quat conjugate() const noexcept { return {w, -x, -y, -z}; }
     /// Euclidean norm sqrt(w^2 + x^2 + y^2 + z^2).
     [[nodiscard]] double norm() const noexcept;
-    /// Unit quaternion along this one; the identity if the norm is zero.
+    /// Unit quaternion along this one; the identity if the norm is zero. A not-a-number (NaN)
+    /// component makes every component of the result NaN.
     [[nodiscard]] Quat normalized() const noexcept;
 
     /// Coordinates of a fixed vector in the rotated frame: toMatrix() * v.
