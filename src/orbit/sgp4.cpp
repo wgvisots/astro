@@ -16,9 +16,11 @@
  *         limitations under the License.
  **********************************************************************/
 
-// Implementation of SGP4/SDP4 following the algorithm and variable naming of
-// Vallado, Crawford, Hujsak & Kelso (2006), "Revisiting Spacetrack Report #3",
-// AIAA 2006-6753, including the published "sgp4fix" corrections.
+// SGP4/SDP4, ported from the reference C++ implementation published with Vallado, Crawford, Hujsak &
+// Kelso (2006), "Revisiting Spacetrack Report #3", AIAA 2006-6753
+// (https://celestrak.org/publications/AIAA/2006-6753/). The routines (dpper, dscom, dsinit, dspace,
+// initl, sgp4) and their variable names are kept so the code can be compared with the reference line
+// by line, and the published "sgp4fix" corrections are included. See THIRD_PARTY_NOTICES.md.
 
 #include "astro/orbit/sgp4.h"
 

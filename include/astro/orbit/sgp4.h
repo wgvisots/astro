@@ -28,8 +28,8 @@
 #include "astro/orbit/tle.h"
 
 /// \file
-/// SGP4/SDP4 analytic propagator for two-line element sets, following
-/// Vallado, Crawford, Hujsak & Kelso (2006), "Revisiting Spacetrack Report #3"
+/// SGP4/SDP4 analytic propagator for two-line element sets, ported from the reference
+/// implementation of Vallado, Crawford, Hujsak & Kelso (2006), "Revisiting Spacetrack Report #3"
 /// (AIAA 2006-6753). Output is in the TEME frame (see astro::Frame::TEME).
 namespace astro {
 

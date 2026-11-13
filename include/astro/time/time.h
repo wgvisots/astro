@@ -79,7 +79,7 @@ struct GnssWeekTow {
 /// An instant tagged with its time scale.
 ///
 /// Internally a normalized two-part Julian Date in the given scale. For UTC
-/// the fraction follows the SOFA "quasi-JD" convention: on a day containing a
+/// the fraction follows the "quasi-JD" convention of SOFA and ERFA: on a day containing a
 /// leap second the fraction is (seconds of day) / 86401, so 23:59:60.5 is
 /// representable and round-trips.
 ///

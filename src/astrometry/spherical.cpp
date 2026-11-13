@@ -59,6 +59,7 @@ Vec3 eclipticToEquatorial(const RaDec& ecl, double eps) noexcept {
 }
 
 const Mat3& icrsToGalacticMatrix() noexcept {
+    // The matrix of ERFA's eraIcrs2g (Hipparcos definition). See THIRD_PARTY_NOTICES.md.
     // clang-format off
     static const Mat3 m{
         -0.054875560416215368492398900454, -0.873437090234885048760383168409, -0.483835015548713226831774175116,

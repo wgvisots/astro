@@ -16,6 +16,9 @@
  *         limitations under the License.
  **********************************************************************/
 
+// refractionConstants follows ERFA's eraRefco; refractTrueToObserved and refractObservedToTrue follow
+// the refraction steps of eraAtioq and eraAtoiq. See THIRD_PARTY_NOTICES.md.
+
 #include "astro/astrometry/refraction.h"
 
 #include <algorithm>
@@ -53,14 +56,14 @@ RefractionConstants refractionConstants(const Atmosphere& atm) noexcept {
 }
 
 double refractTrueToObserved(double trueElevation, const RefractionConstants& k) noexcept {
-    // SOFA atioq: work with the topocentric unit vector (r = cos el, z = sin el).
+    // ERFA eraAtioq: work with the topocentric unit vector (r = cos el, z = sin el).
     constexpr double celmin = 1e-6, selmin = 0.05;
     const double     rr  = std::max(std::cos(trueElevation), celmin);
     const double     z   = std::max(std::sin(trueElevation), selmin);
     const double     tz  = rr / z;
     const double     w   = k.B * tz * tz;
     const double     del = (k.A + w) * tz / (1.0 + (k.A + 3.0 * w) / (z * z));
-    // As in SOFA, the clamped r and z are used in the update.
+    // As in ERFA, the clamped r and z are used in the update.
     const double cosdel = 1.0 - del * del / 2.0;
     const double f      = cosdel - del * z / rr;
     const double horiz  = std::cos(trueElevation) * f;
@@ -69,7 +72,7 @@ double refractTrueToObserved(double trueElevation, const RefractionConstants& k)
 }
 
 double refractObservedToTrue(double observedElevation, const RefractionConstants& k) noexcept {
-    // SOFA atoiq: dZ = (A + B tan^2 Z) tan Z applied to the observed zenith distance.
+    // ERFA eraAtoiq: dZ = (A + B tan^2 Z) tan Z applied to the observed zenith distance.
     constexpr double selmin = 0.05;
     const double     c      = std::cos(observedElevation);
     const double     s      = std::max(std::sin(observedElevation), selmin);

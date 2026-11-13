@@ -16,6 +16,9 @@
  *         limitations under the License.
  **********************************************************************/
 
+// nutationIau2000B, fukushimaWilliams06, fwToMatrix and celestialToIntermediateMatrix follow the
+// ERFA routines eraNut00b, eraPfw06, eraFw2m and eraC2ixys. See THIRD_PARTY_NOTICES.md.
+
 #include "astro/frames/precession_nutation.h"
 
 #include <cmath>

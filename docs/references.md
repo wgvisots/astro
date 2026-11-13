@@ -2,8 +2,8 @@
 
 The standards, papers and books the implementations follow, grouped by topic, with what each is
 used for. DOIs and links were checked when this list was written (November 2026); the two marked
-"link not checked" could not be reached from the checking machine. Third-party tables and test data
-included in the repository are credited in
+"link not checked" could not be reached from the checking machine. Third-party tables, test data and
+ported code included in the repository are credited in
 [THIRD_PARTY_NOTICES.md](https://github.com/wgvisots/astro/blob/main/THIRD_PARTY_NOTICES.md).
 
 ## Standards and reference software
@@ -18,7 +18,8 @@ included in the repository are credited in
   (precession-nutation, frames).
 - **ERFA**, *Essential Routines for Fundamental Astronomy* (a BSD-licensed SOFA derivative),
   <https://github.com/liberfa/erfa>, and its Python wrapper **pyerfa**,
-  <https://github.com/liberfa/pyerfa>. The reference values in the tests.
+  <https://github.com/liberfa/pyerfa>. The reference values in the tests; several functions of the
+  time, frames and astrometry modules follow ERFA routines (listed in THIRD_PARTY_NOTICES.md).
 - **Urban, S. E. & Seidelmann, P. K. (eds.) (2013).** *Explanatory Supplement to the Astronomical
   Almanac*, 3rd ed. University Science Books. <https://aa.usno.navy.mil/publications/exp_supp>.
   The project's primary reference; rotation conventions, time scales, frames, astrometry.
@@ -99,7 +100,8 @@ included in the repository are credited in
   Lambert example in the tests.
 - **Vallado, D. A., Crawford, P., Hujsak, R. & Kelso, T. S. (2006).** Revisiting Spacetrack Report
   #3. AIAA 2006-6753. <https://doi.org/10.2514/6.2006-6753>; paper, code and the SGP4-VER test set:
-  <https://celestrak.org/publications/AIAA/2006-6753/>. SGP4/SDP4.
+  <https://celestrak.org/publications/AIAA/2006-6753/>. SGP4/SDP4: `Sgp4` is a port of the paper's
+  reference code.
 - **Hoots, F. R. & Roehrich, R. L. (1980).** *Models for Propagation of NORAD Element Sets*.
   Spacetrack Report No. 3. <https://celestrak.org/NORAD/documentation/spacetrk.pdf>.
 - **Brouwer, D. (1959).** Solution of the problem of artificial satellite theory without drag.

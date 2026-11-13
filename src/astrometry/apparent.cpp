@@ -16,6 +16,8 @@
  *         limitations under the License.
  **********************************************************************/
 
+// lightDeflection and aberration follow the ERFA routines eraLd and eraAb. See THIRD_PARTY_NOTICES.md.
+
 #include "astro/astrometry/apparent.h"
 
 #include <algorithm>
