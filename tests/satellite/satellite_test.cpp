@@ -206,6 +206,35 @@ TEST(Ground, SubpointFootprintAndLineOfSight) {
     EXPECT_EQ(groundTrack(geo, Time(), Time() + 3600.0, 600.0).size(), 7u);
 }
 
+TEST(Ground, FootprintAboutAPoleIsAnEvenlySpacedParallel) {
+    // About a pole, the circle of angular radius `lam` is the parallel of latitude 90 deg - lam, and
+    // its n points are 360/n deg of longitude apart. Every azimuth at a pole points along a meridian:
+    // the one reached is the limit for a center just short of the pole on the meridian `lon0`. So from
+    // the north pole azimuth 180 deg (south) runs down `lon0` itself and azimuth 0 down the opposite
+    // meridian, and from the south pole azimuth 0 (north) runs up `lon0`.
+    const double lam = deg2rad(20.0), lon0 = deg2rad(10.0);
+    const int    n = 12;
+    for (double pole : {constants::halfPi, -constants::halfPi}) {
+        const auto ring = footprint(pole, lon0, lam, n);
+        // The same circle about a center 1e-9 rad (6 mm) short of the pole.
+        const auto nearby = footprint(pole > 0.0 ? pole - 1e-9 : pole + 1e-9, lon0, lam, n);
+        ASSERT_EQ(ring.size(), 12u);
+        ASSERT_EQ(nearby.size(), 12u);
+        for (std::size_t i = 0; i < ring.size(); ++i) {
+            SCOPED_TRACE(testing::Message() << (pole > 0.0 ? "north" : "south") << " pole, point " << i);
+            const double az  = constants::twoPi * static_cast<double>(i) / n;
+            const double lon = pole > 0.0 ? lon0 + constants::pi - az : lon0 + az;
+            // 1e-14 rad: asin near 1 magnifies rounding by 1 / sin(lam) = 3.
+            EXPECT_NEAR(ring[i].lat, pole > 0.0 ? constants::halfPi - lam : lam - constants::halfPi, 1e-14);
+            EXPECT_NEAR(wrapPi(ring[i].lon - lon), 0.0, 1e-14);
+            // Moving the center by 1e-9 rad moves no point of the circle by more than 1e-9 rad of
+            // latitude, or 1e-9 / sin(lam) = 3e-9 rad of longitude.
+            EXPECT_NEAR(nearby[i].lat, ring[i].lat, 1e-8);
+            EXPECT_NEAR(wrapPi(nearby[i].lon - ring[i].lon), 0.0, 1e-8);
+        }
+    }
+}
+
 TEST(OrbitalFrames, DefinitionsAndRelativeMotion) {
     const StateVector s = elementsToState({7000 * km, 0.1, 0.8, 0.3, 0.5, 1.0});
     for (const Mat3& m : {ricMatrix(s), lvlhMatrix(s), vncMatrix(s), ntwMatrix(s)}) {

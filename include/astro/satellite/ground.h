@@ -51,7 +51,12 @@ coverageHalfAngle(double altitude, double minElevation = 0.0, double radius = co
 maxSlantRange(double altitude, double minElevation = 0.0, double radius = constants::wgs84A) noexcept;
 
 /// Coverage footprint boundary: `n` points at central angle `halfAngle` around
-/// a sub-satellite point (spherical geometry; lat/lon in rad, h = 0).
+/// a sub-satellite point (spherical geometry; lat/lon in rad, h = 0). Point i lies
+/// at azimuth 2 pi i / n from the sub-satellite point, clockwise from north. About
+/// a pole (lat = +-pi/2) the points are evenly spaced in longitude on the parallel
+/// `halfAngle` from it, placed as for a point just short of the pole on the
+/// meridian `lon`: longitude lon + pi - azimuth at the north pole, lon + azimuth at
+/// the south pole.
 [[nodiscard]] std::vector<Geodetic> footprint(double lat, double lon, double halfAngle, int n = 72);
 
 /// True if the straight segment between two positions does not intersect the

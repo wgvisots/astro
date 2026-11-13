@@ -67,7 +67,11 @@ std::vector<Geodetic> footprint(double lat, double lon, double halfAngle, int n)
     for (int i = 0; i < n; ++i) {
         const double az   = constants::twoPi * i / n;
         const double lat2 = std::asin(std::clamp(sl * cd + cl * sd * std::cos(az), -1.0, 1.0));
-        const double lon2 = lon + std::atan2(std::sin(az) * sd * cl, cd - sl * std::sin(lat2));
+        // Longitude difference atan2(sin az sd cl, cd - sl sin lat2) with the factor cl that both
+        // arguments share taken out: cd - sl sin lat2 = cl (cl cd - sl sd cos az). With cl left in, the
+        // second argument cancels to rounding noise at a pole; without it the pole is the limit
+        // along the meridian `lon` (pi - az at the north pole, az at the south).
+        const double lon2 = lon + std::atan2(std::sin(az) * sd, cl * cd - sl * sd * std::cos(az));
         out.push_back({lat2, wrapPi(lon2), 0.0});
     }
     return out;
