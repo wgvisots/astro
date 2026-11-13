@@ -18,6 +18,7 @@
 
 #include "astro/orbit/tle.h"
 
+#include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <cmath>
@@ -235,8 +236,108 @@ std::string formatExpField(double v, const char* what) {
     return text;
 }
 
+// The writers below refuse a value its field cannot hold. Writing it anyway would push the later fields out of
+// their columns, or wrap the value into another one, and the line would still carry a valid checksum.
+
+[[noreturn]] void cannotWrite(const char* function, const char* what, double value, const char* why) {
+    char text[32];
+    std::snprintf(text, sizeof(text), "%.10g", value);
+    throw Error(std::string(function) + ": " + what + " " + text + " " + why);
+}
+
+// A number with `decimals` decimals, right-justified in `width` columns. Throws astro::Error naming `what` if it is
+// not finite or needs more columns than the field has.
+std::string fixedField(double v, int width, int decimals, const char* function, const char* what) {
+    if (!std::isfinite(v)) {
+        cannotWrite(function, what, v, "is not finite");
+    }
+    char buf[32];
+    if (std::snprintf(buf, sizeof(buf), "%*.*f", width, decimals, v) != width) {
+        cannotWrite(function, what, v, "does not fit its field");
+    }
+    return buf;
+}
+
+// An angle of line 2 other than the inclination: degrees in [0, 360) with four decimals. An angle that rounds up to
+// 360.0000 is written as 0.0000, because the top of the range is not in it.
+std::string angleField(double rad, const char* what) {
+    if (!std::isfinite(rad)) {
+        cannotWrite("Tle::line2", what, rad, "is not finite");
+    }
+    const std::string text = fixedField(rad2deg(wrapTwoPi(rad)), 8, 4, "Tle::line2", what);
+    return text == "360.0000" ? "  0.0000" : text;
+}
+
+// The first derivative of the mean motion: a minus sign or a blank, then the decimal point and eight decimals. The
+// field has no column for a digit before the point.
+std::string ndotField(double v) {
+    if (!std::isfinite(v)) {
+        cannotWrite("Tle::line1", "n-dot", v, "is not finite");
+    }
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.8f", v);
+    const std::string text = buf; // "0.00002182" or "-0.00002182"
+    if (text.rfind("-0.", 0) == 0) {
+        return "-" + text.substr(2);
+    }
+    if (text.rfind("0.", 0) == 0) {
+        return " " + text.substr(1);
+    }
+    cannotWrite("Tle::line1", "n-dot", v, "does not fit its field (the magnitude must round to less than 1)");
+}
+
+// The epoch field: the two-digit year, the day of the year, and the time of day as a fraction of 86400 s to eight
+// decimals (see tleDayPerUtcDay).
+std::string epochField(const Time& epoch) {
+    if (!std::isfinite(epoch.jd().jd1 + epoch.jd().jd2)) {
+        throw Error("Tle::line1: epoch is not finite");
+    }
+    const JulianDate utc  = epoch.to(TimeScale::UTC).jd();
+    int              year = 0, month = 0, dayOfMonth = 0;
+    dateFromJulianDayNumber(std::llround(utc.jd1 + 0.5), year, month, dayOfMonth);
+    const double perUtcDay = tleDayPerUtcDay(utc.jd1);
+    const double fraction  = utc.jd2 / perUtcDay; // of 86400 s; it reaches 1 and goes on during a leap second
+    int          day       = dayOfYear(year, month, dayOfMonth);
+    long long    units     = std::llround(fraction * 1e8); // of 1e-8 day (0.864 ms), the resolution of the field
+    if (units >= 100000000) {
+        // The fraction rounds up to the end of an 86400 s day, which the field cannot say ("366.00000000" is not a
+        // time on day 365). Normally the end of the day is 0h of the next day, and that is the epoch to write. On
+        // a day with a leap second 0h is a second further on.
+        const double toNextDay = 1.0 / perUtcDay - fraction; // in days of 86400 s
+        if (toNextDay * 1e8 <= 0.5) {
+            units = 0;
+            if (++day > (isLeapYear(year) ? 366 : 365)) {
+                day = 1;
+                ++year;
+            }
+        } else if (fraction < 1.0) {
+            units = 99999999; // the last half step before a leap second: this is the nearest epoch the field holds
+        } else {
+            throw Error("Tle::line1: epoch " + epoch.to(TimeScale::UTC).iso8601(3)
+                        + " is inside a leap second, which a fraction of an 86400 s day cannot name");
+        }
+    }
+    if (year < 1957 || year > 2056) {
+        throw Error("Tle::line1: epoch year " + std::to_string(year)
+                    + " does not fit its two-digit field (1957 to 2056)");
+    }
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%02d%03d.%08lld", year % 100, day, units);
+    return buf;
+}
+
+// Whether a character can stand in a line: printable ASCII, the blank included.
+bool isPrintable(char c) {
+    return c >= ' ' && c <= '~';
+}
+
+// Adds the checksum to the 68 columns of a line. Every field was written to its exact width, so the length is a
+// check on this file and not on the caller: a line cut or padded to 68 columns would be the malformed line with a
+// valid checksum that the field checks exist to prevent.
 std::string withChecksum(std::string line) {
-    line.resize(68, ' ');
+    if (line.size() != 68) {
+        throw Error("Tle: a line of " + std::to_string(line.size()) + " columns was formatted (internal error)");
+    }
     line += static_cast<char>('0' + tleChecksum(line));
     return line;
 }
@@ -280,16 +381,17 @@ int decodeAlpha5(std::string_view s) {
 }
 
 std::string encodeAlpha5(int satnum) {
+    if (satnum < 0 || satnum > 339999) {
+        throw Error("encodeAlpha5: catalog number " + std::to_string(satnum)
+                    + " cannot be written in 5 characters (0 to 339999)");
+    }
     char buf[8];
     if (satnum < 100000) {
-        std::snprintf(buf, sizeof(buf), "%05d", std::max(0, satnum) % 100000);
+        std::snprintf(buf, sizeof(buf), "%05d", satnum);
         return buf;
     }
-    int lead = satnum / 10000;
-    if (lead > 33) {
-        throw Error("encodeAlpha5: catalog number too large");
-    }
-    char c = static_cast<char>('A' + lead - 10);
+    const int lead = satnum / 10000;
+    char      c    = static_cast<char>('A' + lead - 10);
     if (c >= 'I') {
         ++c;
     }
@@ -371,30 +473,29 @@ std::vector<Tle> Tle::parseMany(std::string_view text, bool verifyChecksum) {
 }
 
 std::string Tle::line1() const {
-    // Epoch: the year, and the day of the year with the time of day as a fraction of 86400 s (see tleDayPerUtcDay).
-    const JulianDate utc  = epoch.to(TimeScale::UTC).jd();
-    int              year = 0, month = 0, dayOfMonth = 0;
-    dateFromJulianDayNumber(std::llround(utc.jd1 + 0.5), year, month, dayOfMonth);
-    const double day = dayOfYear(year, month, dayOfMonth) + utc.jd2 / tleDayPerUtcDay(utc.jd1);
-    char         nd[16];
-    std::snprintf(nd, sizeof(nd), "%.8f", meanMotionDot);
-    std::string ndot = nd;
-    // " .00002182" / "-.00002182" style.
-    if (ndot.rfind("-0.", 0) == 0) {
-        ndot = "-" + ndot.substr(2);
-    } else if (ndot.rfind("0.", 0) == 0) {
-        ndot = " " + ndot.substr(1);
+    if (!isPrintable(classification)) {
+        throw Error("Tle::line1: classification is not a printable character (code "
+                    + std::to_string(static_cast<int>(classification)) + ")");
+    }
+    if (intlDesignator.size() > 8 || !std::all_of(intlDesignator.begin(), intlDesignator.end(), isPrintable)) {
+        throw Error("Tle::line1: international designator '" + intlDesignator
+                    + "' does not fit its field (at most 8 printable characters)");
+    }
+    if (ephemerisType < 0 || ephemerisType > 9) {
+        throw Error("Tle::line1: ephemeris type " + std::to_string(ephemerisType) + " is not one digit");
+    }
+    if (elementSetNumber < 0) {
+        throw Error("Tle::line1: element set number " + std::to_string(elementSetNumber) + " is negative");
     }
     char buf[96];
     std::snprintf(buf,
                   sizeof(buf),
-                  "1 %s%c %-8s %02d%012.8f %10s %8s %8s %1d %4d",
+                  "1 %s%c %-8s %s %s %s %s %1d %4d",
                   encodeAlpha5(satnum).c_str(),
                   classification,
                   intlDesignator.c_str(),
-                  year % 100,
-                  day,
-                  ndot.c_str(),
+                  epochField(epoch).c_str(),
+                  ndotField(meanMotionDot).c_str(),
                   formatExpField(meanMotionDdot, "n-ddot").c_str(),
                   formatExpField(bstar, "B*").c_str(),
                   ephemerisType,
@@ -403,19 +504,25 @@ std::string Tle::line1() const {
 }
 
 std::string Tle::line2() const {
-    char ecc[16];
-    std::snprintf(ecc, sizeof(ecc), "%07ld", std::lround(eccentricity * 1e7));
+    // Seven digits after an implied decimal point: 0 to 0.9999999.
+    const double eccentricityDigits = std::isfinite(eccentricity) ? std::round(eccentricity * 1e7) : -1.0;
+    if (!(eccentricityDigits >= 0.0 && eccentricityDigits <= 9999999.0)) {
+        cannotWrite("Tle::line2", "eccentricity", eccentricity, "does not fit its field (0 to 0.9999999)");
+    }
+    if (revolutionNumber < 0) {
+        throw Error("Tle::line2: revolution number " + std::to_string(revolutionNumber) + " is negative");
+    }
     char buf[96];
     std::snprintf(buf,
                   sizeof(buf),
-                  "2 %s %8.4f %8.4f %s %8.4f %8.4f %11.8f%5d",
+                  "2 %s %s %s %07ld %s %s %s%5d",
                   encodeAlpha5(satnum).c_str(),
-                  rad2deg(inclination),
-                  rad2deg(wrapTwoPi(raan)),
-                  ecc,
-                  rad2deg(wrapTwoPi(argPerigee)),
-                  rad2deg(wrapTwoPi(meanAnomaly)),
-                  meanMotion,
+                  fixedField(rad2deg(inclination), 8, 4, "Tle::line2", "inclination").c_str(),
+                  angleField(raan, "RAAN").c_str(),
+                  static_cast<long>(eccentricityDigits),
+                  angleField(argPerigee, "argument of perigee").c_str(),
+                  angleField(meanAnomaly, "mean anomaly").c_str(),
+                  fixedField(meanMotion, 11, 8, "Tle::line2", "mean motion").c_str(),
                   revolutionNumber % 100000);
     return withChecksum(buf);
 }

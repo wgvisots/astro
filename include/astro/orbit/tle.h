@@ -70,13 +70,32 @@ struct Tle {
 
     /// @{
 
-    /// Format back into the two 69-column lines (with checksums). The epoch is written as parse() reads it:
-    /// the time of day as a fraction of 86400 s, also on a day that ends with a leap second.
+    /// Format back into the two 69-column lines (with checksums). Each value is rounded to the nearest one
+    /// its field can hold, and a value that no rounding can fit throws astro::Error naming the field, so a
+    /// line that is returned is well formed and parse() reads it back.
     ///
-    /// B* and the second derivative of the mean motion are written as the nearest value their fields can
-    /// hold: five digits and a power of ten from -9 to +9. Below 1e-10 the digits get leading zeros
-    /// (1e-11 is " 01000-9"), in steps of 1e-14, and below 5e-15 the field is zero. A value that rounds
-    /// above 0.99999e9, or is not finite, throws astro::Error naming the field.
+    /// The epoch is written as parse() reads it: the time of day as a fraction of 86400 s, in steps of
+    /// 1e-8 day, also on a day that ends with a leap second. An epoch that rounds up to the end of its
+    /// day is written as 0h of the next day (of the next year after 31 December), except just before a
+    /// leap second, where the last step of the day is the nearest. Throws for an epoch inside a leap
+    /// second, which no day fraction names, and for a year outside 1957 to 2056, the range of the
+    /// two-digit field.
+    ///
+    /// B* and the second derivative of the mean motion are written with five digits and a power of ten
+    /// from -9 to +9. Below 1e-10 the digits get leading zeros (1e-11 is " 01000-9"), in steps of 1e-14,
+    /// and below 5e-15 the field is zero. Throws for a value that rounds above 0.99999e9.
+    ///
+    /// The right ascension of the node, the argument of perigee and the mean anomaly are wrapped into
+    /// [0, 360) deg; one that rounds up to 360.0000 is written as 0.0000. The inclination is written as it
+    /// is.
+    ///
+    /// Also thrown for: any number that is not finite; a catalog number outside 0 to 339999; a
+    /// classification that is not a printable character; an international designator of more than 8
+    /// characters; a first derivative of the mean motion that rounds to 1 rev/day^2 or more in magnitude
+    /// (the field has no digit before the decimal point); an ephemeris type outside 0 to 9; a negative
+    /// element set or revolution number; an eccentricity that is negative or rounds to 1 or more; an
+    /// inclination or a mean motion with more digits before the decimal point than the field has columns
+    /// (100 rev/day or more).
     [[nodiscard]] std::string line1() const;
     [[nodiscard]] std::string line2() const;
     /// @}
@@ -87,7 +106,7 @@ struct Tle {
 /// Decode an Alpha-5 / numeric 5-character catalog number.
 [[nodiscard]] int decodeAlpha5(std::string_view s);
 /// Encode a catalog number as 5 characters: zero-padded digits below 100000, Alpha-5 (a letter,
-/// skipping I and O, plus 4 digits) up to 339999. Throws astro::Error above 339999.
+/// skipping I and O, plus 4 digits) up to 339999. Throws astro::Error below 0 and above 339999.
 [[nodiscard]] std::string encodeAlpha5(int satnum);
 
 } // namespace astro

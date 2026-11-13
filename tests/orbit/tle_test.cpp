@@ -22,6 +22,7 @@
 #include <string>
 
 #include "astro/core/angle.h"
+#include "astro/core/constants.h"
 #include "astro/core/error.h"
 #include "astro/orbit/tle.h"
 #include "test_util.h"
@@ -311,4 +312,191 @@ TEST(Tle, ParseAcceptsSignsDecimalPointsAndBlankPadding) {
     EXPECT_EQ(tle.meanAnomaly, deg2rad(5.0));
     // A blank-padded day of the year, as some writers produce.
     EXPECT_EQ(Tle::parse(withField(kLine1, 19, "08  4.51782528"), kLine2).epoch.iso8601(3), "2008-01-04T12:25:40.104Z");
+}
+
+// --- Writing values at and beyond the edges of their fields ---------------------------------------------------------
+
+TEST(Tle, Line2WritesAnglesThatRoundTo360AsZero) {
+    // 2 pi - 1e-9 rad is 359.99999994 deg, which rounds to 360.0000 at the four decimals of the field. The
+    // range of these angles is [0, 360), so that is 0.0000.
+    const double almostTwoPi = constants::twoPi - 1e-9;
+    Tle          tle         = Tle::parse(kLine1, kLine2);
+    tle.raan                 = almostTwoPi;
+    tle.argPerigee           = almostTwoPi;
+    tle.meanAnomaly          = almostTwoPi;
+    const std::string line2  = tle.line2();
+    EXPECT_EQ(columns(line2, 18, 25), "  0.0000");
+    EXPECT_EQ(columns(line2, 35, 42), "  0.0000");
+    EXPECT_EQ(columns(line2, 44, 51), "  0.0000");
+    // The largest angle that does not round up, and angles outside [0, 2 pi) that wrap into it.
+    tle.raan        = deg2rad(359.99994);
+    tle.argPerigee  = deg2rad(-90.0);
+    tle.meanAnomaly = deg2rad(725.5);
+    EXPECT_EQ(columns(tle.line2(), 18, 25), "359.9999");
+    EXPECT_EQ(columns(tle.line2(), 35, 42), "270.0000");
+    EXPECT_EQ(columns(tle.line2(), 44, 51), "  5.5000");
+}
+
+TEST(Tle, Line1CarriesAnEpochThatRoundsUpToMidnightIntoTheNextDay) {
+    // The field resolves 1e-8 day (0.864 ms). 0.1 ms before midnight is 0.9999999988 of the day and rounds to
+    // the next day's 0h: the day number, and at the end of December the year, must follow.
+    Tle tle   = Tle::parse(kLine1, kLine2);
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2020, 12, 31, 23, 59, 59.9999); // day 366 of a leap year
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "21001.00000000");
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2021, 3, 4, 23, 59, 59.9999); // day 63
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "21064.00000000");
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 1999, 12, 31, 23, 59, 59.9999);
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "00001.00000000");
+    // 1 ms before midnight is 0.99999998843 of the day and stays in its day.
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2020, 12, 31, 23, 59, 59.999);
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "20366.99999999");
+}
+
+TEST(Tle, Line1DoesNotCarryAnEpochAcrossALeapSecond) {
+    // On 2016-12-31 the next day's 0h is a whole second after 23:59:60, so 0.1 ms before 23:59:60 must not be
+    // written as 17001.00000000, which would be 1.0001 s late. The nearest epoch the field can hold is
+    // 16366.99999999 (23:59:59.999136, 0.76 ms early).
+    Tle tle   = Tle::parse(kLine1, kLine2);
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 23, 59, 59.9999);
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "16366.99999999");
+    // Inside the leap second there is no fraction of an 86400 s day that names the instant.
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 23, 59, 60.5);
+    expectErrorNaming([&] { (void)tle.line1(); }, "epoch");
+    // 0.1 ms before the end of the leap second rounds to the next day's 0h, as on any other day.
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 23, 59, 60.9999);
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "17001.00000000");
+}
+
+TEST(Tle, Line1RefusesAnEpochYearTheTwoDigitFieldCannotHold) {
+    // Two-digit years 57-99 are 1957-1999 and 00-56 are 2000-2056, so 2057 would be read back as 1957.
+    Tle tle   = Tle::parse(kLine1, kLine2);
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2057, 3, 1);
+    expectErrorNaming([&] { (void)tle.line1(); }, "epoch");
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2056, 12, 31, 12);
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "56366.50000000");
+    // A non-finite epoch has no date at all.
+    tle.epoch = Time(JulianDate{kNan, 0.0}, TimeScale::UTC);
+    expectErrorNaming([&] { (void)tle.line1(); }, "epoch");
+}
+
+TEST(Tle, EncodeAlpha5RefusesNumbersOutsideItsRange) {
+    // Five characters hold 0 to 99999 as digits and 100000 to 339999 with a leading letter.
+    expectErrorNaming([] { (void)encodeAlpha5(-5); }, "catalog number");
+    expectErrorNaming([] { (void)encodeAlpha5(-1); }, "catalog number");
+    expectErrorNaming([] { (void)encodeAlpha5(340000); }, "catalog number");
+    EXPECT_EQ(encodeAlpha5(0), "00000");
+    EXPECT_EQ(encodeAlpha5(99999), "99999");
+    EXPECT_EQ(encodeAlpha5(100000), "A0000");
+    EXPECT_EQ(encodeAlpha5(339999), "Z9999");
+}
+
+TEST(Tle, Line1RefusesValuesItsFieldsCannotHold) {
+    const Tle good = Tle::parse(kLine1, kLine2);
+    struct Case {
+        const char* name;
+        void (*set)(Tle&);
+    };
+    // clang-format off
+    const Case cases[] = {
+        {"catalog number",           [](Tle& t) { t.satnum = -7; }                           },
+        {"catalog number",           [](Tle& t) { t.satnum = 340000; }                       },
+        {"classification",           [](Tle& t) { t.classification = '\0'; }                 },
+        {"classification",           [](Tle& t) { t.classification = '\n'; }                 },
+        {"international designator", [](Tle& t) { t.intlDesignator = "1998-067ABCDEF"; }     }, // 14 characters for 8 columns
+        {"international designator", [](Tle& t) { t.intlDesignator = "98067\tA"; }           },
+        {"n-dot",                    [](Tle& t) { t.meanMotionDot = -1.5; }                  }, // the field has no digit before the point
+        {"n-dot",                    [](Tle& t) { t.meanMotionDot = 1.0; }                   },
+        {"n-dot",                    [](Tle& t) { t.meanMotionDot = 0.999999996; }           }, // rounds to 1.00000000
+        {"n-dot",                    [](Tle& t) { t.meanMotionDot = kNan; }                  },
+        {"n-dot",                    [](Tle& t) { t.meanMotionDot = kInf; }                  },
+        {"ephemeris type",           [](Tle& t) { t.ephemerisType = 12; }                    },
+        {"ephemeris type",           [](Tle& t) { t.ephemerisType = -1; }                    },
+        {"element set number",       [](Tle& t) { t.elementSetNumber = -3; }                 },
+    };
+    // clang-format on
+    for (const Case& c : cases) {
+        Tle tle = good;
+        c.set(tle);
+        expectErrorNaming([&] { (void)tle.line1(); }, c.name);
+    }
+}
+
+TEST(Tle, Line2RefusesValuesItsFieldsCannotHold) {
+    const Tle good = Tle::parse(kLine1, kLine2);
+    struct Case {
+        const char* name;
+        void (*set)(Tle&);
+    };
+    // clang-format off
+    const Case cases[] = {
+        {"catalog number",      [](Tle& t) { t.satnum = -7; }                  },
+        {"inclination",         [](Tle& t) { t.inclination = kNan; }           },
+        {"inclination",         [](Tle& t) { t.inclination = deg2rad(1000.0); }}, // four digits before the point
+        {"RAAN",                [](Tle& t) { t.raan = kNan; }                  },
+        {"RAAN",                [](Tle& t) { t.raan = kInf; }                  },
+        {"eccentricity",        [](Tle& t) { t.eccentricity = 0.99999996; }    }, // rounds to 1.0000000
+        {"eccentricity",        [](Tle& t) { t.eccentricity = 1.2; }           },
+        {"eccentricity",        [](Tle& t) { t.eccentricity = -0.001; }        },
+        {"eccentricity",        [](Tle& t) { t.eccentricity = kNan; }          },
+        {"argument of perigee", [](Tle& t) { t.argPerigee = -kInf; }           },
+        {"mean anomaly",        [](Tle& t) { t.meanAnomaly = kNan; }           },
+        {"mean motion",         [](Tle& t) { t.meanMotion = 100.5; }           }, // three digits before the point
+        {"mean motion",         [](Tle& t) { t.meanMotion = 99.999999996; }    }, // rounds to 100.00000000
+        {"mean motion",         [](Tle& t) { t.meanMotion = kNan; }            },
+        {"revolution number",   [](Tle& t) { t.revolutionNumber = -8; }        },
+    };
+    // clang-format on
+    for (const Case& c : cases) {
+        Tle tle = good;
+        c.set(tle);
+        expectErrorNaming([&] { (void)tle.line2(); }, c.name);
+    }
+}
+
+TEST(Tle, ValuesAtTheEdgesOfTheirFieldsAreWrittenAndReadBack) {
+    // The largest (or otherwise extreme) value each field can hold: the lines must be well formed, 69 columns
+    // with a valid checksum, and give the values back.
+    Tle tle;
+    tle.satnum              = 339999;
+    tle.classification      = 'S';
+    tle.intlDesignator      = "99999ZZZ";
+    tle.epoch               = Time::fromCalendar(TimeScale::UTC, 1960, 1, 1);
+    tle.meanMotionDot       = -0.99999999;
+    tle.meanMotionDdot      = -0.99999e9;
+    tle.bstar               = 0.99999e9;
+    tle.ephemerisType       = 9;
+    tle.elementSetNumber    = 9999;
+    tle.inclination         = deg2rad(180.0);
+    tle.raan                = deg2rad(359.9999);
+    tle.eccentricity        = 0.9999999;
+    tle.argPerigee          = deg2rad(0.0001);
+    tle.meanAnomaly         = deg2rad(359.9999);
+    tle.meanMotion          = 99.99999999;
+    tle.revolutionNumber    = 99999;
+    const std::string line1 = tle.line1(), line2 = tle.line2();
+    EXPECT_EQ(line1, withChecksum("1 Z9999S 99999ZZZ 60001.00000000 -.99999999 -99999+9  99999+9 9 9999"));
+    EXPECT_EQ(line2, withChecksum("2 Z9999 180.0000 359.9999 9999999   0.0001 359.9999 99.9999999999999"));
+    const Tle back = Tle::parse(line1, line2);
+    EXPECT_EQ(back.satnum, tle.satnum);
+    EXPECT_EQ(back.classification, tle.classification);
+    EXPECT_EQ(back.intlDesignator, tle.intlDesignator);
+    EXPECT_TRUE(back.epoch == tle.epoch) << back.epoch.iso8601(9);
+    EXPECT_EQ(back.meanMotionDot, tle.meanMotionDot);
+    EXPECT_EQ(back.ephemerisType, tle.ephemerisType);
+    EXPECT_EQ(back.elementSetNumber, tle.elementSetNumber);
+    EXPECT_EQ(back.eccentricity, tle.eccentricity);
+    EXPECT_EQ(back.meanMotion, tle.meanMotion);
+    EXPECT_EQ(back.revolutionNumber, tle.revolutionNumber);
+    // 1e-15: a degree-radian-degree round trip of a four-decimal angle, and a mantissa times a power of ten.
+    EXPECT_NEAR(back.meanMotionDdot, tle.meanMotionDdot, 1e-15 * 1e9);
+    EXPECT_NEAR(back.bstar, tle.bstar, 1e-15 * 1e9);
+    EXPECT_NEAR(back.inclination, tle.inclination, 1e-15);
+    EXPECT_NEAR(back.raan, tle.raan, 1e-14);
+    EXPECT_NEAR(back.argPerigee, tle.argPerigee, 1e-15);
+    EXPECT_NEAR(back.meanAnomaly, tle.meanAnomaly, 1e-14);
+    // The element set and revolution numbers wrap, as documented, when they outgrow their fields.
+    tle.elementSetNumber = 12345;
+    tle.revolutionNumber = 123456;
+    EXPECT_EQ(columns(tle.line1(), 65, 68), "2345");
+    EXPECT_EQ(columns(tle.line2(), 64, 68), "23456");
 }
