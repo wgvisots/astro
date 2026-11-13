@@ -16,6 +16,7 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -337,5 +338,42 @@ TEST(EopTable, DuplicateEpochIsRejected) {
         for (double mjd : {59000.0, 59000.5, 59001.0, 59001.75, 59002.25, 59003.0}) {
             EXPECT_NEAR(rad2arcsec(table.at(mjd).xp), mjd - 58999.0, 1e-12) << mjd; // rounding only
         }
+    }
+}
+
+TEST(FrameTransformer, InvalidFrameValueGivesNaN) {
+    // A Frame that is not one of the enumerators (a bad cast, an uninitialised value) used to index
+    // past the end of the transformer's table of matrices. gcrsTo() and matrix() are noexcept, so they
+    // answer with NaN, which cannot be taken for a rotation; the functions that may throw, throw.
+    const Time             t = Time::fromIso8601("2021-07-04T12:34:56Z");
+    const FrameTransformer ft(t, ConstantEop{});
+    const auto             allNaN = [](const Mat3& m) {
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                if (!std::isnan(m(i, j))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+    const auto        allNaNVec = [](const Vec3& v) { return std::isnan(v.x) && std::isnan(v.y) && std::isnan(v.z); };
+    const StateVector s{
+        {7000e3, -1200e3, 300e3},
+        {1.0e3,  7.2e3,   0.5e3}
+    };
+    for (int raw : {9, 99, -1}) { // 9 is one past the last enumerator (ITRS = 8)
+        const Frame bad = static_cast<Frame>(raw);
+        EXPECT_TRUE(allNaN(ft.gcrsTo(bad))) << raw;
+        EXPECT_TRUE(allNaN(ft.matrix(bad, Frame::GCRS))) << raw;
+        EXPECT_TRUE(allNaN(ft.matrix(Frame::ITRS, bad))) << raw;
+        EXPECT_TRUE(allNaNVec(ft.transform(s.r, bad, Frame::ITRS))) << raw;
+        EXPECT_TRUE(allNaNVec(ft.transform(s.r, Frame::GCRS, bad))) << raw;
+        for (const StateVector& out : {ft.transform(s, bad, Frame::ITRS), ft.transform(s, Frame::GCRS, bad)}) {
+            EXPECT_TRUE(allNaNVec(out.r)) << raw;
+            EXPECT_TRUE(allNaNVec(out.v)) << raw;
+        }
+        EXPECT_THROW((void)gcrsToCelestialMatrix(bad, t), Error) << raw;
+        EXPECT_THROW((void)poleOfDateMatrix(bad, t), Error) << raw;
     }
 }

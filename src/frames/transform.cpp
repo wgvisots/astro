@@ -18,7 +18,12 @@
 
 #include "astro/frames/transform.h"
 
+#include <limits>
 #include <string>
+#include <type_traits>
+
+#include <boost/describe/enumerators.hpp>
+#include <boost/mp11/list.hpp>
 
 #include "../core/enum_io.h"
 #include "astro/core/angle.h"
@@ -32,6 +37,21 @@ namespace {
 constexpr std::size_t idx(Frame f) noexcept {
     return static_cast<std::size_t>(f);
 }
+
+/// Number of enumerators of Frame. They are numbered from 0, and a FrameTransformer keeps one matrix
+/// for each.
+constexpr std::size_t kFrameCount = boost::mp11::mp_size<boost::describe::describe_enumerators<Frame>>::value;
+
+/// False for a value that is not an enumerator of Frame (a bad cast, an uninitialised variable).
+constexpr bool isFrame(Frame f) noexcept {
+    return idx(f) < kFrameCount;
+}
+
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
+/// What gcrsTo() and matrix(), which are noexcept, answer for such a value: every element is NaN, so
+/// that nothing computed from it can pass for a rotation.
+constexpr Mat3 kNotAFrame{kNaN, kNaN, kNaN, kNaN, kNaN, kNaN, kNaN, kNaN, kNaN};
 } // namespace
 
 std::string_view toString(Frame f) noexcept {
@@ -85,11 +105,12 @@ FrameTransformer::FrameTransformer(const Time& t, const EopProvider& eop, const 
 }
 
 const Mat3& FrameTransformer::gcrsTo(Frame f) const noexcept {
-    return m_[idx(f)];
+    static_assert(std::extent_v<decltype(m_)> == kFrameCount, "FrameTransformer keeps one matrix per Frame");
+    return isFrame(f) ? m_[idx(f)] : kNotAFrame;
 }
 
 Mat3 FrameTransformer::matrix(Frame from, Frame to) const noexcept {
-    return m_[idx(to)] * m_[idx(from)].transpose();
+    return gcrsTo(to) * gcrsTo(from).transpose();
 }
 
 Vec3 FrameTransformer::angularVelocity(Frame f) const noexcept {
@@ -128,6 +149,9 @@ FrameTransformer fastCelestialTransformer(const Time& t) {
 }
 
 void requireCelestial(Frame f) {
+    if (!isFrame(f)) {
+        throw Error("invalid Frame value " + std::to_string(static_cast<int>(f)));
+    }
     if (isEarthFixed(f)) {
         throw Error("celestial frame required (got an Earth-fixed frame)");
     }
