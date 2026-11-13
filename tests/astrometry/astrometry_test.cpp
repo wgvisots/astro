@@ -16,6 +16,10 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
 #include "astro/astrometry/apparent.h"
 #include "astro/astrometry/refraction.h"
 #include "astro/astrometry/rise_set.h"
@@ -85,6 +89,81 @@ TEST(Refraction, ModelsAgree) {
     }
     // ~34 arcmin at the horizon (Bennett).
     EXPECT_NEAR(rad2arcsec(refractionBennett(0.0)) / 60.0, 34.5, 0.6);
+}
+
+TEST(Refraction, BennettAndSaemundssonMatchMeeus) {
+    // Meeus (1998), Astronomical Algorithms, 2nd ed., ch. 16, with the altitude h in degrees and the
+    // refraction R in arcminutes, at 1010 hPa and 10 C:
+    //     R = cot(h + 7.31 / (h + 4.4)) + 0.0013515          h apparent   (16.3, Bennett)
+    //     R = 1.02 cot(h + 10.3 / (h + 5.11)) + 0.0019279    h true       (16.4, Saemundsson)
+    // The last term of each is the one Meeus gives to make R zero at the zenith. He prints it to
+    // 1e-7 arcmin, hence the tolerance.
+    const auto arcmin = [](double rad) { return rad2arcsec(rad) / 60.0; };
+    for (double h = 0.0; h <= 90.0; h += 2.5) {
+        const double bennett     = 1.0 / std::tan(deg2rad(h + 7.31 / (h + 4.4))) + 0.0013515;
+        const double saemundsson = 1.02 / std::tan(deg2rad(h + 10.3 / (h + 5.11))) + 0.0019279;
+        EXPECT_NEAR(arcmin(refractionBennett(deg2rad(h))), bennett, 1e-7) << h;
+        EXPECT_NEAR(arcmin(refractionSaemundsson(deg2rad(h))), saemundsson, 1e-7) << h;
+    }
+    // Meeus, example 16.a: the Sun's lower limb at an apparent altitude of 30 arcmin has R = 28.754
+    // arcmin; its upper limb, at a true altitude of 33.246 arcmin, has R = 24.618 arcmin. (Both are
+    // printed without the zenith terms, which add 0.0014 and 0.0019 arcmin.)
+    EXPECT_NEAR(arcmin(refractionBennett(deg2rad(30.0 / 60.0))), 28.754, 0.002);
+    EXPECT_NEAR(arcmin(refractionSaemundsson(deg2rad(33.246 / 60.0))), 24.618, 0.0025);
+    // Proportional to pressure, and to 283 / (273 + T).
+    EXPECT_DOUBLE_EQ(refractionBennett(0.2, 505.0, 10.0), 0.5 * refractionBennett(0.2));
+    EXPECT_DOUBLE_EQ(refractionSaemundsson(0.2, 1010.0, 293.0), 0.5 * refractionSaemundsson(0.2));
+}
+
+TEST(Refraction, BennettAndSaemundssonAreDefinedFromNadirToZenith) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    // Smallest cotangent argument of each formula, h + p / (h + q) at h = sqrt(p) - q: there the
+    // refraction is largest, and below it the formulas turn back and then run away.
+    struct Formula {
+        const char* name;
+        double (*refraction)(double, double, double) noexcept;
+        double largestArcmin;
+    };
+    const Formula formulas[] = {
+        {"Bennett",     refractionBennett,     1.0 / std::tan(deg2rad(2.0 * std::sqrt(7.31) - 4.4)) + 0.0013515  },
+        {"Saemundsson", refractionSaemundsson, 1.02 / std::tan(deg2rad(2.0 * std::sqrt(10.3) - 5.11)) + 0.0019279},
+    };
+    for (const Formula& f : formulas) {
+        SCOPED_TRACE(f.name);
+        const auto refraction = [&](double elevationDeg) { return f.refraction(deg2rad(elevationDeg), 1010.0, 10.0); };
+        // Every millidegree from -90 to +90 deg: finite, never negative, never rising with elevation,
+        // and with no jump. The steepest slope of either formula is 0.27 rad per rad (Bennett, near
+        // -0.9 deg), so no step may exceed 0.3 of the spacing.
+        constexpr double stepDeg  = 0.001;
+        double           previous = refraction(-90.0), lowest = previous, largestRise = 0.0, largestDrop = 0.0;
+        double           riseAt = -90.0, dropAt = -90.0;
+        bool             finite = std::isfinite(previous);
+        for (int i = -90000 + 1; i <= 90000; ++i) {
+            const double r = refraction(i * stepDeg);
+            finite         = finite && std::isfinite(r);
+            lowest         = std::min(lowest, r);
+            if (r - previous > largestRise) {
+                largestRise = r - previous;
+                riseAt      = i * stepDeg;
+            }
+            if (previous - r > largestDrop) {
+                largestDrop = previous - r;
+                dropAt      = i * stepDeg;
+            }
+            previous = r;
+        }
+        EXPECT_TRUE(finite);
+        EXPECT_GE(lowest, 0.0);
+        EXPECT_EQ(largestRise, 0.0) << "rises at " << riseAt << " deg";
+        EXPECT_LE(largestDrop, 0.3 * deg2rad(stepDeg)) << "jumps at " << dropAt << " deg";
+        // Exactly zero at the zenith; the largest value everywhere below the turning point.
+        EXPECT_EQ(f.refraction(constants::halfPi, 1010.0, 10.0), 0.0);
+        EXPECT_NEAR(rad2arcsec(refraction(-90.0)) / 60.0, f.largestArcmin, 1e-7);
+        EXPECT_EQ(refraction(-4.4), refraction(-90.0));
+        EXPECT_EQ(refraction(-5.11), refraction(-90.0));
+        // NaN in, NaN out.
+        EXPECT_TRUE(std::isnan(f.refraction(nan, 1010.0, 10.0)));
+    }
 }
 
 TEST(Apparent, ObservedPlaceMatchesErfaAtco13) {

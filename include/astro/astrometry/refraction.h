@@ -49,9 +49,25 @@ struct RefractionConstants {
 
 /// Bennett (1982): refraction (rad) for an *observed* elevation; scaled for
 /// pressure and temperature. Good to ~0.1 arcmin down to the horizon.
+///
+/// The formula is  R = cot(h + 7.31 / (h + 4.4)) arcmin  for h in degrees, less its value at
+/// h = 90 deg (-0.08 arcsec), so that the refraction is exactly zero at the zenith (the correction
+/// given by Meeus 1998, ch. 16). It is meaningful for observed elevations from the horizon (0) to the
+/// zenith. Below the horizon it is an extrapolation, and it is largest at -1.70 deg (56.9 arcmin
+/// at 1010 hPa and 10 C); for every elevation below that, where the formula as printed turns back
+/// down and then divides by zero, that largest value is returned. The result is therefore finite,
+/// continuous and never negative for any elevation; a NaN elevation gives NaN.
 [[nodiscard]] double
 refractionBennett(double observedElevation, double pressureHpa = 1010.0, double temperatureC = 10.0) noexcept;
-/// Saemundsson (1986): refraction (rad) for a *true* elevation.
+/// Saemundsson (1986): refraction (rad) for a *true* elevation; scaled for pressure and
+/// temperature as refractionBennett(), with which it agrees to ~0.1 arcmin.
+///
+/// The formula is  R = 1.02 cot(h + 10.3 / (h + 5.11)) arcmin  for h in degrees, less its value at
+/// h = 90 deg (-0.12 arcsec), so that the refraction is exactly zero at the zenith (Meeus 1998,
+/// ch. 16). It is meaningful for true elevations from about -0.6 deg (a body seen on the horizon)
+/// to the zenith. Below that it is an extrapolation, and it is largest at -1.90 deg (44.6 arcmin at
+/// 1010 hPa and 10 C); for every elevation below that the largest value is returned. The result is
+/// finite, continuous and never negative for any elevation; a NaN elevation gives NaN.
 [[nodiscard]] double
 refractionSaemundsson(double trueElevation, double pressureHpa = 1010.0, double temperatureC = 10.0) noexcept;
 
