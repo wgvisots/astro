@@ -89,8 +89,13 @@ struct Sexagesimal {
 
 /// Decompose radians into hours/minutes/seconds, with seconds rounded to `decimals`
 /// places (carries propagate, so 59.9999 never prints as 60).
+///
+/// An angle with no such decomposition is reported in `seconds`, with `whole` and `minutes` zero:
+/// `seconds` is NaN if `rad` is not-a-number (NaN), and infinity if `rad` is infinite or so large that
+/// the hours do not fit in an `int` (`negative` still gives the sign).
 [[nodiscard]] Sexagesimal radToHms(double rad, int decimals = 3) noexcept;
-/// Decompose radians into degrees/arcminutes/arcseconds.
+/// Decompose radians into degrees/arcminutes/arcseconds. NaN, infinity and an angle whose degrees do
+/// not fit in an `int` are reported as in radToHms.
 [[nodiscard]] Sexagesimal radToDms(double rad, int decimals = 2) noexcept;
 
 /// Parse an hours/minutes/seconds string into radians, e.g. "12:34:56.7", "12h 34m 56.7s", "12 34.5".
@@ -117,9 +122,11 @@ struct Sexagesimal {
 /// arcseconds. An hours mark ("12h") is an error.
 [[nodiscard]] double parseDms(std::string_view text);
 
-/// Format as "HH:MM:SS.sss" (sep=':').
+/// Format as "HH:MM:SS.sss" (sep=':'). A NaN angle gives "nan"; an angle that is infinite, or too
+/// large for radToHms, gives "inf" or "-inf".
 [[nodiscard]] std::string formatHms(double rad, int decimals = 3, char sep = ':');
-/// Format as "+DD:MM:SS.ss" (sep=':'), always signed.
+/// Format as "+DD:MM:SS.ss" (sep=':'), always signed. A NaN angle gives "nan"; an angle that is
+/// infinite, or too large for radToDms, gives "+inf" or "-inf".
 [[nodiscard]] std::string formatDms(double rad, int decimals = 2, char sep = ':');
 
 } // namespace astro

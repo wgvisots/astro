@@ -224,6 +224,53 @@ TEST(Angle, ParseRejectsMalformedSexagesimalText) {
     }
 }
 
+// An angle that is not finite has no sexagesimal digits. The result is the one stated in angle.h; before,
+// the hours or degrees were converted to int unchecked, which is undefined behaviour (it printed
+// "+-2147483648:-2147483648:nan").
+TEST(Angle, FormatAndDecomposeOfNonFiniteAnglesAreDefined) {
+    EXPECT_EQ(formatHms(kNaN), "nan");
+    EXPECT_EQ(formatDms(kNaN), "nan");
+    EXPECT_EQ(formatHms(kInf), "inf");
+    EXPECT_EQ(formatHms(-kInf), "-inf");
+    EXPECT_EQ(formatDms(kInf), "+inf");
+    EXPECT_EQ(formatDms(-kInf), "-inf");
+
+    for (const Sexagesimal& s : {radToHms(kNaN), radToDms(kNaN)}) {
+        EXPECT_FALSE(s.negative);
+        EXPECT_EQ(s.whole, 0);
+        EXPECT_EQ(s.minutes, 0);
+        EXPECT_TRUE(std::isnan(s.seconds));
+    }
+    for (double sign : {1.0, -1.0}) {
+        for (const Sexagesimal& s : {radToHms(sign * kInf), radToDms(sign * kInf)}) {
+            EXPECT_EQ(s.negative, sign < 0.0);
+            EXPECT_EQ(s.whole, 0);
+            EXPECT_EQ(s.minutes, 0);
+            EXPECT_EQ(s.seconds, kInf);
+        }
+    }
+}
+
+// The whole part is an int. The largest one still decomposes and prints; one degree more does not fit
+// and is reported like infinity, as angle.h says.
+TEST(Angle, FormatAndDecomposeAtTheLargestWholePart) {
+    const double      largest = std::numeric_limits<int>::max(); // 2147483647, exact in a double
+    const Sexagesimal fits    = radToDms(deg2rad(-largest));
+    EXPECT_TRUE(fits.negative);
+    EXPECT_EQ(fits.whole, std::numeric_limits<int>::max());
+    EXPECT_EQ(fits.minutes, 0);
+    EXPECT_EQ(fits.seconds, 0.0);
+    EXPECT_EQ(formatDms(deg2rad(largest)), "+2147483647:00:00.00");
+
+    const Sexagesimal tooLarge = radToDms(deg2rad(-(largest + 1.0)));
+    EXPECT_TRUE(tooLarge.negative);
+    EXPECT_EQ(tooLarge.whole, 0);
+    EXPECT_EQ(tooLarge.minutes, 0);
+    EXPECT_EQ(tooLarge.seconds, kInf);
+    EXPECT_EQ(formatDms(deg2rad(largest + 1.0)), "+inf");
+    EXPECT_EQ(formatHms(-1e300), "-inf");
+}
+
 TEST(Angle, Sexagesimal) {
     EXPECT_NEAR(parseHms("12:00:00"), pi, 1e-15);
     EXPECT_NEAR(parseHms("06h30m"), deg2rad(97.5), 1e-15);

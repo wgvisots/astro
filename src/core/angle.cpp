@@ -22,6 +22,8 @@
 #include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <limits>
+#include <string>
 #include <system_error>
 
 #include "astro/core/error.h"
@@ -96,12 +98,21 @@ Sexagesimal decompose(double units, int decimals) {
     const double ticksPerMinute = 60.0 * scale;
     const double ticksPerWhole  = 3600.0 * scale;
     const double whole          = std::floor(totalTicks / ticksPerWhole);
-    const double remWhole       = totalTicks - whole * ticksPerWhole;
-    const double minutes        = std::floor(remWhole / ticksPerMinute);
-    const double secTicks       = remWhole - minutes * ticksPerMinute;
-    out.whole                   = static_cast<int>(whole);
-    out.minutes                 = static_cast<int>(minutes);
-    out.seconds                 = secTicks / scale;
+    // The whole part must fit Sexagesimal::whole, an int. Converting a not-a-number (NaN), an infinity
+    // or a value beyond the largest int is undefined behaviour, so those are reported in `seconds`
+    // instead, as documented at radToHms in angle.h: NaN for a NaN angle, infinity for an angle that is
+    // infinite or too large. The comparison is written so that a NaN fails it.
+    if (!(whole <= static_cast<double>(std::numeric_limits<int>::max()))) {
+        out.seconds =
+            std::isnan(whole) ? std::numeric_limits<double>::quiet_NaN() : std::numeric_limits<double>::infinity();
+        return out;
+    }
+    const double remWhole = totalTicks - whole * ticksPerWhole;
+    const double minutes  = std::floor(remWhole / ticksPerMinute);
+    const double secTicks = remWhole - minutes * ticksPerMinute;
+    out.whole             = static_cast<int>(whole);
+    out.minutes           = static_cast<int>(minutes);
+    out.seconds           = secTicks / scale;
     if (out.whole == 0 && out.minutes == 0 && secTicks == 0.0) {
         out.negative = false;
     }
@@ -246,11 +257,18 @@ double parseSexagesimal(std::string_view text, Whole whole) {
 }
 
 std::string format(const Sexagesimal& s, int decimals, char sep, bool forceSign, int wholeWidth) {
+    const char* sign = s.negative ? "-" : (forceSign ? "+" : "");
+    // An angle that is not finite, or too large to decompose, has no digits: see decompose() above.
+    if (std::isnan(s.seconds)) {
+        return "nan";
+    }
+    if (std::isinf(s.seconds)) {
+        return std::string(sign) + "inf";
+    }
     char      secBuf[32];
     const int secWidth = decimals > 0 ? decimals + 3 : 2;
     std::snprintf(secBuf, sizeof(secBuf), "%0*.*f", secWidth, decimals, s.seconds);
-    char        buf[96];
-    const char* sign = s.negative ? "-" : (forceSign ? "+" : "");
+    char buf[96];
     std::snprintf(buf, sizeof(buf), "%s%0*d%c%02d%c%s", sign, wholeWidth, s.whole, sep, s.minutes, sep, secBuf);
     return buf;
 }
