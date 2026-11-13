@@ -448,8 +448,10 @@ void SecularPropagator::stmGrid(double start, double step, std::span<StateVector
     for (std::size_t j = 0; j < 6; ++j) {
         const double h = kStmStep * (j < 3 ? norm(epoch.r) : norm(epoch.v));
         for (std::size_t p = 0; p < 4; ++p) {
-            StateVector s0                      = epoch;
-            (j < 3 ? &s0.r.x : &s0.v.x)[j % 3] += kStencilOffset[p] * h;
+            StateVector s0 = epoch;
+            // Component j of the state. (Not by indexing from the address of r.x: that reaches
+            // outside the object pointed to, and an optimizer may then drop the write.)
+            (j < 3 ? s0.r : s0.v)[j % 3] += kStencilOffset[p] * h;
             rebuilt(s0).trajectoryGrid(start, step, buf);
             const double w = kStencilWeight[p] / (12.0 * h);
             for (std::size_t k = 0; k < buf.size(); ++k) {
