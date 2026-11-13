@@ -10,7 +10,7 @@ LEO, output every Y seconds:
 
 | Method | X = 1 day, Y = 60 s | X = 1 day, Y = 10 s | X = 4 h, Y = 10 s |
 |---|---|---|---|
-| `propagateSecular(state, dt)` called per output | 201 ns/output | 227 ns/output | 201 ns/output |
+| `propagateSecular(state, dt)` called per output | 234 ns/output | 219 ns/output | 224 ns/output |
 | `SecularPropagator::propagateGrid` | 40 ns/output | 43 ns/output | 40 ns/output |
 | `SecularPropagatorCorrected::propagateGrid` | 39 ns/output | 39 ns/output | 39 ns/output |
 | `SecularPropagator::propagateGrid12` | 69 ns/output | 68 ns/output | 68 ns/output |
@@ -21,7 +21,7 @@ LEO, output every Y seconds:
 
 `SecularPropagatorCorrected` was timed in a later run, alongside `SecularPropagator::propagateGrid` at
 38.7 ns/output: the velocity correction adds about 2 %. Times for the numerical propagator are per propagation (all outputs). Two-body `propagateKepler`
-costs about 150 ns per call; SGP4 about 0.3 us per call (1.3 us for deep-space SDP4).
+costs about 100 ns per call (70-180 ns from near-circular to e = 0.7); SGP4 about 0.3 us per call (1.3 us for deep-space SDP4).
 
 What makes the grids fast:
 
@@ -50,7 +50,7 @@ What makes the grids fast:
 | `lambertIzzo`, up to 3 revolutions (all solutions of one problem) | 1.3 us |
 | `SecularPropagatorCorrected::propagateWithCovariance` (24 differenced propagations) | 6.4 us |
 | `SecularPropagatorCorrected::propagateGridWithCovariance`, 4 h at 10 s (1441 outputs) | 1.7 ms (1.2 us per output) |
-| `checkConsistency` / `EstimateTracker::update`, gap 10 min / 30 min / 4 h | 15 / 26 / 137 us |
+| `checkConsistency` / `EstimateTracker::update`, gap 10 min / 30 min / 4 h | 12 / 23 / 129 us |
 | `FrameTransformer`, IAU 2006/2000A | 125 us |
 | `FrameTransformer`, IAU 2006/2000B | 6 us |
 | `poleOfDateMatrix(Frame::GCRS, t)` | 3 us |
@@ -62,9 +62,9 @@ the horizon), with the Earth rotations built per call or shared between calls:
 
 | Shot | Flight | Per call | Shared rotations | Shared, with covariance |
 |---|---|---|---|---|
-| 3 km/s | 413 s | 32 us | 12 us | 18 us |
-| 5 km/s | 936 s | 31 us | 15 us | 29 us |
-| 7 km/s | 2353 s | 41 us | 24 us | 50 us |
+| 3 km/s | 413 s | 25 us | 9 us | 14 us |
+| 5 km/s | 936 s | 29 us | 14 us | 26 us |
+| 7 km/s | 2353 s | 38 us | 21 us | 50 us |
 
 | Operation | Time |
 |---|---|

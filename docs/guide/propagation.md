@@ -4,7 +4,7 @@
 
 | Propagator | Model | Accuracy (LEO) | Speed (4 h at 10 s) | Use it for |
 |---|---|---|---|---|
-| `propagateKepler` | point mass | km per orbit (no J2) | ~150 ns per call | quick two-body estimates, Lambert transfers |
+| `propagateKepler` | point mass | km per orbit (no J2) | ~100 ns per call | quick two-body estimates, Lambert transfers |
 | `SecularPropagator` | J2, J2^2, J4 mean-element drift (Brouwer) | **tens to hundreds of km** from a state vector; ~2-6 km with fitted mean elements | 40 ns per output | mean-element studies: node and perigee drift, sun-synchronous and repeat-track design |
 | `SecularPropagatorCorrected` | the same positions; velocity = d(position)/dt | the same | ~2 % more | the same, when velocity must agree with position (range rate, Doppler, closest approach) |
 | `NumericalPropagator` | point mass + zonal harmonics (+ third bodies, custom forces) | set by tolerance: 0.2 m over 4 h at relTol 1e-9, 0.2 mm at the default | 55 us per propagation at relTol 1e-9 | accurate J2/J4 trajectories, covariance |
