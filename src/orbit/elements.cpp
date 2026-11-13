@@ -62,49 +62,47 @@ KeplerianElements stateToElements(const StateVector& s, double mu) {
         throw Error("stateToElements: parabolic orbit");
     }
     el.a = -mu / (2.0 * energy);
-    el.i = std::acos(std::clamp(h.z / hm, -1.0, 1.0));
+    // Every angle below comes from atan2 of a sine and a cosine. acos of the cosine alone cannot
+    // resolve an angle within ~1.5e-8 rad of 0 or pi (there the cosine differs from +-1 by less
+    // than its rounding), which cost 0.07 m in a state rebuilt from the elements.
+    el.i = std::atan2(nm, h.z);
 
     const bool circular   = el.e < kSmall;
     const bool equatorial = el.i < kSmall || std::abs(el.i - constants::pi) < kSmall;
 
+    // Angle in the orbit plane from `from` to `to` (both perpendicular to h), positive in the
+    // direction of motion, in (-pi, pi]: h . (from x to) and |h| (from . to) are its sine and cosine
+    // times the same factor.
+    const auto angleInPlane = [&h, hm](const Vec3& from, const Vec3& to) {
+        return std::atan2(dot(h, cross(from, to)), hm * dot(from, to));
+    };
+
+    double nu = 0.0;
     if (!equatorial) {
         el.raan = wrapTwoPi(std::atan2(n.y, n.x));
     }
     if (!circular && !equatorial) {
-        el.argp = std::acos(std::clamp(dot(n, ev) / (nm * el.e), -1.0, 1.0));
-        if (ev.z < 0.0) {
-            el.argp = constants::twoPi - el.argp;
-        }
-        el.nu = std::acos(std::clamp(dot(ev, r) / (el.e * rm), -1.0, 1.0));
-        if (dot(r, v) < 0.0) {
-            el.nu = constants::twoPi - el.nu;
-        }
+        el.argp = wrapTwoPi(angleInPlane(n, ev));
+        nu      = angleInPlane(ev, r);
     } else if (circular && !equatorial) {
         // Argument of latitude.
-        el.nu = std::acos(std::clamp(dot(n, r) / (nm * rm), -1.0, 1.0));
-        if (r.z < 0.0) {
-            el.nu = constants::twoPi - el.nu;
-        }
+        nu = angleInPlane(n, r);
     } else if (!circular && equatorial) {
         // Longitude of periapsis.
         el.argp = wrapTwoPi(std::atan2(ev.y, ev.x));
         if (h.z < 0.0) {
             el.argp = wrapTwoPi(-el.argp);
         }
-        el.nu = std::acos(std::clamp(dot(ev, r) / (el.e * rm), -1.0, 1.0));
-        if (dot(r, v) < 0.0) {
-            el.nu = constants::twoPi - el.nu;
-        }
+        nu = angleInPlane(ev, r);
     } else {
         // True longitude.
-        el.nu = wrapTwoPi(std::atan2(r.y, r.x));
+        nu = std::atan2(r.y, r.x);
         if (h.z < 0.0) {
-            el.nu = wrapTwoPi(-el.nu);
+            nu = -nu;
         }
     }
-    if (el.e >= 1.0) {
-        el.nu = wrapPi(el.nu);
-    }
+    // Elliptic anomalies in [0, 2 pi); hyperbolic ones stay between the asymptotes, in (-pi, pi).
+    el.nu = el.e >= 1.0 ? nu : wrapTwoPi(nu);
     return el;
 }
 

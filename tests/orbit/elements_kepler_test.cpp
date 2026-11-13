@@ -338,3 +338,251 @@ TEST(Kepler, ParabolicAnomalySolvesBarkersEquationForBothSigns) {
     EXPECT_EQ(meanToParabolicAnomaly(kInf), kInf);
     EXPECT_EQ(meanToParabolicAnomaly(-kInf), -kInf);
 }
+
+// ------------------------------------------------------------------------- Classical elements
+
+namespace {
+
+constexpr double km = 1000.0;
+
+// Tolerances of the element tests: a few units of rounding (eps = 2.2e-16), about four times what
+// was measured. The acos formulas missed each of them by seven orders of magnitude or more.
+constexpr double kInclinationTolerance = 8.0 * kEps;  // relative; measured 2 eps
+constexpr double kAngleTolerance       = 16.0 * kEps; // rad; measured 4 eps
+// Relative error of a state rebuilt from its elements: a, e and four angles each carry a rounding
+// error. Measured 2e-15; 1e-14 is 0.07 micrometres at 7000 km (acos: 4e-8, 0.3 m).
+constexpr double kRoundTripTolerance = 1e-14;
+// SecularPropagator at its epoch: its Kepler solver stops at a residual of 2e-15 rad, 1.4e-8 m at
+// 7000 km, on top of the element conversion. Measured 6e-9 m and 5e-12 m/s (acos: 5e-3 m).
+constexpr double kEpochPositionTolerance = 5e-8;  // m
+constexpr double kEpochVelocityTolerance = 5e-11; // m/s
+
+/// Difference of two angles, wrapped to [-pi, pi].
+double angleDifference(double a, double b) {
+    return std::remainder(a - b, kTwoPi);
+}
+
+/// Position and velocity from classical elements by the perifocal construction (unit vectors P
+/// towards perigee and Q a quarter turn ahead of it in the orbit plane), evaluated in extended
+/// precision and rounded to double. Independent of elementsToState.
+StateVector
+stateFromElements(double a, double e, double i, double raan, double argp, double nu, double mu = constants::gmEarth) {
+    using L        = long double;
+    const L     cO = std::cos(static_cast<L>(raan)), sO = std::sin(static_cast<L>(raan));
+    const L     cw = std::cos(static_cast<L>(argp)), sw = std::sin(static_cast<L>(argp));
+    const L     ci = std::cos(static_cast<L>(i)), si = std::sin(static_cast<L>(i));
+    const L     cn = std::cos(static_cast<L>(nu)), sn = std::sin(static_cast<L>(nu));
+    const L     P[3] = {cO * cw - sO * sw * ci, sO * cw + cO * sw * ci, sw * si};
+    const L     Q[3] = {-cO * sw - sO * cw * ci, -sO * sw + cO * cw * ci, cw * si};
+    const L     el   = e;
+    const L     p    = static_cast<L>(a) * (1.0L - el * el);
+    const L     rm   = p / (1.0L + el * cn);
+    const L     k    = std::sqrt(static_cast<L>(mu) / p);
+    StateVector s;
+    for (std::size_t j = 0; j < 3; ++j) {
+        s.r[j] = static_cast<double>(rm * (cn * P[j] + sn * Q[j]));
+        s.v[j] = static_cast<double>(k * (-sn * P[j] + (el + cn) * Q[j]));
+    }
+    return s;
+}
+
+std::string describe(double a, double e, double i, double raan, double argp, double nu) {
+    std::ostringstream os;
+    os.precision(17);
+    os << "a=" << a / km << " km, e=" << e << ", i=" << i << " (pi-i=" << kPi - i << "), raan=" << raan
+       << ", argp=" << argp << ", nu=" << nu;
+    return os.str();
+}
+
+} // namespace
+
+TEST(Elements, AnglesNearZeroAndPiAreRecoveredToRounding) {
+    // States built from known elements; stateToElements must return them. Formulas with acos
+    // cannot: near 0 and pi they resolve an angle only to ~1.5e-8 rad, and an inclination of 1e-9
+    // came back as exactly 0.
+    const double inclinations[] = {1e-9, 1e-6, 0.4, 0.5 * kPi, 2.5, kPi - 1e-6, kPi - 1e-9};
+    const double perigees[]     = {1e-9, 1.0, kPi - 1e-9, kPi + 1e-9, 5.0, kTwoPi - 1e-9};
+    const double anomalies[]    = {1e-9, 1e-6, 2.0, kPi - 1e-9, kPi + 1e-9, 4.0, kTwoPi - 1e-6, kTwoPi - 1e-9};
+    const double nodes[]        = {0.3, 3.0, 5.5};
+    // clang-format off
+    const double shapes[][2]    = {{7000.0 * km,  0.1},
+                                   {26600.0 * km, 0.7}};
+    // clang-format on
+    double      worstI = 0.0, worstNode = 0.0, worstPerigee = 0.0, worstAnomaly = 0.0, worstLatitude = 0.0;
+    std::string atI, atNode, atPerigee, atAnomaly, atLatitude;
+    std::size_t count = 0;
+    for (const auto& shape : shapes) {
+        const double a = shape[0], e = shape[1];
+        for (const double i : inclinations) {
+            for (const double argp : perigees) {
+                for (const double nu : anomalies) {
+                    const double            raan = nodes[count++ % 3];
+                    const KeplerianElements el   = stateToElements(stateFromElements(a, e, i, raan, argp, nu));
+                    const auto              note = [&](double error, double& worst, std::string& at) {
+                        if (!(error <= worst)) {
+                            worst = error;
+                            at    = describe(a, e, i, raan, argp, nu);
+                        }
+                    };
+                    EXPECT_TRUE(el.raan >= 0.0 && el.raan < kTwoPi && el.argp >= 0.0 && el.argp < kTwoPi && el.nu >= 0.0
+                                && el.nu < kTwoPi)
+                        << describe(a, e, i, raan, argp, nu);
+                    // The inclination relative to itself: 1e-9 rad is recovered as 1e-9 rad.
+                    note(std::abs(el.i - i) / i, worstI, atI);
+                    note(std::abs(angleDifference(el.raan, raan)), worstNode, atNode);
+                    // Perigee direction and true anomaly carry the rounding of the eccentricity
+                    // vector, eps / e; their sum, the argument of latitude, does not.
+                    note(std::abs(angleDifference(el.argp, argp)) * e, worstPerigee, atPerigee);
+                    note(std::abs(angleDifference(el.nu, nu)) * e, worstAnomaly, atAnomaly);
+                    note(std::abs(angleDifference(el.argp + el.nu, argp + nu)), worstLatitude, atLatitude);
+                }
+            }
+        }
+    }
+    EXPECT_LE(worstI, kInclinationTolerance) << "relative inclination error, at " << atI;
+    EXPECT_LE(worstNode, kAngleTolerance) << "RAAN error (rad), at " << atNode;
+    EXPECT_LE(worstPerigee, kAngleTolerance) << "argument of perigee error times e (rad), at " << atPerigee;
+    EXPECT_LE(worstAnomaly, kAngleTolerance) << "true anomaly error times e (rad), at " << atAnomaly;
+    EXPECT_LE(worstLatitude, kAngleTolerance) << "argument of latitude error (rad), at " << atLatitude;
+}
+
+TEST(Elements, ArgumentOfLatitudeOfCircularOrbitsIsRecoveredNearZeroAndPi) {
+    for (const double i : {1e-6, 0.4, 2.5, kPi - 1e-6}) {
+        for (const double u : {1e-9, 1e-6, 1.0, kPi - 1e-9, kPi + 1e-9, 4.0, kTwoPi - 1e-9}) {
+            const KeplerianElements el = stateToElements(stateFromElements(7000.0 * km, 0.0, i, 2.0, 0.0, u));
+            EXPECT_LT(el.e, 1e-11);
+            EXPECT_EQ(el.argp, 0.0);
+            EXPECT_NEAR(angleDifference(el.nu, u), 0.0, kAngleTolerance) << "i=" << i << " u=" << u;
+        }
+    }
+}
+
+TEST(Elements, RoundTripThroughElementsIsExactToRounding) {
+    // state -> elements -> state for ordinary orbits with every angle at and near 0 and pi. The
+    // truth is the starting state.
+    const double inclinations[] = {0.0, 1e-9, 1e-6, 0.4, 0.5 * kPi, 2.5, kPi - 1e-6, kPi - 1e-9, kPi};
+    const double perigees[]     = {0.0, 1e-9, 1.0, kPi - 1e-9, kPi + 1e-9, 5.0, kTwoPi - 1e-9};
+    const double anomalies[] = {0.0, 1e-9, 1e-6, 2.0, kPi - 1e-9, kPi, kPi + 1e-9, 4.0, kTwoPi - 1e-6, kTwoPi - 1e-9};
+    const double nodes[]     = {0.0, 0.3, 3.0, 5.5};
+    // clang-format off
+    const double shapes[][2]    = {{7000.0 * km,  0.0  },
+                                   {7000.0 * km,  0.001},
+                                   {7000.0 * km,  0.1  },
+                                   {26600.0 * km, 0.7  },
+                                   {42164.0 * km, 0.0  }};
+    // clang-format on
+    double      worstR = 0.0, worstV = 0.0;
+    std::string atR, atV;
+    std::size_t count = 0;
+    for (const auto& shape : shapes) {
+        const double a = shape[0], e = shape[1];
+        for (const double i : inclinations) {
+            for (const double argp : perigees) {
+                for (const double nu : anomalies) {
+                    const double      raan = nodes[count++ % 4];
+                    const StateVector s    = stateFromElements(a, e, i, raan, argp, nu);
+                    const StateVector back = elementsToState(stateToElements(s));
+                    const double      dr = norm(back.r - s.r) / norm(s.r), dv = norm(back.v - s.v) / norm(s.v);
+                    if (!(dr <= worstR)) {
+                        worstR = dr;
+                        atR    = describe(a, e, i, raan, argp, nu);
+                    }
+                    if (!(dv <= worstV)) {
+                        worstV = dv;
+                        atV    = describe(a, e, i, raan, argp, nu);
+                    }
+                }
+            }
+        }
+    }
+    EXPECT_LE(worstR, kRoundTripTolerance) << "relative position error, at " << atR;
+    EXPECT_LE(worstV, kRoundTripTolerance) << "relative velocity error, at " << atV;
+
+    // Hyperbolic orbits: true anomaly in [-pi, pi), accurate through perigee.
+    for (const double nu : {-2.0, -1e-9, 0.0, 1e-9, 1.0}) {
+        const StateVector       s  = stateFromElements(-20000.0 * km, 1.5, 0.5, 1.0, 2.0, nu);
+        const KeplerianElements el = stateToElements(s);
+        EXPECT_NEAR(el.nu, nu, kAngleTolerance) << "nu=" << nu;
+        const StateVector back = elementsToState(el);
+        EXPECT_LE(norm(back.r - s.r), kRoundTripTolerance * norm(s.r)) << "nu=" << nu;
+    }
+}
+
+TEST(Elements, SpecialCaseConventionsAndThresholdsAreKept) {
+    const double a = 8000.0 * km;
+    // Circular inclined: argument of perigee 0, nu is the argument of latitude.
+    {
+        const KeplerianElements el = stateToElements(stateFromElements(a, 0.0, 0.5, 1.0, 0.0, 0.7));
+        EXPECT_EQ(el.argp, 0.0);
+        EXPECT_NEAR(el.raan, 1.0, 1e-15);
+        EXPECT_NEAR(el.nu, 0.7, 1e-15);
+    }
+    // Elliptic equatorial: RAAN 0, argp is the longitude of periapsis.
+    {
+        const KeplerianElements el = stateToElements(stateFromElements(a, 0.2, 0.0, 0.0, 1.1, 0.4));
+        EXPECT_EQ(el.i, 0.0);
+        EXPECT_EQ(el.raan, 0.0);
+        EXPECT_NEAR(el.argp, 1.1, 1e-15);
+        EXPECT_NEAR(el.nu, 0.4, 1e-15);
+    }
+    // Circular equatorial: RAAN and argp 0, nu is the true longitude.
+    {
+        const KeplerianElements el = stateToElements(stateFromElements(a, 0.0, 0.0, 0.0, 0.0, 2.0));
+        EXPECT_EQ(el.raan, 0.0);
+        EXPECT_EQ(el.argp, 0.0);
+        EXPECT_NEAR(el.nu, 2.0, 1e-15);
+    }
+    // Retrograde equatorial (i = pi): the same, with longitudes measured in the direction of motion
+    // (clockwise seen from +z). Each state is the mirror image in the x axis of a prograde one, so
+    // its perigee is at longitude -1.1 (or the satellite at -2.0) and it moves clockwise.
+    {
+        const StateVector       p  = stateFromElements(a, 0.2, 0.0, 0.0, 1.1, 0.4);
+        const KeplerianElements el = stateToElements({
+            {p.r.x, -p.r.y, 0.0},
+            {p.v.x, -p.v.y, 0.0}
+        });
+        EXPECT_EQ(el.i, kPi);
+        EXPECT_EQ(el.raan, 0.0);
+        EXPECT_NEAR(el.argp, 1.1, 4e-15); // wrapped twice, each rounding to 4.4e-16
+        EXPECT_NEAR(el.nu, 0.4, 1e-15);
+        const StateVector       c  = stateFromElements(a, 0.0, 0.0, 0.0, 0.0, 2.0);
+        const KeplerianElements ec = stateToElements({
+            {c.r.x, -c.r.y, 0.0},
+            {c.v.x, -c.v.y, 0.0}
+        });
+        EXPECT_EQ(ec.argp, 0.0);
+        EXPECT_NEAR(ec.nu, 2.0, 1e-15);
+    }
+    // The documented thresholds: e and i below 1e-11 are the special cases, above it they are not.
+    {
+        const KeplerianElements below = stateToElements(stateFromElements(a, 5e-12, 0.5, 1.0, 2.0, 0.7));
+        EXPECT_EQ(below.argp, 0.0);
+        EXPECT_NEAR(below.nu, 2.7, 4e-15);
+        const KeplerianElements above = stateToElements(stateFromElements(a, 1e-9, 0.5, 1.0, 2.0, 0.7));
+        EXPECT_NEAR(above.argp, 2.0, 1e-5); // perigee direction of e = 1e-9: good to eps / e
+        EXPECT_NEAR(above.argp + above.nu, 2.7, 4e-15);
+    }
+    {
+        const KeplerianElements below = stateToElements(stateFromElements(a, 0.2, 5e-12, 1.0, 2.0, 0.7));
+        EXPECT_EQ(below.raan, 0.0);
+        EXPECT_NEAR(below.argp, 3.0, 1e-10); // longitude of periapsis = RAAN + argp
+        // An inclination of 2e-11 used to come back as 0, and so as equatorial.
+        const KeplerianElements above = stateToElements(stateFromElements(a, 0.2, 2e-11, 1.0, 2.0, 0.7));
+        EXPECT_NEAR(above.i, 2e-11, 1e-20);
+        EXPECT_NEAR(above.raan, 1.0, 1e-9);
+        EXPECT_NEAR(above.argp, 2.0, 1e-9);
+    }
+}
+
+TEST(Secular, PropagatorReproducesItsInputStateAtTheEpochNearSingularAngles) {
+    // "The input state is reproduced at the epoch" (secular.h), also where acos could not resolve
+    // the angles: true anomaly and argument of perigee within 1e-7 of 0 and pi (it gave 5 mm).
+    for (const double nu : {1e-9, 1e-7, kPi - 1e-7, kTwoPi - 1e-8}) {
+        for (const double argp : {1e-8, kPi - 1e-9, 4.0}) {
+            const StateVector s = stateFromElements(7000.0 * km, 0.01, 0.9, 0.3, argp, nu);
+            const StateVector b = SecularPropagator(s).propagate(0.0);
+            test::expectVecNear(b.r, s.r, kEpochPositionTolerance, "position");
+            test::expectVecNear(b.v, s.v, kEpochVelocityTolerance, "velocity");
+        }
+    }
+}

@@ -52,8 +52,12 @@ struct KeplerianElements {
 
 /// Osculating elements of an inertial state (m, m/s) about a body with gravitational parameter
 /// `mu` (m^3/s^2). Inclination and RAAN refer to the z axis and x-y plane of the state's frame.
-/// Hyperbolic true anomalies are in [-pi, pi). Throws astro::Error for a rectilinear state
-/// (r = 0 or r parallel to v) or a parabolic orbit (|e - 1| < 1e-14).
+/// RAAN, argument of periapsis and elliptic true anomalies are in [0, 2 pi); hyperbolic true
+/// anomalies are in [-pi, pi). The angles are accurate to rounding everywhere, including
+/// inclinations and anomalies close to 0 and pi, so elementsToState gives the state back to
+/// rounding (an inclination or eccentricity that is not zero but below the 1e-11 of the special
+/// cases is the exception: the angle that is set to 0 is lost). Throws astro::Error for a
+/// rectilinear state (r = 0 or r parallel to v) or a parabolic orbit (|e - 1| < 1e-14).
 [[nodiscard]] KeplerianElements stateToElements(const StateVector& s, double mu = constants::gmEarth);
 /// Inertial position (m) and velocity (m/s) from elements; the inverse of stateToElements.
 /// Throws astro::Error if the semi-latus rectum is not positive (inconsistent a and e).
