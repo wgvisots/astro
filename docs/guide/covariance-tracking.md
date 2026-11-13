@@ -53,7 +53,7 @@ The two-body and secular propagators carry a covariance too, without integrating
 
 | Propagator | Call | How Phi is found | Cost |
 |---|---|---|---|
-| two-body | `propagateKeplerWithCovariance(s0, P0, dt)`; `propagateKeplerStm` for Phi | closed form: the universal-variable Lagrange coefficients differentiated, as in [Shepperd (1985)](https://doi.org/10.1007/BF01227666) and [Battin (1999)](https://doi.org/10.2514/4.861543); exact to rounding, any conic | 0.31 us |
+| two-body | `propagateKeplerWithCovariance(s0, P0, dt)`; `propagateKeplerStm` for Phi | closed form: the universal-variable Lagrange coefficients differentiated (the matrix that [Shepperd (1985)](https://doi.org/10.1007/BF01227666) and [Battin (1999)](https://doi.org/10.2514/4.861543) derive in other forms); exact to rounding, any conic | 0.31 us |
 | secular J2/J4 | `SecularPropagator::propagateWithCovariance(dt, P0)`, `propagateGridWithCovariance`; `propagateStm` for Phi | fourth-order central differences of the whole state-to-state map; 1e-11 to 2e-5 relative | 6.4 us per time, 1.2 us per grid output |
 | numerical | `propagateGridWithCovariance` (above) | variational equations, integrated | 0.3 ms for 4 h at 10 s |
 
@@ -86,8 +86,8 @@ two-body                       44.0         675.1           9.7
 ```
 
 - **The covariance is mostly Keplerian shear.** Against the numerical J2/J4 covariance, both analytic
-  ones match the in-track sigma to 0.5 % at 4 h on all six test orbits, and two-body does as well as
-  secular. Over a day the small radial sigma differs by up to ~35 % (it oscillates, and the analytic
+  ones match the in-track sigma to 0.6 % at 4 h on all six test orbits, and two-body does as well as
+  secular. Over a day the small radial sigma differs by up to 37 % (it oscillates, and the analytic
   trajectories are at a different phase), and the HEO in-track sigma by 10 %
   ([Accuracy](../accuracy.md#analytic-state-transition-matrices-and-covariances)). The state, not the
   covariance, is where the models really differ: tens of km for the secular model, more for two-body.

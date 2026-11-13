@@ -111,8 +111,8 @@ struct SecularRates {
 /// The velocity is the two-body velocity of the mean elements at each time (as in Vallado's
 /// PKEPLER), so a state converts back to exactly the propagated mean elements and the input state
 /// is reproduced at the epoch. It is not the time derivative of the position, which also carries
-/// the node and perigee drift and the J2/J4 part of the mean-anomaly rate (1e-3 relative, ~6-10 m/s
-/// in LEO). SecularPropagatorCorrected returns that derivative instead; see the propagation guide
+/// the node and perigee drift and the J2/J4 part of the mean-anomaly rate (1e-3 relative: 5-20 m/s
+/// in LEO, depending on the inclination). SecularPropagatorCorrected returns that derivative instead; see the propagation guide
 /// for when each fits.
 class SecularPropagator {
 public:
@@ -161,7 +161,8 @@ public:
     /// the input velocity. Costs 24 extra propagations (and constructions); for many times use
     /// propagateGridWithCovariance, which builds the perturbed propagators once. The state is
     /// propagate(dt), or propagate12(dt) for HigherOrderMode::UnmodeledForce, whose input
-    /// acceleration and jerk are held fixed.
+    /// acceleration and jerk are held fixed. Throws astro::Error if a perturbed input state is not
+    /// elliptic, which happens within ~1e-5 of e = 1.
     [[nodiscard]] StateTransition propagateStm(double dt) const;
     /// State and covariance dt seconds after the epoch: P = Phi P0 Phi^T, Phi from propagateStm. P0 is
     /// the covariance of epochState() (m^2, m^2/s, m^2/s^2) in its frame. There is no process noise:
@@ -177,7 +178,7 @@ public:
     propagateGridWithCovariance(double start, double step, std::size_t count, const Mat6& P0) const;
     /// The input state the covariance methods refer to: the state given to the constructor, or for
     /// mean elements elementsToState(mean, zp.mu).
-    [[nodiscard]] StateVector epochState() const noexcept { return input_.rv(); }
+    [[nodiscard]] StateVector epochState() const;
 
     /// Mean elements at the epoch.
     [[nodiscard]] const KeplerianElements& meanElements() const noexcept { return mean_; }
@@ -244,8 +245,9 @@ private:
     double              mDotOverN_{1.0};      // mean-anomaly rate over the two-body mean motion
     Vec3                da0_;
     Vec3                dj0_;
-    StateVector12       input_;                            // epoch state for the covariance methods
+    StateVector12       input_;                            // the input state, when built from one
     HigherOrderMode     mode_{HigherOrderMode::ModelOnly}; // mode of a StateVector12 start
+    bool                fromState_{false};                 // built from a state (not mean elements)
     bool                fromState12_{false};               // built from a StateVector12
 };
 

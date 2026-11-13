@@ -108,7 +108,7 @@ The two give **identical positions** and differ only in the velocity:
 | Velocity | two-body velocity of the mean elements at each time (as Vallado's PKEPLER) | time derivative of the position: v = (Mdot / n) v_mean + raanDot (z x r) + argpDot (w x r) |
 | Agrees with dr/dt of its own positions | no: off by 1.2-9.0 m/s (the drift of node, perigee and mean anomaly, ~1e-3 relative) | yes: to 0.002 m/s (the finite-difference check's own error) |
 | Velocity error against numerical J2/J4, fitted mean elements, 4 h | 6.3 / 8.3 / 3.9 m/s (LEO / SSO / HEO) | 3.6 / 8.4 / 4.0 m/s |
-| Reproduces the input state at dt = 0 | yes, position and velocity | position only; the velocity differs by the drift term (~6-10 m/s in LEO) |
+| Reproduces the input state at dt = 0 | yes, position and velocity | position only; the velocity differs by the drift term (5-20 m/s in LEO: 5 at 51.6 deg, 9 sun-synchronous, 20 near-equatorial) |
 | A propagated state converts back to the mean elements | yes, exactly | no |
 | Cost | 39 ns per grid output | ~2 % more |
 
@@ -185,10 +185,10 @@ threshold: a conjunction list. Each object is a `Trajectory`, built from any of 
 
 | Built from | Propagated with |
 |---|---|
-| `{epoch, StateVector}` | `TrajectoryModel::TwoBody` (default, `propagateKepler`), `SecularJ2` or `SecularJ2J4` (`SecularPropagator`) |
+| `{epoch, StateVector}` | `TrajectoryModel::TwoBody` (default, `propagateKepler`), `SecularJ2` or `SecularJ2J4` (`SecularPropagatorCorrected`) |
 | `{epoch, KeplerianElements}` | the same; osculating elements for two-body, mean elements for the secular models |
 | `{epoch, EquinoctialElements}` | the same, via `equinoctialToKeplerian` |
-| any `std::function<StateVector(const Time&)>` | your own: a `NumericalPropagator`, an `Sgp4`, an ephemeris table, ... |
+| any callable `StateVector(const Time&)`, e.g. a lambda | your own: a `NumericalPropagator`, an `Sgp4`, an ephemeris table, ... |
 
 So two element sets, two states, or one of each pass straight in:
 
@@ -214,7 +214,9 @@ the two objects' values at each sample: ~125 samples per circular orbit, 45 s in
 GEO), so eccentric orbits are sampled finely near perigee and coarsely near apogee. Each change of
 sign from negative to positive brackets a minimum, which Brent's method
 ([Brent 1973](../references.md#orbits-and-propagation)) refines to `timeTolerance` (1 us). Searching
-for the zeros of the range rate is the approach of [Alfano & Negron (1993)](../references.md#conjunctions-and-collision-probability); analytic
+for the zeros of the range rate is the approach of [Alfano & Negron (1993)](../references.md#conjunctions-and-collision-probability), who
+fit cubic polynomials through its samples; here each bracketed zero is refined on the trajectories
+themselves. Analytic
 pre-filters such as [Hoots, Crawford & Roehrich (1984)](https://doi.org/10.1007/BF01234152) can
 thin a large catalogue before it. The minima and maxima of the distance between two orbits about
 the same body are typically a large fraction of a revolution apart, so the step leaves a wide
@@ -269,25 +271,26 @@ It is the standard short-term encounter model of [Foster & Estes (1992)](../refe
 | Objects | spheres whose radii add up to the hard-body radius (HBR) |
 | Uncertainty | independent Gaussian position errors at TCA: the relative position has covariance C1 + C2 |
 | Encounter plane | the plane through the miss vector perpendicular to the relative velocity; errors along the relative velocity only shift the time of the encounter, so they drop out |
-| Probability | the 2-D Gaussian of the miss in that plane integrated over the HBR circle (`probabilityInCircle`): exact along the covariance's minor axis, adaptive Gauss-Kronrod along the major axis, ~1e-12 relative in 6-13 us |
+| Probability | the 2-D Gaussian of the miss in that plane integrated over the HBR circle (`probabilityInCircle`): exact along the covariance's minor axis, adaptive Gauss-Kronrod along the major axis, ~1e-12 relative in 7-18 us |
 
 The result also gives the miss distance, the projected 2x2 covariance, its sigmas and the miss in
 standard deviations (`mahalanobis`).
 
 **Validated against NASA CARA (Conjunction Assessment Risk Analysis) reference cases**
-([CARA Analysis Tools](https://github.com/nasa/CARA_Analysis_Tools)) to 1e-12 relative, and
+([CARA Analysis Tools](https://github.com/nasa/CARA_Analysis_Tools)): to 1e-12 relative where CARA's own values are that
+good, and to an independent integral where they are not (a near-singular covariance, and large radii). Also
 against [Alfano's (2009)](../references.md#conjunctions-and-collision-probability) test cases (see [Accuracy](../accuracy.md#collision-probability)).
 One convention differs from CARA's `PcCircle`: CARA takes the full distance |r2 - r1| as the miss,
 assuming the states are exactly at TCA; `collisionProbability` projects r2 - r1 onto the encounter
 plane, which is the closest distance of the straight-line encounter. They agree for a true closest
-approach from `closestApproach`; for states 2 deg off TCA they differ by ~0.1 %.
+approach from `closestApproach`; for states 2.1 deg off TCA (CARA's Omitron 2 case) they differ by 0.017 %.
 
 **When it applies.** The model assumes the encounter is short: straight-line relative motion and
 constant covariances while the objects cross each other's uncertainty, as at relative speeds of
 km/s. Alfano's slow test cases (0.2-0.5 m/s) still agree with his Monte Carlo to within 2 %,
 because their relative motion stays nearly straight, but for slow, curving, nearly co-orbital
-encounters use a Monte Carlo or a long-term encounter method instead, such as
-[Patera (2001)](https://doi.org/10.2514/2.4771). Use a true closest approach (not
+encounters use a Monte Carlo or a method for nonlinear relative motion instead, such as
+[Patera (2003)](https://doi.org/10.2514/2.5127). Use a true closest approach (not
 `atBoundary`).
 
 **More uncertainty does not always mean more risk.** For a given miss, the probability peaks when
@@ -345,9 +348,9 @@ most probable collision, so to rank a window's approaches use `assessConjunction
 
 - **The search samples the trajectory; the covariance is computed once per approach.** The cost is
   that of `closeApproaches` plus 0.3 us (two-body) or 6.4 us (secular) per approach and object.
-- **Validated end to end.** In the tests, 40 000 draws of both initial states, each propagated and
-  searched, pass within the hard-body radius as often as `assessConjunction` predicts (Pc 0.04,
-  within 0.3 sigma of the Monte Carlo).
+- **Validated end to end.** In the tests, 100 000 draws of both initial states, each propagated and
+  searched, pass within the hard-body radius as often as `assessConjunction` predicts (Pc 0.3,
+  checked to 2 %).
 - **For a NumericalPropagator**, give the trajectory and the covariance separately, so that the search
   does not integrate the covariance at every sample:
 

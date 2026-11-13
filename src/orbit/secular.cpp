@@ -179,8 +179,8 @@ SecularPropagator::SecularPropagator(const KeplerianElements& mean, const ZonalP
 
 SecularPropagator::SecularPropagator(const StateVector& s0, const ZonalParameters& zp, SecularOrder order)
     : SecularPropagator(stateToElements(s0, zp.mu), zp, order) {
-    input_.r = s0.r;
-    input_.v = s0.v;
+    input_     = StateVector12(s0.r, s0.v, Vec3{}, Vec3{});
+    fromState_ = true;
 }
 
 SecularPropagator::SecularPropagator(const StateVector12&   s0,
@@ -190,6 +190,7 @@ SecularPropagator::SecularPropagator(const StateVector12&   s0,
     : SecularPropagator(s0.rv(), zp, order) {
     input_       = s0;
     mode_        = mode;
+    fromState_   = true;
     fromState12_ = true;
     initResiduals(s0, mode);
 }
@@ -210,8 +211,8 @@ SecularPropagator::SecularPropagator(RateVelocity           tag,
                                      const ZonalParameters& zp,
                                      SecularOrder           order)
     : SecularPropagator(tag, stateToElements(s0, zp.mu), zp, order) {
-    input_.r = s0.r;
-    input_.v = s0.v;
+    input_     = StateVector12(s0.r, s0.v, Vec3{}, Vec3{});
+    fromState_ = true;
 }
 
 SecularPropagator::SecularPropagator(RateVelocity           tag,
@@ -222,6 +223,7 @@ SecularPropagator::SecularPropagator(RateVelocity           tag,
     : SecularPropagator(tag, s0.rv(), zp, order) {
     input_       = s0;
     mode_        = mode;
+    fromState_   = true;
     fromState12_ = true;
     initResiduals(s0, mode);
 }
@@ -266,10 +268,6 @@ void SecularPropagator::init() {
     cosI_      = std::cos(mean_.i);
     sinI_      = std::sin(mean_.i);
     mDotOverN_ = rates_.meanAnomalyDot / std::sqrt(zp_.mu / (mean_.a * mean_.a * mean_.a));
-    // The epoch state the covariance methods differentiate with respect to; the state constructors
-    // replace it with their input.
-    const StateVector s0 = elementsToState(mean_, zp_.mu);
-    input_               = StateVector12(s0.r, s0.v, Vec3{}, Vec3{});
 }
 
 void SecularPropagator::fieldDerivatives(const Vec3& r, const Vec3& v, Vec3& a, Vec3& j) const noexcept {
@@ -412,6 +410,12 @@ constexpr double kStencilWeight[4] = {8.0, -8.0, -1.0, 1.0};
 
 } // namespace
 
+StateVector SecularPropagator::epochState() const {
+    // Mean elements are converted on demand, so that constructions which never ask (every
+    // propagateSecular call) do not pay for it.
+    return fromState_ ? input_.rv() : elementsToState(mean_, zp_.mu);
+}
+
 SecularPropagator SecularPropagator::rebuilt(const StateVector& s) const {
     StateVector12 x = input_;
     x.r             = s.r;
@@ -440,10 +444,11 @@ void SecularPropagator::stmGrid(double start, double step, std::span<StateVector
         m = Mat6{};
     }
     std::vector<StateVector> buf(states.size());
+    const StateVector        epoch = epochState();
     for (std::size_t j = 0; j < 6; ++j) {
-        const double h = kStmStep * (j < 3 ? norm(input_.r) : norm(input_.v));
+        const double h = kStmStep * (j < 3 ? norm(epoch.r) : norm(epoch.v));
         for (std::size_t p = 0; p < 4; ++p) {
-            StateVector s0                      = input_.rv();
+            StateVector s0                      = epoch;
             (j < 3 ? &s0.r.x : &s0.v.x)[j % 3] += kStencilOffset[p] * h;
             rebuilt(s0).trajectoryGrid(start, step, buf);
             const double w = kStencilWeight[p] / (12.0 * h);

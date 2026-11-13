@@ -19,7 +19,8 @@
 // Conjunction study (docs/accuracy.md, docs/guide/propagation.md):
 //  1. closest-approach search: minima missed against a brute-force scan, by sampling step;
 //  2. collision probability against NASA CARA's reference values and Alfano's (2009) test cases,
-//     with a brute-force grid where the references disagree.
+//     with a brute-force grid and a second, cross-axis integral where the references disagree, and
+//     near-singular covariances.
 //
 //   astro_study_conjunctions [number of orbit pairs]   (default 300)
 
@@ -164,6 +165,56 @@ void collisionProbabilityStudy() {
                 collisionProbability(c, kCara[2].c1, kCara[2].c2, 10.0).sigmaMajor,
                 collisionProbability(c, kCara[2].c1, kCara[2].c2, 10.0).sigmaMinor,
                 collisionProbability(c, kCara[2].c1, kCara[2].c2, 10.0).missDistance);
+
+    // The same geometry at every radius, against the integral taken the other way round
+    // (crossAxisReference) along principal axes computed in extended precision. At 10 m and 100 m
+    // the polar grid above is no check: its covariance inverse loses the minor variance's digits.
+    std::printf("\nCARA multiple radii, against the cross-axis integral along extended-precision principal axes\n\n");
+    std::printf("| HBR (m) | collisionProbability | Cross-axis reference | Ours vs reference | CARA vs reference |\n");
+    std::printf("|---|---|---|---|---|\n");
+    for (int k = 0; k < 6; ++k) {
+        const double      hbr = kMultiRadiusHbr[k];
+        const auto        q   = collisionProbability(c, kCara[2].c1, kCara[2].c2, hbr);
+        const long double X = q.xx, Y = q.yy, Z = q.xy, zz = Z * Z;
+        const long double det   = std::fma(X, Y, -zz) + std::fma(-Z, Z, zz);
+        const long double major = 0.5L * (X + Y) + std::hypot(0.5L * (X - Y), Z);
+        const long double minor = det / major;
+        const long double angle = 0.5L * std::atan2(2.0L * Z, X - Y);
+        const double      u0    = static_cast<double>(std::cos(angle) * q.missDistance);
+        const double      v0    = static_cast<double>(std::abs(std::sin(angle) * q.missDistance));
+        const double      ref   = crossAxisReference(u0,
+                                              v0,
+                                              static_cast<double>(std::sqrt(major)),
+                                              static_cast<double>(std::sqrt(minor)),
+                                              hbr);
+        std::printf("| %g | %.12e | %.12e | %.1e | %.1e |\n",
+                    hbr,
+                    q.probability,
+                    ref,
+                    q.probability / ref - 1.0,
+                    kMultiRadiusPc[k] / ref - 1.0);
+    }
+
+    // Near-singular covariances at the circle's edge (R = 10; standard deviations along x and y).
+    std::printf("\nNear-singular covariances, against the cross-axis integral\n\n");
+    std::printf("| mean x, y | sigma x, y | probabilityInCircle | Relative difference |\n|---|---|---|---|\n");
+    struct Edge {
+        double mx, my, sx, sy;
+    };
+    const Edge edges[] = {
+        {3.0,       10.00003,  0.5,  1e-5},
+        {3.0,       10.0003,   0.5,  1e-4},
+        {3.0,       10.0003,   10.0, 1e-4},
+        {1.0,       10.003,    1.0,  1e-3},
+        {3.0,       10.03,     0.5,  5e-3},
+        {3.0,       9.99997,   0.5,  1e-5},
+        {7.0710678, 7.0710678, 1e-3, 1e-5},
+    };
+    for (const Edge& e : edges) {
+        const double p   = probabilityInCircle(e.mx, e.my, e.sx * e.sx, 0.0, e.sy * e.sy, 10.0);
+        const double ref = crossAxisReference(e.mx, e.my, e.sx, e.sy, 10.0);
+        std::printf("| %.8g, %.8g | %g, %g | %.9e | %.1e |\n", e.mx, e.my, e.sx, e.sy, p, p / ref - 1.0);
+    }
 }
 
 } // namespace

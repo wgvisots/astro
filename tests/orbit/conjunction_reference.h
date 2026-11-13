@@ -21,6 +21,7 @@
 // Reference conjunctions and a brute-force Pc, shared by collision_probability_test.cpp and the
 // conjunction study (studies/conjunctions.cpp).
 
+#include <algorithm>
 #include <cmath>
 
 #include "astro/core/constants.h"
@@ -50,6 +51,48 @@ polarReference(double mx, double my, double xx, double xy, double yy, double R, 
         sum += (i % 2 ? 4.0 : 2.0) * ring(i * h);
     }
     return sum * h / 3.0;
+}
+
+/// A second, independent reference for an axis-aligned covariance (standard deviations sx, sy along
+/// x and y): the outer integral runs along y and the chord integral along x is exact, the other way
+/// round from probabilityInCircle when sx > sy. y = R sin t over the part of the circle within
+/// 40 sy of the mean, 400 panels of 20-point Gauss-Legendre, in long double.
+inline double crossAxisReference(double mx, double my, double sx, double sy, double R) {
+    // clang-format off
+    static constexpr long double x[10] = {0.0765265211334973337546404L, 0.2277858511416450780804962L, 0.3737060887154195606725482L,
+                                          0.5108670019508270980043641L, 0.6360536807265150254528367L, 0.7463319064601507926143051L,
+                                          0.8391169718222188233945291L, 0.9122344282513259058677524L, 0.9639719272779137912676661L,
+                                          0.9931285991850949247861224L};
+    static constexpr long double w[10] = {0.1527533871307258506980843L, 0.1491729864726037467878287L, 0.1420961093183820513292983L,
+                                          0.1316886384491766268984945L, 0.1181945319615184173123774L, 0.1019301198172404350367501L,
+                                          0.0832767415767047487247581L, 0.0626720483341090635695065L, 0.0406014298003869413310400L,
+                                          0.0176140071391521183118620L};
+    // clang-format on
+    const long double Rl = R, sxl = sx, syl = sy, mxl = mx, myl = my;
+    const long double ya = std::max(-Rl, myl - 40.0L * syl), yb = std::min(Rl, myl + 40.0L * syl);
+    if (!(ya < yb)) {
+        return 0.0;
+    }
+    const long double root2 = std::sqrt(2.0L), twoPi = 2.0L * std::acos(-1.0L);
+    const auto        f = [&](long double t) {
+        const long double y = Rl * std::sin(t), half = Rl * std::cos(t), z = (y - myl) / syl;
+        const long double a = (-half - mxl) / (sxl * root2), b = (half - mxl) / (sxl * root2);
+        const long double chord = a > 0.0L ? 0.5L * (std::erfc(a) - std::erfc(b))
+                                       : b < 0.0L ? 0.5L * (std::erfc(-b) - std::erfc(-a))
+                                                  : 0.5L * (std::erf(b) - std::erf(a));
+        return half * std::exp(-0.5L * z * z) / (syl * std::sqrt(twoPi)) * chord;
+    };
+    const long double ta = std::asin(ya / Rl), tb = std::asin(yb / Rl);
+    const int         n   = 400;
+    long double       sum = 0.0L;
+    for (int k = 0; k < n; ++k) {
+        const long double lo = ta + (tb - ta) * k / n, hi = ta + (tb - ta) * (k + 1) / n;
+        const long double m = 0.5L * (lo + hi), h = 0.5L * (hi - lo);
+        for (int i = 0; i < 10; ++i) {
+            sum += w[i] * h * (f(m - h * x[i]) + f(m + h * x[i]));
+        }
+    }
+    return static_cast<double>(sum);
 }
 
 /// A conjunction from NASA CARA's test data: both states and position covariances at TCA.
@@ -140,10 +183,9 @@ inline double caraPc(const CaraGeometry& g, double hbr) {
     return collisionProbability(c, c1, g.c2, hbr).probability;
 }
 
-// Reference probabilities for kCara. Omitron 1 and 2 (HBR 0.020 km = 20 m, in their km units):
-// CARA's highest-accuracy values (RelTol 1e-10 in its test). Multiple radii (m): CARA's default
-// 64-point Gauss-Chebyshev values. Alfano (2009) cases 5-7 (HBR 10 m): Alfano's linear Pc and his
-// 1e8-sample Monte Carlo.
+// Reference probabilities for kCara, from CARA's PcCircle_UnitTest.m. Omitron 1 and 2 (HBR 0.020 km
+// = 20 m, in their km units). Multiple radii (m): CARA's default 64-point Gauss-Chebyshev values.
+// Alfano (2009) cases 5-7 (HBR 10 m): Alfano's linear Pc and his 1e8-sample Monte Carlo.
 // clang-format off
 inline constexpr double kOmitronPc[]          = {2.706023476569787e-05, 1.807363058494765e-01};
 inline constexpr double kOmitronHbr           = 0.020;

@@ -139,12 +139,13 @@ included in the repository are credited in
   future close approaches between satellites. *Celestial Mechanics* 33(2), 143-158.
   <https://doi.org/10.1007/BF01234152>. Geometric pre-filters for screening a catalogue.
 - **Alfano, S. & Negron, D. (1993).** Determining satellite close approaches. *J. Astronaut. Sci.*
-  41(2), 217-225 (no DOI found). Close approaches as zeros of the range rate, bracketed by sampling.
+  41(2), 217-225 (no DOI found). Close approaches as zeros of the range rate, found from cubic
+  polynomials through its samples; here the samples bracket each zero for Brent's method.
 - **Akella, M. R. & Alfriend, K. T. (2000).** Probability of collision between space objects.
   *J. Guidance, Control, and Dynamics* 23(5), 769-772. <https://doi.org/10.2514/2.4611>.
-- **Patera, R. P. (2001).** General method for calculating satellite collision probability.
-  *J. Guidance, Control, and Dynamics* 24(4), 716-722. <https://doi.org/10.2514/2.4771>. A method
-  for encounters whose relative motion is not a straight line.
+- **Patera, R. P. (2003).** Satellite collision probability for nonlinear relative motion.
+  *J. Guidance, Control, and Dynamics* 26(5), 728-733. <https://doi.org/10.2514/2.5127>. For slow
+  encounters whose relative motion is not a straight line, which the short-term model excludes.
 - **Alfano, S. (2005a).** A numerical implementation of spherical object collision probability.
   *J. Astronaut. Sci.* 53(1), 103-109. <https://doi.org/10.1007/BF03546397>. The 1-D integral
   with an exact error-function inner integral.

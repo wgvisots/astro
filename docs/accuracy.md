@@ -178,15 +178,19 @@ Measured by `astro_study_conjunctions` (relative difference = `collisionProbabil
 
 | Reference | Relative difference |
 |---|---|
-| [NASA CARA](https://github.com/nasa/CARA_Analysis_Tools) `PcCircle` highest-accuracy values (Omitron cases 1 and 2, 20 m radius) | 2.7e-14, 4.4e-16 |
-| CARA default-mode values on one geometry (123 km x 19 m covariance), radii 10 m and 100 m | 4.2e-14, 1.4e-14 |
-| the same, radii 1, 3, 10 and 30 km | -1.1e-4, -2.8e-4, 1.1e-4, 1.8e-4: CARA's 64-point Gauss-Chebyshev quadrature cannot resolve the 19 m axis there |
-| brute-force polar grid (4000 x 80000 points) on that geometry, radii 1-30 km | 1.6e-13 or less; CARA's values differ from the grid by the same 1-3e-4 |
+| [NASA CARA](https://github.com/nasa/CARA_Analysis_Tools) `PcCircle` reference values (Omitron cases 1 and 2, 20 m radius) | 2.8e-14, 2.2e-16 |
+| CARA values on one near-singular geometry (123 km x 18.6 m covariance, miss 7 sigma along the narrow axis), radii 10 m and 100 m | -2.0e-8, -1.9e-9: the rounding of CARA's minor variance, epsilon x (123 km / 18.6 m)^2 |
+| the same, radii 1, 3, 10 and 30 km | -1.1e-4, -2.8e-4, 1.1e-4, 1.8e-4: CARA's 64-point Gauss-Chebyshev quadrature cannot resolve the 18.6 m axis there |
+| a second integral on that geometry, taken along the other axis in extended precision, all six radii | 2e-15 or less; CARA's values differ from it by the amounts above |
+| brute-force polar grid (4000 x 80000 points) on that geometry, radii 1-30 km | 8e-15 or less |
+| near-singular covariances at the circle's edge (sigma down to 1e-6 of the radius), against the second integral | 3.5e-13 or less |
 | [Alfano (2009)](references.md#conjunctions-and-collision-probability) cases 5-7, his linear Pc | 1.1e-4, -2.4e-7, -3.3e-6 |
 | Alfano (2009) cases 5-7, his 1e8-sample Monte Carlo | -1.5e-4, 8.1e-3, -2.1e-2 (the linear model's own error on these slow encounters, and Monte Carlo noise) |
 
 CARA's cases are compared in CARA's miss-distance convention (see the
-[guide](guide/propagation.md#collision-probability)).
+[guide](guide/propagation.md#collision-probability)). An earlier version of `probabilityInCircle` formed
+the minor variance as CARA's values imply, agreed with them to 4e-14 at 10 m and 100 m, and was
+wrong by the same 2e-8: agreement with a reference that shares the arithmetic is not accuracy.
 
 Asserted by `tests/orbit/collision_probability_test.cpp`:
 
@@ -194,10 +198,14 @@ Asserted by `tests/orbit/collision_probability_test.cpp`:
 |---|---|
 | closed form 1 - exp(-R^2 / 2 sigma^2) (isotropic, centred) | 1e-11 |
 | Rice distribution (isotropic, offset; [Rice 1945](references.md#conjunctions-and-collision-probability)), by Simpson's rule | 1e-10 |
-| brute-force polar grid: anisotropic, 1000:1 aspect ratio, R >> sigma, correlated, Pc ~ 1e-14 | 1e-8 |
-| 3-D Monte Carlo of straight-line encounters (400 000 draws) | 5 binomial standard deviations |
-| CARA Omitron cases, and the multiple-radius geometry at 10 m and 100 m | 1e-12 |
-| CARA multiple-radius geometry at 1-30 km, and Alfano's linear Pc | 1e-3 (CARA's own test tolerance) |
+| brute-force polar grid: anisotropic, 1000:1 aspect ratio, R >> sigma, correlated, Pc 6e-26 | 1e-8 |
+| a second integral along the other axis: near-singular covariances at the circle's edge | 1e-9 |
+| the same: a rotated 7500:1 covariance with an exactly known determinant | 1e-10 |
+| 3-D Monte Carlo of straight-line encounters (4 million draws) | 4 binomial standard deviations (1.2 % of Pc) |
+| end-to-end Monte Carlo of both initial states (100 000 draws, `assessConjunction`) | 4 binomial standard deviations (2 % of Pc) |
+| CARA Omitron cases | 1e-12 |
+| CARA multiple-radius geometry at 10 m, 100 m, and 1-30 km | 1e-7, 1e-8, 1e-3 (the errors of CARA's values, above) |
+| Alfano's linear Pc | 1e-3 (the tolerance of CARA's own test) |
 | singular covariances (zero width), head-on encounter | 1e-14 and 1e-12 absolute |
 
 ## Consistency checks

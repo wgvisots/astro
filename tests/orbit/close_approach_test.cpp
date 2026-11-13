@@ -247,6 +247,47 @@ TEST(CloseApproach, SecularModelsAndEquinoctialElements) {
     }
 }
 
+TEST(CloseApproach, ConstantDistanceHasNoMinimum) {
+    // The same circular orbit, 0.001 rad apart: the distance never changes, and the range rate is
+    // zero up to rounding. Its changes of sign are noise, not approaches.
+    for (TrajectoryModel model : {TrajectoryModel::TwoBody, TrajectoryModel::SecularJ2J4}) {
+        const Trajectory lead{
+            kEpoch,
+            KeplerianElements{7000 * km, 0.0, 0.9, 0.3, 0.0, 0.001},
+            model
+        };
+        const Trajectory trail{
+            kEpoch,
+            KeplerianElements{7000 * km, 0.0, 0.9, 0.3, 0.0, 0.0},
+            model
+        };
+        EXPECT_TRUE(closeApproaches(lead, trail, kEpoch, kEpoch + 86400.0).empty()) << model;
+        const CloseApproach ca = closestApproach(lead, trail, kEpoch, kEpoch + 86400.0);
+        EXPECT_TRUE(ca.atBoundary) << model;
+        EXPECT_NEAR(ca.distance, 2.0 * 7000 * km * std::sin(0.0005), 1e-3) << model;
+    }
+}
+
+TEST(CloseApproach, AcceptsACallableAndAMinimumAtTheWindowEnd) {
+    const Conjunction c;
+    const Trajectory  first{kEpoch, c.elements};
+    const Trajectory  second{kEpoch + Conjunction::kTca, c.atTca};
+    // A lambda converts to a Trajectory where one is expected.
+    const CloseApproach viaLambda =
+        closestApproach([&first](const Time& t) { return first.state(t); }, second, kEpoch + 36000.0, kEpoch + 38000.0);
+    EXPECT_NEAR(viaLambda.time - kEpoch, Conjunction::kTca, 1e-6);
+    EXPECT_NEAR(viaLambda.distance, Conjunction::kMiss, 1e-6);
+
+    // The list covers (start, end]: a window ending exactly at the minimum includes it, one
+    // starting exactly there does not.
+    const Time                       tca    = kEpoch + Conjunction::kTca;
+    const std::vector<CloseApproach> ending = closeApproaches(first, second, tca - 300.0, tca, 1 * km);
+    ASSERT_EQ(ending.size(), 1u);
+    EXPECT_NEAR(ending[0].time - tca, 0.0, 1e-6);
+    EXPECT_FALSE(ending[0].atBoundary);
+    EXPECT_TRUE(closeApproaches(first, second, tca, tca + 300.0, 1 * km).empty());
+}
+
 TEST(CloseApproach, WindowEnds) {
     const Conjunction c;
     const Trajectory  first{kEpoch, c.elements};

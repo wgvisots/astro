@@ -40,8 +40,9 @@ void stumpff(double psi, double& c2, double& c3) noexcept;
 /// form (the quantity of Shepperd 1985 and Battin 1999): the universal-variable Lagrange
 /// coefficients differentiated with respect to r0, v0 and, implicitly through Kepler's equation,
 /// the universal anomaly over the full dt (whole revolutions included, which carry the
-/// along-track drift). Exact to rounding and valid for any conic: symplectic to ~1e-9 and equal to
-/// the integrated variational equations to ~1e-11 (astro_study_propagation). The state is
+/// along-track drift). Exact to rounding and valid for any conic: equal to the integrated
+/// variational equations to ~1e-11, and symplectic to 6e-9 after a day in LEO and 1e-7 after a week
+/// (astro_study_propagation). The state is
 /// propagateKepler's, bit for bit. Phi(0) is the identity.
 [[nodiscard]] StateTransition propagateKeplerStm(const StateVector& s0, double dt, double mu = constants::gmEarth);
 
