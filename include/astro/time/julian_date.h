@@ -57,7 +57,9 @@ struct JulianDate {
         , jd2(jd2_) {}
 
     /// From Gregorian calendar date + time of day, assuming 86400-second days
-    /// (i.e. not leap-second aware; use astro::Time for UTC).
+    /// (i.e. not leap-second aware; use astro::Time for UTC). Throws
+    /// astro::Error if `month` is outside 1-12 or `day` is not a day of that
+    /// month. The time of day is not checked.
     [[nodiscard]] static JulianDate
     fromCalendar(int year, int month, int day, int hour = 0, int minute = 0, double second = 0.0);
     /// From a Modified Julian Date (JD - 2400000.5), split into whole day and fraction.
@@ -116,7 +118,8 @@ struct JulianDate {
 [[nodiscard]] int daysInMonth(int year, int month);
 /// Day of year, 1-based (Jan 1 = 1).
 [[nodiscard]] int dayOfYear(int year, int month, int day);
-/// Month and day from year and 1-based day of year.
+/// Month and day from year and 1-based day of year. Throws astro::Error if
+/// `doy` is outside 1-365 (1-366 in a leap year).
 void monthDayFromDayOfYear(int year, int doy, int& month, int& day);
 /// Day of week, 0 = Sunday ... 6 = Saturday.
 [[nodiscard]] int dayOfWeek(int year, int month, int day);

@@ -54,7 +54,7 @@ public:
     LeapSecondTable();
     /// From explicit entries (sorted by date here) and an optional expiration
     /// MJD. Throws astro::Error if `entries` is empty or an entry is invalid (year outside
-    /// 1960-9999, month outside 1-12, non-finite values).
+    /// 1960-9999, month outside 1-12, non-finite values), or if `expiresMjd` is not finite.
     explicit LeapSecondTable(std::vector<LeapSecondEntry> entries, std::optional<double> expiresMjd = std::nullopt);
 
     /// The built-in table (same as the default constructor).
@@ -71,13 +71,18 @@ public:
     /// line. The message gives the line number and the line. A malformed line
     /// is never skipped, because TAI-UTC would then be wrong without notice.
     [[nodiscard]] static LeapSecondTable load(const std::string& path);
-    /// As load(), from file contents already in memory.
+    /// As load(), from file contents already in memory. Throws astro::Error as
+    /// load() does for a file with these contents.
     [[nodiscard]] static LeapSecondTable parse(std::string_view content);
 
     /// TAI-UTC in seconds for the UTC calendar date and fraction of day.
-    /// Throws astro::Error before 1960-01-01, where UTC is undefined.
+    /// Throws astro::Error before 1960-01-01, where UTC is undefined. A table
+    /// made from explicit entries that start later throws before the month of
+    /// its first entry.
     [[nodiscard]] double taiMinusUtc(int year, int month, int day, double fractionOfDay = 0.0) const;
-    /// TAI-UTC in seconds for an MJD (UTC).
+    /// TAI-UTC in seconds for an MJD (UTC). Throws astro::Error as the
+    /// calendar overload does, and if `mjdUtc` is not finite (NaN or infinity)
+    /// or is 1e9 days or more in size.
     [[nodiscard]] double taiMinusUtc(double mjdUtc) const;
 
     /// The entries, sorted by date.
