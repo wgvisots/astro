@@ -41,7 +41,7 @@ namespace astro {
 [[nodiscard]] Mat3 R2(double theta) noexcept;
 /// Passive rotation about the z axis.
 [[nodiscard]] Mat3 R3(double theta) noexcept;
-/// Passive rotation about coordinate axis `axis` (1, 2 or 3).
+/// Passive rotation about coordinate axis `axis` (1, 2 or 3). Throws astro::Error for any other `axis`.
 [[nodiscard]] Mat3 rotationAboutAxis(int axis, double theta);
 
 /// Passive rotation by `theta` about an arbitrary axis. Only the direction of `axis` is used: it may
