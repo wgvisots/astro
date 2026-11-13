@@ -482,6 +482,33 @@ TEST(EstimateTracker, TrueOfDateDeliveries) {
     astro::test::expectVecNear(tod.predict(t0 + 3600.0 + 7200.0).state.r, pt[12].state.r, 1e-3);
 }
 
+TEST(EstimateTracker, RejectsOptionsThatCannotWork) {
+    // These were accepted, and then every update() threw from the propagation: a tracker that could
+    // never take a delivery. The constructor refuses them.
+    const auto rejected = [](auto&& set) {
+        TrackerOptions options;
+        set(options);
+        try {
+            const EstimateTracker tracker(options);
+            return false;
+        } catch (const Error&) {
+            return true;
+        }
+    };
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_TRUE(rejected([](TrackerOptions& o) { o.accelerationNoisePsd = -1e-9; }));
+    EXPECT_TRUE(rejected([&](TrackerOptions& o) { o.accelerationNoisePsd = nan; }));
+    EXPECT_TRUE(rejected([&](TrackerOptions& o) { o.alarmProbability = nan; }));
+    EXPECT_TRUE(rejected([](TrackerOptions& o) { o.alarmProbability = -0.1; }));
+    EXPECT_TRUE(rejected([](TrackerOptions& o) { o.alarmProbability = 1.5; }));
+    EXPECT_TRUE(rejected([](TrackerOptions& o) { o.mu = 0.0; }));
+    EXPECT_TRUE(rejected([&](TrackerOptions& o) { o.re = nan; }));
+    // The ends of the range are meaningful: 0 never flags a delivery, 1 flags every one.
+    EXPECT_FALSE(rejected([](TrackerOptions& o) { o.alarmProbability = 0.0; }));
+    EXPECT_FALSE(rejected([](TrackerOptions& o) { o.alarmProbability = 1.0; }));
+    EXPECT_FALSE(rejected([](TrackerOptions& o) { o.accelerationNoisePsd = 0.0; }));
+}
+
 TEST(EstimateTracker, RejectsEarthFixedFrames) {
     TrackerOptions itrs;
     itrs.frame = Frame::ITRS;
