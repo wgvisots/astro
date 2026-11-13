@@ -138,11 +138,16 @@ struct MinimizeResult {
 
 /// Brent's method minimizer of f on the interval between a and b, which may be given in either
 /// order (no derivatives). Finds a local minimum.
-/// Note: x accuracy is limited to about sqrt(machine epsilon) * |x| regardless of tol.
+///
+/// `tol` is an absolute tolerance on x, in the units of x. The minimum is located to within about
+/// tol + 3 sqrt(eps) |x|, where eps is the machine epsilon (sqrt(eps) = 1.5e-8). The second term is a
+/// floor that no tolerance lowers: closer to a minimum than that, f differs from its least value by
+/// less than its own rounding error. A `tol` below the floor, such as the default, is therefore safe
+/// and costs no extra evaluations.
 template <class F>
 [[nodiscard]] MinimizeResult brentMinimize(F&& f, double a, double b, double tol = 1e-10, int maxIter = 200) {
-    constexpr double golden = 0.3819660112501051; // (3 - sqrt(5)) / 2
-    constexpr double zeps   = 1e-14;
+    constexpr double golden  = 0.3819660112501051;    // (3 - sqrt(5)) / 2
+    constexpr double sqrtEps = 1.4901161193847656e-8; // sqrt(machine epsilon) = 2^-26
     // Everything below takes a as the lower end. With a > b the first convergence test, which
     // subtracts half of (b - a), was met at once and the first trial point was returned.
     if (a > b) {
@@ -152,8 +157,14 @@ template <class F>
     double fx = f(x), fw = fx, fv = fx;
     double d = 0.0, e = 0.0;
     for (int it = 0; it < maxIter; ++it) {
-        const double xm   = 0.5 * (a + b);
-        const double tol1 = tol * std::abs(x) + zeps;
+        const double xm = 0.5 * (a + b);
+        // Brent's tolerance (Brent 1973, "Algorithms for Minimization without Derivatives",
+        // chapter 5): a relative part of sqrt(eps), below which f cannot tell two points apart, plus
+        // the caller's absolute part. No two evaluations are closer than tol1 and the search ends
+        // with x within 2 tol1 of both ends, so the minimum is within 3 tol1 = 3 sqrt(eps) |x| + tol
+        // of x; hence the tol / 3. (With `tol` as the relative part and no floor, a tolerance of
+        // 1e-10 spent three to six times the evaluations moving about inside the rounding error of f.)
+        const double tol1 = sqrtEps * std::abs(x) + tol / 3.0;
         const double tol2 = 2.0 * tol1;
         if (std::abs(x - xm) <= tol2 - 0.5 * (b - a)) {
             return {x, fx};

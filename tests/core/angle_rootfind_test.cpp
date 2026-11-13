@@ -332,3 +332,48 @@ TEST(RootFind, BrentMinimizeAcceptsAReversedInterval) {
         EXPECT_EQ(calls, orderedCalls);
     }
 }
+
+// A minimum cannot be located more finely than about sqrt(eps) |x|: closer than that, f differs from
+// its least value by less than its own rounding error. Brent's tolerance has that floor built in, so a
+// tolerance below it must cost no more evaluations than one at it. Two functions with a minimum known
+// in closed form: a parabola at 1.234, and -sin(x) exp(-x / 10), whose minimum is where tan(x) = 10.
+// Before the fix `tol` was a relative tolerance with no floor: the parabola took 35 evaluations at the
+// default tolerance and 55 at 1e-300, against 6 now at any of them (21 and 36 against 10 for the other).
+TEST(RootFind, BrentMinimizeToleranceHasTheSqrtEpsFloor) {
+    const double sqrtEps = std::sqrt(std::numeric_limits<double>::epsilon());
+    struct Case {
+        double (*f)(double);
+        double lo, hi, minimum;
+    };
+    const Case cases[] = {
+        {[](double x) { return (x - 1.234) * (x - 1.234) + 3.0; },   -10.0, 10.0, 1.234          },
+        {[](double x) { return -std::sin(x) * std::exp(-0.1 * x); }, 0.0,   4.0,  std::atan(10.0)},
+    };
+    for (const Case& c : cases) {
+        int        calls   = 0;
+        const auto counted = [&](double x) {
+            ++calls;
+            return c.f(x);
+        };
+        // A tolerance at the floor: the yardstick for the count.
+        const double         floorTol     = 3.0 * sqrtEps * c.minimum;
+        const MinimizeResult atFloor      = brentMinimize(counted, c.lo, c.hi, floorTol);
+        const int            atFloorCalls = calls;
+        EXPECT_NEAR(atFloor.x, c.minimum, 2.0 * floorTol);
+
+        for (double tol : {1e-9, 1e-10, 1e-12, 1e-14, 1e-300}) {
+            calls                  = 0;
+            const MinimizeResult r = brentMinimize(counted, c.lo, c.hi, tol);
+            // The documented accuracy: tol plus the floor, 3 sqrt(eps) |x|.
+            EXPECT_NEAR(r.x, c.minimum, tol + 3.0 * sqrtEps * c.minimum) << "tol " << tol;
+            // No more work than at the floor. The counts are in fact equal; one evaluation of slack
+            // because the last steps of the search are a tolerance long, so a slightly different
+            // tolerance (or compiler) can end it one step later.
+            EXPECT_LE(calls, atFloorCalls + 1) << "tol " << tol;
+        }
+        // The default tolerance is below the floor as well.
+        calls = 0;
+        (void)brentMinimize(counted, c.lo, c.hi);
+        EXPECT_LE(calls, atFloorCalls + 1);
+    }
+}
