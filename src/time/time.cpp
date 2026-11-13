@@ -39,6 +39,7 @@ namespace {
 
 constexpr double kJdBdtEpoch        = 2453736.5; // 2006-01-01 00:00:00 BDT
 constexpr int    kGalileoWeekOffset = 1024;      // GST week 0 == GPS week 1024
+constexpr int    kMinutesPerDay     = 1440;      // of the civil clock
 
 // --------------------------------------------------------------- UTC helpers
 //
@@ -353,8 +354,8 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
     while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
         text.remove_suffix(1);
     }
-    Cursor    c{text};
-    const int year = c.integer(4);
+    Cursor c{text};
+    int    year = c.integer(4);
     c.expect('-');
     int month = 1, day = 1;
     if (c.digitsAhead() == 3) {
@@ -379,7 +380,8 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
             if (c.digitsAhead() < 2) {
                 c.fail();
             }
-            auto [ptr, ec] = std::from_chars(b, e, second);
+            // Fixed notation only: ISO-8601 seconds have no exponent ("05e1" is not 50 s).
+            auto [ptr, ec] = std::from_chars(b, e, second, std::chars_format::fixed);
             if (ec != std::errc{}) {
                 c.fail();
             }
@@ -387,7 +389,7 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
         }
     }
     TimeScale scale         = defaultScale;
-    double    offsetSeconds = 0.0;
+    int       offsetMinutes = 0; // local civil time minus UTC
     while (c.peek() == ' ') {
         ++c.p;
     }
@@ -406,7 +408,11 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
             if (!c.done()) {
                 om = c.integer(2);
             }
-            offsetSeconds = (z == '-' ? -1.0 : 1.0) * (oh * 3600.0 + om * 60.0);
+            // Offset hours are 00-23 and offset minutes 00-59 (RFC 3339, section 5.6).
+            if (oh > 23 || om > 59) {
+                throw Error("Time::fromIso8601: UTC offset out of range in '" + std::string(text) + "'");
+            }
+            offsetMinutes = (z == '-' ? -1 : 1) * (oh * 60 + om);
             scale         = TimeScale::UTC;
         } else {
             scale = timeScaleFromString(text.substr(c.p));
@@ -416,8 +422,30 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
     if (!c.done()) {
         c.fail();
     }
-    Time t = fromCalendar(scale, year, month, day, hour, minute, second);
-    return offsetSeconds != 0.0 ? t + (-offsetSeconds) : t;
+    if (offsetMinutes != 0) {
+        // A UTC offset is civil-clock arithmetic: the local clock shows the same seconds as a UTC clock and
+        // differs only in its hours and minutes. So move the calendar fields, not the instant: taking the
+        // offset off as elapsed seconds is 1 s out across a leap second, and would not recognise a leap
+        // second written with an offset ("00:59:60+01:00" is 23:59:60 UTC).
+        if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59) {
+            throw Error("Time::fromIso8601: invalid date or time of day in '" + std::string(text) + "'");
+        }
+        // Minutes after 0h UTC on the local date. The offset is less than a day, so this is at most one
+        // day early or late.
+        int minuteOfDay = hour * 60 + minute - offsetMinutes;
+        int dayShift    = 0;
+        if (minuteOfDay < 0) {
+            dayShift     = -1;
+            minuteOfDay += kMinutesPerDay;
+        } else if (minuteOfDay >= kMinutesPerDay) {
+            dayShift     = 1;
+            minuteOfDay -= kMinutesPerDay;
+        }
+        dateFromJulianDayNumber(julianDayNumber(year, month, day) + dayShift, year, month, day);
+        hour   = minuteOfDay / 60;
+        minute = minuteOfDay % 60;
+    }
+    return fromCalendar(scale, year, month, day, hour, minute, second);
 }
 
 Time Time::to(TimeScale target, const EopProvider* eop) const {

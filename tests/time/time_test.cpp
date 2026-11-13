@@ -264,6 +264,94 @@ TEST(Time, Iso8601) {
     EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00Zjunk"), Error);
 }
 
+TEST(Time, Iso8601OffsetIsCivilClockArithmetic) {
+    // A clock keeping "UTC+01:00" shows the same seconds as a UTC clock and is one hour ahead in its hours and
+    // minutes, also on a day with a leap second. The expected UTC calendar fields below are worked out by hand.
+    struct Case {
+        const char* text;
+        int         year, month, day, hour, minute;
+        double      second;
+    };
+    // clang-format off
+    const Case cases[] = {
+        // The leap-second day 2016-12-31 (it ends with 23:59:60) and the days either side of it.
+        {"2016-12-30T23:30:00+01:00",    2016, 12, 30, 22, 30,  0.0 },
+        {"2016-12-31T00:30:00+01:00",    2016, 12, 30, 23, 30,  0.0 }, // back into the day before
+        {"2016-12-30T23:30:00-01:00",    2016, 12, 31,  0, 30,  0.0 }, // forward into the leap-second day
+        {"2016-12-31T12:00:00+05:30",    2016, 12, 31,  6, 30,  0.0 }, // inside the leap-second day
+        {"2017-01-01T00:30:00+01:00",    2016, 12, 31, 23, 30,  0.0 }, // back across the leap second
+        {"2016-12-31T18:30:00-06:00",    2017,  1,  1,  0, 30,  0.0 }, // forward across the leap second
+        {"2017-01-01T00:59:59.25+01:00", 2016, 12, 31, 23, 59, 59.25}, // the second before the leap second
+        {"2017-01-01T00:59:60+01:00",    2016, 12, 31, 23, 59, 60.0 }, // the leap second itself
+        {"2016-12-31T18:59:60.5-05:00",  2016, 12, 31, 23, 59, 60.5 },
+        {"2017-01-01T05:29:60.75+05:30", 2016, 12, 31, 23, 59, 60.75}, // a zone with a half-hour offset
+        {"2017-01-01T01:00:00+01:00",    2017,  1,  1,  0,  0,  0.0 }, // the second after the leap second
+        {"2017-01-02T00:30:00+01:00",    2017,  1,  1, 23, 30,  0.0 },
+        {"2017-01-01T23:30:00-01:00",    2017,  1,  2,  0, 30,  0.0 },
+        // Month and year boundaries, with and without a leap day.
+        {"2024-03-01T00:30:00+01:00",    2024,  2, 29, 23, 30,  0.0 },
+        {"2024-02-29T23:30:00-01:00",    2024,  3,  1,  0, 30,  0.0 },
+        {"2023-03-01T00:30:00+01:00",    2023,  2, 28, 23, 30,  0.0 },
+        {"2024-01-01T00:30:00+14:00",    2023, 12, 31, 10, 30,  0.0 },
+        {"2023-12-31T23:30:00-12:00",    2024,  1,  1, 11, 30,  0.0 },
+        // The largest offsets.
+        {"2024-03-01T00:00:00+23:59",    2024,  2, 29,  0,  1,  0.0 },
+        {"2024-03-01T23:59:00-23:59",    2024,  3,  2, 23, 58,  0.0 },
+        // Other spellings: no colon, hours only, an ordinal date, a zero offset.
+        {"2024-03-01T12:00:00+0530",     2024,  3,  1,  6, 30,  0.0 },
+        {"2024-03-01T12:00:00+05",       2024,  3,  1,  7,  0,  0.0 },
+        {"2024-061T12:00:00-00:45",      2024,  3,  1, 12, 45,  0.0 },
+        {"2016-12-31T23:59:60.5+00:00",  2016, 12, 31, 23, 59, 60.5 },
+        // Before 1972 a UTC second was not an SI second; the clock arithmetic is the same.
+        {"1965-01-01T05:00:00+06:00",    1964, 12, 31, 23,  0,  0.0 },
+    };
+    // clang-format on
+    for (const Case& c : cases) {
+        const Time got  = Time::fromIso8601(c.text);
+        const Time want = Time::fromCalendar(TimeScale::UTC, c.year, c.month, c.day, c.hour, c.minute, c.second);
+        EXPECT_EQ(got.scale(), TimeScale::UTC) << c.text;
+        // The same calendar fields give the same two-part Julian date, bit for bit.
+        EXPECT_EQ(got.jd().jd1, want.jd().jd1) << c.text << " gave " << got.iso8601(6);
+        EXPECT_EQ(got.jd().jd2, want.jd().jd2) << c.text << " gave " << got.iso8601(6);
+    }
+
+    // One hour on the "+01:00" clock that contains the leap second lasts 3601 s. (1e-9 s: about a hundred times
+    // the resolution of a two-part Julian date.)
+    EXPECT_NEAR(Time::fromIso8601("2017-01-01T01:30:00+01:00") - Time::fromIso8601("2017-01-01T00:30:00+01:00"),
+                3601.0,
+                1e-9);
+    // TAI - UTC was 36 s until the end of that leap second, so it began at 00:00:36 TAI.
+    EXPECT_EQ(Time::fromIso8601("2017-01-01T00:59:60+01:00").to(TimeScale::TAI).iso8601(3),
+              "2017-01-01T00:00:36.000 TAI");
+}
+
+TEST(Time, Iso8601OffsetRejectsInvalidFields) {
+    // A leap second exists only at 23:59:60 UTC; with these offsets ":60" falls in another UTC minute.
+    EXPECT_THROW((void)Time::fromIso8601("2017-01-01T00:59:60+00:30"), Error); // 00:29:60 UTC
+    EXPECT_THROW((void)Time::fromIso8601("2016-12-31T23:59:60+01:00"), Error); // 22:59:60 UTC
+    // The local fields must be a real date and time of day, whatever the offset.
+    EXPECT_THROW((void)Time::fromIso8601("2024-02-30T12:00:00+01:00"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T24:00:00+01:00"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:60:00+01:00"), Error);
+    // Offset hours are 00-23 and offset minutes 00-59 (RFC 3339, section 5.6).
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00+99:99"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00+24:00"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00-24:00"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00+23:60"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00+0560"), Error);
+}
+
+TEST(Time, Iso8601RejectsExponentInSeconds) {
+    // ISO-8601 seconds are digits with an optional decimal fraction: "05e1" is not 50 s.
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:05e1"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:05e0"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:05E1Z"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:05.5e1 TT"), Error);
+    // A decimal fraction is still read in full.
+    EXPECT_EQ(Time::fromIso8601("2024-03-01T12:00:05.125Z").iso8601(3), "2024-03-01T12:00:05.125Z");
+    EXPECT_EQ(Time::fromIso8601("2024-03-01T12:00:05.125 TT").iso8601(3), "2024-03-01T12:00:05.125 TT");
+}
+
 TEST(Time, Ut1RequiresEop) {
     const Time t = Time::fromCalendar(TimeScale::UTC, 2020, 1, 1);
     EXPECT_THROW((void)t.to(TimeScale::UT1), Error);

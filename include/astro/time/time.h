@@ -123,6 +123,14 @@ public:
     ///   with optional "Z" (UTC) or "+hh:mm"/"-hh:mm" (UTC offset), or a trailing
     ///   scale name such as " TT" or " TAI". Space is accepted in place of 'T'.
     ///   Without a zone/scale the `defaultScale` is used.
+    ///
+    /// A UTC offset (hours 00-23, minutes 00-59) is taken off the calendar fields,
+    /// as on a civil clock, and not as elapsed seconds: "2017-01-01T00:30:00+01:00"
+    /// is 2016-12-31T23:30:00 UTC although a leap second lies in between, and
+    /// "2017-01-01T00:59:60+01:00" is the leap second 2016-12-31T23:59:60 UTC.
+    /// Seconds are digits with an optional decimal fraction; an exponent ("05e1")
+    /// is not accepted. Throws astro::Error for malformed text, for an invalid
+    /// date, time of day or offset, and for an unknown scale name.
     [[nodiscard]] static Time fromIso8601(std::string_view text, TimeScale defaultScale = TimeScale::UTC);
 
     /// Normalized two-part Julian Date in this time's own scale.
