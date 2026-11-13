@@ -84,7 +84,7 @@ TEST(LeapSeconds, ParseFileFormats) {
                                           "    41317.0    1  1 1972       10\n"
                                           "    41499.0    1  7 1972       11\n"
                                           "    57754.0    1  1 2017       37\n"
-                                          "    61000.0    1  1 2026       38\n";
+                                          "    61041.0    1  1 2026       38\n";
     const LeapSecondTable a             = LeapSecondTable::parse(leapSecondDat);
     EXPECT_DOUBLE_EQ(a.taiMinusUtc(2026, 1, 1), 38.0);
     EXPECT_DOUBLE_EQ(a.taiMinusUtc(2025, 12, 31), 37.0);
