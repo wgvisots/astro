@@ -95,7 +95,8 @@ struct LambertSolution {
 ///
 /// `prograde` selects the direction of motion: counter-clockwise seen from +z (the orbit's angular
 /// momentum has a positive z component) or, if false, clockwise. If the plane of r1 and r2 contains
-/// the z axis the two directions cannot be told apart that way and the shorter way round is taken.
+/// the z axis (the z component of r1 x r2 is zero to within its rounding error) the two directions
+/// cannot be told apart that way, and the shorter way round is taken.
 ///
 /// Sensitive cases, by the nature of the problem: r1 and r2 within ~1e-6 rad of opposite (the orbit
 /// plane is fixed only to rounding / sin(angle)); flights so long that the orbit's period is not

@@ -360,7 +360,13 @@ lambertIzzo(const Vec3& r1, const Vec3& r2, double tof, double mu, bool prograde
     const double c = norm(r2 - r1);
     const double s = 0.5 * (R1 + R2 + c);
     // Prograde: counter-clockwise seen from +z. That is the long way round when r1 x r2 points down.
-    const bool   longWay = prograde ? h.z < 0.0 : h.z > 0.0;
+    // If the plane contains the z axis the z component of r1 x r2 is zero, or just its own rounding
+    // error (a few units in the last place of its two products): its sign then says nothing, and the
+    // shorter way round is taken whichever direction was asked for.
+    const double zNoise =
+        4.0 * std::numeric_limits<double>::epsilon() * (std::abs(ir1.x * ir2.y) + std::abs(ir1.y * ir2.x));
+    const bool   polar   = std::abs(h.z) <= zNoise;
+    const bool   longWay = !polar && (prograde ? h.z < 0.0 : h.z > 0.0);
     const Vec3   normal  = (longWay ? -1.0 : 1.0) / sinAng * h;
     const Vec3   it1 = cross(normal, ir1), it2 = cross(normal, ir2);
     const double chordOverS = c / s; // 1 - lambda^2
