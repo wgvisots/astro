@@ -93,8 +93,12 @@ class Ephemeris {
 public:
     virtual ~Ephemeris() = default;
     /// State of `target` relative to `center` at time t (any scale; converted to TDB).
+    /// Throws astro::Error if the ephemeris has no data for one of the two bodies at t, or if t
+    /// cannot be converted (a UTC time before 1960, or a UT1 time). Each implementation states
+    /// its own limits.
     [[nodiscard]] virtual StateVector state(Body target, Body center, const Time& t) const = 0;
     /// Position (m) of `target` relative to `center` at time t: the position part of state().
+    /// Throws astro::Error as state() does.
     [[nodiscard]] Vec3 position(Body target, Body center, const Time& t) const { return state(target, center, t).r; }
 };
 
