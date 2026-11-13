@@ -41,7 +41,8 @@ struct GeodesicDirectResult {
     double azimuth2{0.0}; ///< forward azimuth at the end point, rad [0, 2pi)
 };
 
-/// Distance and azimuths between two points (lat/lon in radians).
+/// Distance and azimuths between two points (lat/lon in radians). Throws astro::Error if the
+/// iteration does not converge: for nearly antipodal points, and for an input that is not finite.
 [[nodiscard]] GeodesicInverseResult
 geodesicInverse(double lat1, double lon1, double lat2, double lon2, const Ellipsoid& ell = Ellipsoid::wgs84());
 
