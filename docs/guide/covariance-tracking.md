@@ -25,8 +25,9 @@ const std::vector<StateCovariance> out = prop.propagateGridWithCovariance(0.0, 6
 ```
 
 - The integrator's error control looks at the state only, so the steps, and the states, are exactly
-  those of `propagateGrid`. Between steps Phi uses quintic Hermite interpolation (relative error
-  2e-9 at the default tolerance, 4e-7 at relTol 1e-9).
+  those of `propagateGrid`. Between steps Phi uses quintic Hermite interpolation. Against stopping
+  exactly at each output, over 4 h at 10 s: 1e-8 relative at the default tolerance and 1e-6 at
+  relTol 1e-9 for near-circular orbits, ten times that for a 1000 x 20000 km orbit.
 - `Q(t)` is optional process noise: white, isotropic acceleration noise with power spectral density
   q (m^2/s^3), standing in for what the model leaves out. Over a short interval it adds about
   q t^3 / 3 to each position variance.
