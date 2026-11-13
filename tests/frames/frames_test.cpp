@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -282,6 +283,23 @@ TEST(EopTable, C04Formats) {
     EXPECT_NEAR(rad2arcsec(b.at(58850.0).yp), 0.282597, 1e-12);
     EXPECT_NEAR(b.at(58850.0).lod, 0.0002929, 1e-15);
     EXPECT_NEAR(rad2arcsec(b.at(58850.0).dX), 0.000099, 1e-12);
+}
+
+TEST(EopTable, EpochThatIsNotFiniteIsRejected) {
+    // Such a record used to reach std::sort, whose comparison must be a strict order (it is not for
+    // NaN: undefined behaviour), and was refused only later, with a message about leap seconds.
+    for (double bad : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+        EopRecord a, b, c;
+        a.mjd = 59000.0;
+        b.mjd = bad;
+        c.mjd = 59002.0;
+        try {
+            const EopTable table({a, b, c});
+            FAIL() << "accepted an epoch of " << bad;
+        } catch (const Error& e) {
+            EXPECT_NE(std::string(e.what()).find("not finite"), std::string::npos) << e.what();
+        }
+    }
 }
 
 TEST(EopTable, DuplicateEpochIsRejected) {

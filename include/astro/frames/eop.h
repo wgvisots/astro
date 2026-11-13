@@ -87,8 +87,9 @@ std::ostream& operator<<(std::ostream& os, EopInterpolation value);
 class EopTable final : public EopProvider {
 public:
     /// From records in any order (sorted here). Throws astro::Error if there
-    /// are fewer than two records, or if two records have the same epoch (the
-    /// message names it): the interpolation needs distinct epochs.
+    /// are fewer than two records, if an epoch is not finite, or if two records
+    /// have the same epoch (the message names it): the interpolation needs
+    /// distinct epochs.
     explicit EopTable(std::vector<EopRecord> records, EopInterpolation interp = EopInterpolation::Lagrange4);
 
     /// IERS Rapid Service `finals2000A.all` / `finals2000A.data` / `finals2000A.daily`

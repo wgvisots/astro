@@ -70,6 +70,12 @@ EopTable::EopTable(std::vector<EopRecord> records, EopInterpolation interp)
     if (records_.size() < 2) {
         throw Error("EopTable: need at least two records");
     }
+    // An epoch that is not a number has no place in the order: sorting it is undefined behaviour.
+    for (const EopRecord& r : records_) {
+        if (!std::isfinite(r.mjd)) {
+            throw Error("EopTable: a record's epoch is not finite");
+        }
+    }
     std::sort(records_.begin(), records_.end(), [](const EopRecord& a, const EopRecord& b) { return a.mjd < b.mjd; });
     // Two records at one epoch would put a zero in the denominators of the interpolation weights in
     // at(). IERS files have one row per day, so a repeated epoch is a fault in the input: refuse it.
