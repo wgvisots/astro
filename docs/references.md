@@ -84,8 +84,8 @@ included in the repository are credited in
 ## Orbits and propagation
 
 - **Battin, R. H. (1999).** *An Introduction to the Mathematics and Methods of Astrodynamics*,
-  revised ed. AIAA. <https://doi.org/10.2514/4.861543>. Universal variables and the two-body state
-  transition matrix.
+  revised ed. AIAA. <https://doi.org/10.2514/4.861543>. Universal variables, the two-body state
+  transition matrix, and the hypergeometric series for the Lambert time of flight near the parabola.
 - **Shepperd, S. W. (1985).** Universal Keplerian state transition matrix. *Celestial Mechanics*
   35(2), 129-144. <https://doi.org/10.1007/BF01227666>. The closed-form two-body Phi
   (`propagateKeplerStm`).
@@ -105,7 +105,12 @@ included in the repository are credited in
 - **Brouwer, D. (1959).** Solution of the problem of artificial satellite theory without drag.
   *Astron. J.* 64, 378. <https://doi.org/10.1086/107958>. J2, J2^2, J4 secular rates.
 - **Izzo, D. (2015).** Revisiting Lambert's problem. *Celest. Mech. Dyn. Astr.* 121, 1-15.
-  <https://doi.org/10.1007/s10569-014-9587-y>.
+  <https://doi.org/10.1007/s10569-014-9587-y>; preprint <https://arxiv.org/abs/1403.2705>. The
+  Lambert solver (`lambertIzzo`), written from the paper's equations: time of flight (eq. 18 and 20),
+  its derivatives (eq. 22), starting values (eq. 30 and 31) and the velocities (Algorithm 1).
+- **Lancaster, E. R. & Blanchard, R. C. (1969).** *A Unified Form of Lambert's Theorem*. NASA
+  TN D-5368. <https://ntrs.nasa.gov/citations/19690027552>. The variable x and the time-of-flight
+  curves that Izzo's method iterates on.
 - **Conway, B. A. (1986).** An improved algorithm due to Laguerre for the solution of Kepler's
   equation. *Celest. Mech.* 39, 199-211. <https://doi.org/10.1007/BF01230852>.
 - **Danby, J. M. A. (1987).** The solution of Kepler's equation, III. *Celest. Mech.* 40, 303-312.

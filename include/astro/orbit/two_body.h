@@ -69,13 +69,33 @@ struct LambertSolution {
     Vec3 v1;                 ///< departure velocity
     Vec3 v2;                 ///< arrival velocity
     int  revolutions{0};     ///< complete revolutions
-    bool rightBranch{false}; ///< for multi-revolution solutions: right (long-period) branch
+    bool rightBranch{false}; ///< for multi-revolution solutions: the one with the larger semi-major axis
 };
 
-/// Lambert's problem by Izzo's (2015) method: all solutions for 0..maxRevolutions
-/// complete revolutions transferring from r1 to r2 in time `tof`.
-/// The transfer direction is prograde (counter-clockwise about +z) unless
-/// `prograde` is false. Multi-revolution solutions come in pairs.
+/// Lambert's problem: the two-body orbits from r1 to r2 (m) in the time `tof` (s), by the method of
+/// Izzo (2015). Returns the solution without a complete revolution first, then, for each number of
+/// revolutions M = 1 .. maxRevolutions that the time allows, the two solutions of M revolutions
+/// (rightBranch false, then true).
+///
+/// The method iterates on the Lancaster-Blanchard variable x with Householder's third-order scheme
+/// from Izzo's starting values; the non-dimensional time of flight comes from his eq. 18, and from
+/// Battin's hypergeometric series near the parabola. Each root is checked against the time of
+/// flight (to 1e-10) and a bracketed search stands behind the iteration. Typical accuracy: the
+/// arrival position is reproduced to ~1e-12 relative, less where the problem itself is sensitive
+/// (see below and docs/accuracy.md).
+///
+/// `prograde` selects the direction of motion: counter-clockwise seen from +z (the orbit's angular
+/// momentum has a positive z component) or, if false, clockwise. If the plane of r1 and r2 contains
+/// the z axis the two directions cannot be told apart that way and the shorter way round is taken.
+///
+/// Sensitive cases, by the nature of the problem: r1 and r2 within ~1e-6 rad of opposite (the orbit
+/// plane is fixed only to rounding / sin(angle)); flights so long that the orbit's period is not
+/// resolved by a double-precision velocity (non-dimensional times above ~1e5); and the long way
+/// round in a very short time, which passes the centre of attraction closely.
+///
+/// Throws astro::Error if tof or mu is not positive and finite, if r1 or r2 is zero or not finite,
+/// or if r1 and r2 are collinear (sine of the angle between them below 1e-12: the plane is
+/// undefined).
 [[nodiscard]] std::vector<LambertSolution> lambertIzzo(const Vec3& r1,
                                                        const Vec3& r2,
                                                        double      tof,
@@ -83,7 +103,7 @@ struct LambertSolution {
                                                        bool        prograde       = true,
                                                        int         maxRevolutions = 0);
 
-/// The zero-revolution Lambert solution.
+/// The Lambert solution without a complete revolution (the first of lambertIzzo's).
 [[nodiscard]] LambertSolution
 lambert(const Vec3& r1, const Vec3& r2, double tof, double mu = constants::gmEarth, bool prograde = true);
 

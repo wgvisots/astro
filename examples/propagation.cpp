@@ -16,7 +16,7 @@
  *         limitations under the License.
  **********************************************************************/
 
-// Propagation: two-body, analytic J2/J4 (secular), numerical J2/J4 on an output grid, a
+// Propagation: two-body and Lambert's problem, analytic J2/J4 (secular), numerical J2/J4 on an output grid, a
 // 12-component (position, velocity, acceleration, jerk) state with an unmodeled force, and the
 // closest approach of two objects with their collision probability, from states and covariances.
 
@@ -53,6 +53,17 @@ int main() {
     const StateVector kepler = propagateKepler(s0, 14400.0); // universal variables, point mass only
     std::cout << "two-body differs from J2/J4 by " << norm(kepler.r - grid.back().r) / 1e3 << " km\n";
     //! [two_body]
+
+    //! [lambert]
+    // Lambert's problem: the orbit that joins two positions in a given time. These two are 40 minutes
+    // apart on the two-body orbit above, so the solution gives back its velocity.
+    const StateVector     later    = propagateKepler(s0, 2400.0);
+    const LambertSolution transfer = lambert(s0.r, later.r, 2400.0);
+    std::cout << "Lambert recovers the velocity to " << norm(transfer.v1 - s0.v) * 1e6 << " um/s\n";
+    // With 5 hours to spare, other orbits make complete revolutions on the way: two for each number.
+    const std::vector<LambertSolution> all = lambertIzzo(s0.r, later.r, 18000.0, constants::gmEarth, true, 3);
+    std::cout << all.size() << " orbits join the same points in 5 h with up to 3 revolutions\n";
+    //! [lambert]
 
     //! [secular]
     // Analytic J2/J4 mean-element drift. Fast (~40 ns per output) but the state's osculating

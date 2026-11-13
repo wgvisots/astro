@@ -80,6 +80,7 @@ they are in alphabetical order.
 | GM, mu | Gravitational constant times Mass | gravitational parameter of a body (m^3/s^2) |
 | HEO | Highly Elliptical Orbit | e.g. Molniya |
 | J2, J3, J4 | | zonal harmonics of the Earth's gravity field: J2 for the equatorial bulge, J3 for the pear shape, J4 next |
+| Lambert's problem | | find the two-body orbit that joins two positions in a given time (`lambertIzzo`) |
 | LEO | Low Earth Orbit | altitudes up to about 2000 km |
 | NORAD | North American Aerospace Defense Command | its catalogue numbers identify objects in TLEs |
 | ODE | Ordinary Differential Equation | the equations of motion the integrators solve |

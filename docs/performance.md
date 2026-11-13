@@ -46,6 +46,8 @@ What makes the grids fast:
 | Operation | Time |
 |---|---|
 | `propagateKeplerWithCovariance` (closed-form Phi) | 0.31 us |
+| `lambertIzzo`, no complete revolution | 0.27 us |
+| `lambertIzzo`, up to 3 revolutions (all solutions of one problem) | 1.3 us |
 | `SecularPropagatorCorrected::propagateWithCovariance` (24 differenced propagations) | 6.4 us |
 | `SecularPropagatorCorrected::propagateGridWithCovariance`, 4 h at 10 s (1441 outputs) | 1.7 ms (1.2 us per output) |
 | `checkConsistency` / `EstimateTracker::update`, gap 10 min / 30 min / 4 h | 15 / 26 / 137 us |
