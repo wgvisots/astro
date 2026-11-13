@@ -266,6 +266,46 @@ TEST(Time, Gnss) {
     EXPECT_NEAR(Time::fromGpsSeconds(t.gpsSeconds()) - t, 0.0, 1e-9);
 }
 
+TEST(Time, GnssTimeOfWeekStaysBelowOneWeek) {
+    // Week 0 of each system starts at 0h on these Julian dates, in the system's own time scale: GPS 1980-01-06
+    // (IS-GPS-200), Galileo 1999-08-22, which is GPS week 1024 (Galileo OS SIS ICD), BeiDou 2006-01-01 (BeiDou ICD).
+    struct System {
+        GnssSystem system;
+        TimeScale  scale;
+        double     epochJd;
+    };
+    const System systems[] = {
+        {GnssSystem::GPS,     TimeScale::GPS, 2444244.5},
+        {GnssSystem::Galileo, TimeScale::GST, 2451412.5},
+        {GnssSystem::BeiDou,  TimeScale::BDT, 2453736.5}
+    };
+    // Fractions of a day: the last one is the largest below 1, a tenth of a nanosecond before midnight.
+    const double fractions[] = {0.0, 1.0e-17, 0.25, 0.75, std::nextafter(1.0, 0.0)};
+    for (const System& s : systems) {
+        for (const int week : {0, 1, 1023, 2000, 2399}) {
+            for (int day = 0; day < 7; ++day) {
+                for (const double fraction : fractions) {
+                    const Time        t = Time::fromJd(s.epochJd + 7.0 * week + day, fraction, s.scale);
+                    const GnssWeekTow g = t.gnssWeekTow(s.system);
+                    EXPECT_GE(g.tow, 0.0) << week << " " << day << " " << fraction;
+                    EXPECT_LT(g.tow, 604800.0) << week << " " << day << " " << fraction;
+                    // Week and time of week together are the seconds since the epoch, here in extended precision.
+                    // 1.2e-10 s is the spacing of doubles just below 604800: the time of week cannot be closer.
+                    const long double want = (7.0L * week + day + static_cast<long double>(fraction)) * 86400.0L;
+                    const long double got  = 604800.0L * g.week + static_cast<long double>(g.tow);
+                    EXPECT_NEAR(static_cast<double>(got - want), 0.0, 1.2e-10)
+                        << week << " " << day << " " << fraction << ": week " << g.week << ", tow " << g.tow;
+                }
+            }
+        }
+    }
+    // The last instant of GPS week 2000 that a Time can hold is week 2001, time of week 0, to the nearest double.
+    const GnssWeekTow last =
+        Time::fromJd(2444244.5 + 7.0 * 2000 + 6, std::nextafter(1.0, 0.0), TimeScale::GPS).gnssWeekTow(GnssSystem::GPS);
+    EXPECT_EQ(last.week, 2001);
+    EXPECT_EQ(last.tow, 0.0);
+}
+
 TEST(Time, Iso8601) {
     EXPECT_EQ(Time::fromIso8601("2024-03-01T12:34:56.789Z").iso8601(3), "2024-03-01T12:34:56.789Z");
     EXPECT_EQ(Time::fromIso8601("2024-03-01 12:34").iso8601(0), "2024-03-01T12:34:00Z");

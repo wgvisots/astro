@@ -39,6 +39,7 @@ namespace {
 
 constexpr double kJdBdtEpoch        = 2453736.5; // 2006-01-01 00:00:00 BDT
 constexpr int    kGalileoWeekOffset = 1024;      // GST week 0 == GPS week 1024
+constexpr double kSecondsPerWeek    = 604800.0;  // a GNSS week, 7 days of 86400 s
 constexpr int    kMinutesPerDay     = 1440;      // of the civil clock
 constexpr int    kMaxIsoYear        = 9999;      // ISO-8601 text has a four-digit year, 0000 to 9999
 
@@ -564,6 +565,12 @@ GnssWeekTow Time::gnssWeekTow(GnssSystem system) const {
     GnssWeekTow  out;
     out.week = static_cast<int>(week);
     out.tow  = (days - 7.0 * week) * secondsPerDay + t.jd_.jd2 * secondsPerDay;
+    // Within about 1e-10 s of the end of the week the sum rounds up to exactly one week. The time of week is
+    // defined on [0, 604800), so that instant is the start of the next week.
+    if (out.tow >= kSecondsPerWeek) {
+        out.tow  -= kSecondsPerWeek;
+        out.week += 1;
+    }
     if (system == GnssSystem::Galileo) {
         out.week -= kGalileoWeekOffset;
     }

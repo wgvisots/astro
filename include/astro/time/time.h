@@ -174,7 +174,10 @@ public:
     [[nodiscard]] std::chrono::system_clock::time_point toSysTime() const;
     /// Seconds since the GPS epoch (converts to GPS time).
     [[nodiscard]] double gpsSeconds() const;
-    /// Week number and time of week in the given GNSS system's scale.
+    /// Week number and time of week in the given GNSS system's scale. The time
+    /// of week is always in [0, 604800): an instant so close to the end of a
+    /// week that its time of week rounds to 604800 s is returned as time of
+    /// week 0 of the next week.
     [[nodiscard]] GnssWeekTow gnssWeekTow(GnssSystem system) const;
 
     /// Add / subtract SI seconds. UTC is advanced through TAI so leap seconds
