@@ -71,6 +71,14 @@ EopTable::EopTable(std::vector<EopRecord> records, EopInterpolation interp)
         throw Error("EopTable: need at least two records");
     }
     std::sort(records_.begin(), records_.end(), [](const EopRecord& a, const EopRecord& b) { return a.mjd < b.mjd; });
+    // Two records at one epoch would put a zero in the denominators of the interpolation weights in
+    // at(). IERS files have one row per day, so a repeated epoch is a fault in the input: refuse it.
+    const auto repeat = std::adjacent_find(records_.begin(),
+                                           records_.end(),
+                                           [](const EopRecord& a, const EopRecord& b) { return a.mjd == b.mjd; });
+    if (repeat != records_.end()) {
+        throw Error("EopTable: duplicate epoch MJD " + std::to_string(repeat->mjd));
+    }
     const auto leap = leapSecondTable();
     ut1MinusTai_.reserve(records_.size());
     for (const auto& r : records_) {
