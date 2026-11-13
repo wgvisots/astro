@@ -21,7 +21,8 @@
 #include "astro/geodesy/ellipsoid.h"
 
 /// \file
-/// Geodesics on the ellipsoid (Vincenty 1975). Sub-millimeter accurate; the
+/// Geodesics on the ellipsoid (Vincenty 1975). Sub-millimeter accurate for a
+/// flattening like the Earth's (the series are truncated in the flattening); the
 /// inverse problem may fail to converge for nearly antipodal points, in which
 /// case astro::Error is thrown.
 namespace astro {
@@ -36,7 +37,7 @@ struct GeodesicInverseResult {
 /// Solution of the direct geodesic problem (geodesicDirect()).
 struct GeodesicDirectResult {
     double lat{0.0};      ///< geodetic latitude of the end point, rad
-    double lon{0.0};      ///< longitude of the end point, rad, (-pi, pi]
+    double lon{0.0};      ///< longitude of the end point, rad, [-pi, pi)
     double azimuth2{0.0}; ///< forward azimuth at the end point, rad [0, 2pi)
 };
 

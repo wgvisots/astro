@@ -88,8 +88,15 @@ std::cout << t.to(TimeScale::UT1, eop).iso8601(3) << '\n';
 
 ## Pitfalls
 
-- A `Time` remembers its scale. `t1 - t2` converts both to TAI first, so mixing scales is safe,
-  but printing shows the scale each was created in.
+- A `Time` remembers its scale, and printing shows the scale it was created in.
+- `t1 - t2` converts `t2` to the scale of `t1` and gives the difference in seconds of that scale
+  (a UTC `t1` goes through TAI, so leap seconds are counted).
+    - Among UTC, TAI, TT and the GNSS scales, which all tick at the same rate, the result is the
+      elapsed time whatever the mix.
+    - TDB, TCG and TCB tick at slightly different rates, so a difference that involves one of them
+      depends on which operand is on the left, by up to 1.5e-8 of the interval.
+    - A difference or comparison between UT1 and another scale needs Earth orientation data and
+      throws: convert with an `EopProvider` first.
 - UT1 without Earth orientation data is UTC, which is up to 0.9 s off: about 400 m of Earth
   rotation at the equator.
 - TDB - TT is periodic (largest term 1.66 ms over a year); the topocentric correction is a

@@ -102,7 +102,9 @@ Geodetic ecefToGeodetic(const Vec3& r, const Ellipsoid& ell) noexcept {
         g.h   = std::abs(z) - ell.b();
         return g;
     }
-    // Vermeille (2004), "Direct transformation from geocentric coordinates to geodetic coordinates".
+    // Vermeille (2002), "Direct transformation from geocentric coordinates to geodetic coordinates",
+    // J. Geodesy 76, 451-454. (The longitude above is the half-angle form of Vermeille 2004,
+    // "Computing geodetic coordinates from geocentric coordinates", J. Geodesy 78.)
     const double p  = (rho * rho) / (a * a);
     const double q  = (1.0 - e2) * z * z / (a * a);
     const double rr = (p + q - e4) / 6.0;

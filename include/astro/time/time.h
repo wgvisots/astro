@@ -192,9 +192,17 @@ public:
     /// @}
 
     /// Elapsed seconds a - b, measured in a's scale (b is converted first; UTC
-    /// differences are taken in TAI so leap seconds are counted).
+    /// differences are taken in TAI so leap seconds are counted). Scales that tick at
+    /// different rates (TDB, TCG, TCB against the others) therefore give a slightly
+    /// different number for b - a than for -(a - b): up to 1.5e-8 of the interval.
+    /// Throws astro::Error if exactly one of the two is UT1 (the conversion needs
+    /// Earth orientation data: use to() with an EopProvider first), or if a
+    /// conversion to or from UTC falls before 1960.
     friend double operator-(const Time& a, const Time& b);
-    /// Ordering after converting b to a's scale.
+    /// Ordering after converting b to a's scale; throws as operator- does. Equality is
+    /// exact: two times that are the same instant in different scales can compare
+    /// unequal by a rounding error of the conversion (about 1 in 30 do). Compare
+    /// std::abs(a - b) with a tolerance instead.
     friend std::partial_ordering operator<=>(const Time& a, const Time& b);
     friend bool                  operator==(const Time& a, const Time& b) { return (a <=> b) == 0; }
 

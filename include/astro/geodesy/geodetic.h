@@ -35,10 +35,12 @@ struct Geodetic {
 /// Geodetic (lat, lon, h) to Earth-centered Earth-fixed Cartesian (m).
 [[nodiscard]] Vec3 geodeticToEcef(const Geodetic& g, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
-/// ECEF (m) to geodetic. Closed-form (Vermeille 2004) for all points outside the
-/// ellipsoid's evolute (i.e. everywhere farther than ~43 km from the Earth's
-/// center for WGS84), with a Newton fallback inside it. Longitude in (-pi, pi];
-/// at the poles longitude is 0.
+/// ECEF (m) to geodetic. Closed form (Vermeille 2002, with the half-angle longitude of
+/// Vermeille 2004) for all points outside the ellipsoid's evolute (i.e. everywhere farther
+/// than ~43 km from the Earth's center for WGS84); inside it, where up to four normals to
+/// the ellipsoid pass through a point, a bracketed root search picks the nearest foot point.
+/// Longitude in [-pi, pi]: on the antimeridian it is +pi for y >= 0 and -pi for y < 0 (a
+/// negative zero included). On the polar axis the longitude is 0.
 [[nodiscard]] Geodetic ecefToGeodetic(const Vec3& r, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Geocentric latitude of a point on the ellipsoid surface with the given geodetic latitude.
@@ -56,7 +58,7 @@ struct Geodetic {
 /// Spherical (geocentric) coordinates of a vector: latitude, longitude, radius.
 struct Spherical {
     double lat{0.0}; ///< latitude above the xy plane, rad, [-pi/2, pi/2]
-    double lon{0.0}; ///< longitude from +x towards +y, rad, (-pi, pi]
+    double lon{0.0}; ///< longitude from +x towards +y, rad, [-pi, pi] (the sign of y on the antimeridian)
     double r{0.0};   ///< radius (units of the vector)
 };
 /// Spherical coordinates of a vector; longitude is 0 on the z axis.

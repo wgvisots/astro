@@ -59,8 +59,8 @@ int main() {
     // Look angles and the Doppler shift of a 437 MHz downlink at the first pass's closest approach.
     if (!passes.empty()) {
         const LookAngles look = lookAngles(temeToItrs(sgp4.propagate(passes[0].tca), passes[0].tca, eop), station);
-        std::cout << "  at TCA: range " << look.range / 1e3 << " km, range rate " << look.rangeRate << " m/s, Doppler "
-                  << dopplerShift(437e6, look.rangeRate) << " Hz\n";
+        std::cout << "  at maximum elevation: range " << look.range / 1e3 << " km, range rate " << look.rangeRate
+                  << " m/s, Doppler " << dopplerShift(437e6, look.rangeRate) << " Hz\n";
     }
     //! [look]
     return 0;

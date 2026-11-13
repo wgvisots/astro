@@ -7,7 +7,7 @@ follow the IERS Conventions (2010) [IERS Conventions (2010), ch. 5](https://www.
 | `Frame` | What it is |
 |---|---|
 | `GCRS` | Geocentric Celestial Reference System: the modern "ECI" |
-| `J2000` | mean equator and equinox of J2000.0 (EME2000); GCRS plus a 20 mas frame bias |
+| `J2000` | mean equator and equinox of J2000.0 (EME2000); GCRS plus a 23 mas frame bias |
 | `MOD` | mean equator and equinox of date (precession only) |
 | `TOD` | true equator and equinox of date (precession and nutation) |
 | `TEME` | true equator, mean equinox: the frame of SGP4 and two-line elements [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/) |
@@ -21,10 +21,11 @@ The main chain is the CIO-based transformation
     ITRS = W^T(xp, yp, s') * R3(ERA) * C(X + dX, Y + dY, s) * GCRS
 
 with the IAU 2006 precession [Hilton et al. (2006)](https://doi.org/10.1007/s10569-006-0001-2) and IAU 2000A nutation
+[Mathews, Herring & Buffett (2002)](https://doi.org/10.1029/2001JB000390), in the X, Y, s form of
 [Capitaine & Wallace (2006)](https://doi.org/10.1051/0004-6361:20054550), ERA the Earth rotation angle, and W the polar
 motion. The equinox-based frames (MOD, TOD, PEF) and TEME are available for interoperability.
 `PrecessionNutationModel::IAU2006_2000B` [McCarthy & Luzum (2003)](https://doi.org/10.1023/A:1021762727016) is about 20x
-faster (in `FrameTransformer`) and accurate to about 1 mas.
+faster (in `FrameTransformer`) and accurate to about 1 mas (2.3 mas in the equinox of TOD).
 
 ## Earth orientation data
 
@@ -59,7 +60,9 @@ std::cout << "round trip error " << std::scientific << norm(back.r - ecef.r) << 
 ```
 
 State transformations include the Earth-rotation term (omega x r) in the velocity, with omega
-including the length-of-day variation.
+including the length-of-day variation where the Earth orientation data give one. (The prediction
+rows of `finals2000A` leave it blank, and it is then taken as zero: 1 ms of length of day is
+1e-8 of omega.)
 
 For many vectors at one epoch, build a `FrameTransformer` once: its constructor evaluates the
 precession-nutation series (about 125 us with IAU 2000A, 6 us with 2000B), after which each
@@ -77,7 +80,7 @@ std::cout << "TEME " << teme << "\nTOD  " << tod << '\n';
 ## The true pole, and why it matters for propagation
 
 Zonal gravity (J2, J4) acts about the Earth's true spin axis, the Celestial Intermediate Pole. In
-GCRS and J2000 that axis is about 0.13-0.16 deg from z during the 2020s, drifting with precession;
+GCRS and J2000 that axis is 0.11 deg (2020) to 0.17 deg (2030) from z, drifting with precession;
 applying J2 about GCRS z instead would cost about 56 m after 1 h and 270 m after 4 h in LEO
 ([Accuracy](../accuracy.md)). `poleOfDateMatrix` gives the rotation to a frame whose z is the true pole:
 
@@ -95,8 +98,9 @@ The propagators take the frame of their state (`NumericalPropagator::j2j4(epoch,
 
 ## Pitfalls
 
-- "ECI" is ambiguous. GCRS and J2000 differ by a 20 mas frame bias (0.7 m at LEO radius, 4 m at
-  GEO); TEME and TOD differ from GCRS by about 0.13-0.16 deg in the 2020s (15-19 km at LEO radius).
+- "ECI" is ambiguous. GCRS and J2000 differ by a 23 mas frame bias (0.8 m at LEO radius, 4.7 m at
+  GEO). TOD and TEME differ from GCRS by 0.27 deg (2020) to 0.42 deg (2030): 33 to 50 km at LEO
+  radius. (Most of that is precession about the pole; the pole itself has moved 0.11 to 0.17 deg.)
   Know which one your data uses.
 - Of-date frames (MOD, TOD, TEME, CIRS) turn slowly: a fixed vector expressed in TOD of one epoch
   and TOD of 4 h later differs by 0.85 m at LEO radius. `EstimateTracker` expresses predictions in

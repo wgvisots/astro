@@ -72,8 +72,9 @@ public:
     [[nodiscard]] StateVector itrsToGcrs(double dt, const StateVector& s) const;
     /// Earth's rotation rate at start + dt (rad/s). It comes from the UT1 elapsed between nodes, so
     /// it is exactly the rate of the rotation above and includes the length-of-day variation.
-    /// (FrameTransformer takes it from the EOP length of day instead; the two agree when the EOP
-    /// are consistent, as published series are.)
+    /// (FrameTransformer takes it from the EOP length of day instead. The two agree where the EOP
+    /// give a length of day; the prediction rows of finals2000A leave it blank, which reads as
+    /// zero, and there this rate is the better one.)
     [[nodiscard]] double rotationRate(double dt) const;
 
 private:

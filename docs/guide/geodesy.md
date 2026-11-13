@@ -15,7 +15,7 @@ std::cout << "ECEF " << ecef << " m\n";
 std::cout << "lat " << rad2deg(back.lat) << " deg, lon " << rad2deg(back.lon) << " deg, h " << back.h << " m\n";
 ```
 
-`ecefToGeodetic` uses Vermeille's closed form [Vermeille (2011)](https://doi.org/10.1007/s00190-010-0419-x), which is exact
+`ecefToGeodetic` uses Vermeille's closed form [Vermeille (2002)](https://doi.org/10.1007/s00190-002-0273-6), which is exact
 everywhere outside the evolute of the ellipsoid (a small region about 43 km around the centre); inside it a bracketed
 root search takes over, so every point has an answer. Round trips agree to 1e-8 m, and the result
 matches ERFA's `gc2gd` to 2e-12 rad and 10 um near the surface ([Accuracy](../accuracy.md)).

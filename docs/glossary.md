@@ -105,7 +105,7 @@ they are in alphabetical order.
 | Error ellipse | | the curve of equal probability on the ground; semi-major, semi-minor and rotation (`ErrorEllipse`) |
 | HBR | Hard-Body Radius | the radius of a sphere enclosing both objects: the sum of their radii (`collisionProbability`) |
 | LVLH | Local Vertical, Local Horizontal | orbit-following frame, CCSDS convention (`lvlhMatrix`) |
-| Mahalanobis distance | | a difference measured in units of its covariance: d^T P^-1 d |
+| Mahalanobis distance | | a difference d measured in units of its covariance P: sqrt(d^T P^-1 d). The library returns the square, d^T P^-1 d (`mahalanobis2`) |
 | NTW, VNC | Normal-Tangential-W, Velocity-Normal-Co-normal | orbit-following frames (`ntwMatrix`, `vncMatrix`) |
 | Pc | Probability of collision | chance that two objects pass within the hard-body radius (`collisionProbability`) |
 | Probability dilution | | a larger covariance can lower Pc for the same miss: a small Pc may only mean the data are poor |

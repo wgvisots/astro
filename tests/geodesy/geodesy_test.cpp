@@ -80,7 +80,7 @@ TEST(Geodetic, MatchesErfaAndRoundTrips) {
 }
 
 TEST(Geodetic, InsideEvoluteFallback) {
-    // Points within ~43 km of the center exercise the Newton branch.
+    // Points within ~43 km of the center exercise the bracketed root search inside the evolute.
     std::mt19937                           rng(3);
     std::uniform_real_distribution<double> u(-40000.0, 40000.0);
     for (int i = 0; i < 200; ++i) {
@@ -223,7 +223,9 @@ TEST(LocalFrames, EnuNedAer) {
 }
 
 TEST(Geodesic, VincentyFlindersPeakToBuninyong) {
-    // Vincenty (1975) test case on the GRS80 / ANS-like ellipsoid; published values for GRS80.
+    // The Flinders Peak to Buninyong sample line of the Geocentric Datum of Australia technical
+    // manual (Intergovernmental Committee on Surveying and Mapping), on GRS80: 54 972.271 m,
+    // forward azimuth 306 deg 52' 05.37". Vincenty's formulae are the method under test.
     const Ellipsoid grs80 = Ellipsoid::grs80();
     const double    lat1 = -dmsToRad(37, 57, 3.72030), lon1 = dmsToRad(144, 25, 29.52440);
     const double    lat2 = -dmsToRad(37, 39, 10.15610), lon2 = dmsToRad(143, 55, 35.38390);

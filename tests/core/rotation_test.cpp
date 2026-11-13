@@ -134,7 +134,7 @@ TEST(Rotation, PassiveConvention) {
 }
 
 TEST(Rotation, R2MatchesExplanatorySupplement) {
-    // R2(theta) = [cos 0 -sin; 0 1 0; sin 0 cos]  (the original lib/Astro.cpp had this transposed)
+    // R2(theta) = [cos 0 -sin; 0 1 0; sin 0 cos]
     const double t = 0.3;
     const Mat3   m = R2(t);
     EXPECT_DOUBLE_EQ(m(0, 2), -std::sin(t));

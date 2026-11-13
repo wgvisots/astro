@@ -126,7 +126,8 @@ private:
 };
 
 /// Rotation from GCRS to the celestial (non-rotating) frame f at t: r_f = M r_gcrs. Identity for
-/// GCRS. Uses IAU 2006/2000B precession-nutation (about 1 mas) and no Earth-orientation data, which
+/// GCRS. Uses IAU 2006/2000B precession-nutation (about 1 mas; up to 2.3 mas in the equinox of TOD)
+/// and no Earth-orientation data, which
 /// suits conversions applied in both directions with the same model.
 ///
 /// GCRS and J2000 are fixed: t is not used. MOD, TOD and CIRS depend on TT alone, so t may be any

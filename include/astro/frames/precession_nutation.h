@@ -35,7 +35,7 @@ namespace astro {
 /// Precession-nutation model selection.
 enum class PrecessionNutationModel {
     IAU2006_2000A, ///< full model, ~microarcsecond (default)
-    IAU2006_2000B, ///< truncated nutation, ~1 mas, ~20x faster
+    IAU2006_2000B, ///< truncated nutation, ~1 mas (2.3 mas in the equinox of TOD), ~20x faster
 };
 
 BOOST_DESCRIBE_ENUM(PrecessionNutationModel, IAU2006_2000A, IAU2006_2000B)
@@ -43,7 +43,8 @@ BOOST_DESCRIBE_ENUM(PrecessionNutationModel, IAU2006_2000A, IAU2006_2000B)
 /// Writes "PrecessionNutationModel::<enumerator>", or "PrecessionNutationModel::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, PrecessionNutationModel value);
 
-/// The 14 fundamental arguments of nutation theory (IERS Conventions 2003/2010, eq. 5.43),
+/// The 14 fundamental arguments of nutation theory (IERS Conventions 2010, eq. 5.43 for the five
+/// Delaunay arguments and eq. 5.44 for the planetary longitudes and the general precession),
 /// radians: l, l', F, D, Om, L_Me, L_Ve, L_E, L_Ma, L_J, L_Sa, L_U, L_Ne, p_A.
 [[nodiscard]] std::array<double, 14> fundamentalArguments(double t) noexcept;
 
@@ -110,7 +111,7 @@ struct CipXY {
 [[nodiscard]] Mat3 celestialToIntermediateMatrix(const CipXY& xy, double s) noexcept;
 
 /// Convert celestial pole offsets dX, dY to nutation corrections ddpsi, ddeps
-/// (first-order, IERS 2010 eq. 5.27 inverse).
+/// (first-order, IERS 2010 eq. 5.25 inverse).
 [[nodiscard]] Nutation poleOffsetsToNutation(double t, double dX, double dY) noexcept;
 
 } // namespace astro

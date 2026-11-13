@@ -58,8 +58,16 @@ ported code included in the repository are credited in
 
 ## Geodesy
 
-- **Vermeille, H. (2011).** An analytical method to transform geocentric into geodetic
-  coordinates. *J. Geodesy* 85, 105-117. <https://doi.org/10.1007/s00190-010-0419-x>.
+- **Vermeille, H. (2002).** Direct transformation from geocentric coordinates to geodetic
+  coordinates. *J. Geodesy* 76(8), 451-454. <https://doi.org/10.1007/s00190-002-0273-6>. The closed
+  form of `ecefToGeodetic` outside the evolute.
+- **Vermeille, H. (2004).** Computing geodetic coordinates from geocentric coordinates.
+  *J. Geodesy* 78(1-2). <https://doi.org/10.1007/s00190-004-0375-4>. Its half-angle longitude.
+- **Moritz, H. (2000).** Geodetic Reference System 1980. *J. Geodesy* 74(1), 128-133.
+  <https://doi.org/10.1007/s001900050278>. The GRS80 ellipsoid (`Ellipsoid::grs80`).
+- **Intergovernmental Committee on Surveying and Mapping.** *Geocentric Datum of Australia Technical
+  Manual*. <https://www.icsm.gov.au/> (link not checked). The Flinders Peak to Buninyong line in the
+  geodesic tests.
 - **Vincenty, T. (1975).** Direct and inverse solutions of geodesics on the ellipsoid with
   application of nested equations. *Survey Review* 23(176), 88-93. <https://doi.org/10.1179/sre.1975.23.176.88>.
 - **NGA (2014).** *Department of Defense World Geodetic System 1984: Its Definition and

@@ -64,7 +64,8 @@ inline constexpr double LG = 6.969290134e-10;
 inline constexpr double LB = 1.550519768e-8;
 /// IAU 2006 Resolution B3: TDB - TCB at T0, seconds.
 inline constexpr double TDB0 = -6.55e-5;
-/// JD (TAI) of 1977-01-01T00:00:00 TAI, i.e. 1977-01-01T00:00:32.184 TT.
+/// Julian date in TT of the instant 1977-01-01T00:00:00 TAI = 1977-01-01T00:00:32.184 TT, at which
+/// TT, TCG and TCB read the same. As one double it is good to 14 microseconds only.
 inline constexpr double jdT0 = 2443144.5003725;
 
 // ------------------------------------------------------------ physics
@@ -80,7 +81,10 @@ inline constexpr double gmMoon = 4.902800118457549e12;
 inline constexpr double earthMoonMassRatio = 81.3005682214972154;
 
 // ------------------------------------------------------------ Earth
-/// Geocentric gravitational constant, m^3/s^2 (IERS 2010, TT-compatible; same as WGS84 EGM).
+/// Geocentric gravitational constant, m^3/s^2: the value of IERS Conventions (2010) Table 1.1,
+/// which is TCG-compatible, and of WGS 84. The TT-compatible value, which is also the GM of
+/// EGM2008, is 3.986004415e14: 7.5e-10 smaller, about 2 cm along the track per revolution in low
+/// Earth orbit.
 inline constexpr double gmEarth = 3.986004418e14;
 /// Nominal mean angular velocity of the Earth, rad/s (IERS 2010 / WGS84).
 inline constexpr double earthRotationRate = 7.292115e-5;

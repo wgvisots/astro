@@ -81,7 +81,8 @@ using Mat6 = std::array<std::array<double, 6>, 6>;
     return c;
 }
 
-/// a * p * a^T, symmetrized ((m + m^T) / 2) so that a covariance stays exactly symmetric.
+/// a * p * a^T, returned exactly symmetric: the upper triangle is computed and mirrored into the
+/// lower one, so a covariance stays a covariance.
 [[nodiscard]] constexpr Mat6 congruence(const Mat6& a, const Mat6& p) noexcept {
     const Mat6 ap = multiply(a, p);
     Mat6       c{};
