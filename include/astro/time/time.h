@@ -129,8 +129,10 @@ public:
     /// is 2016-12-31T23:30:00 UTC although a leap second lies in between, and
     /// "2017-01-01T00:59:60+01:00" is the leap second 2016-12-31T23:59:60 UTC.
     /// Seconds are digits with an optional decimal fraction; an exponent ("05e1")
-    /// is not accepted. Throws astro::Error for malformed text, for an invalid
-    /// date, time of day or offset, and for an unknown scale name.
+    /// is not accepted. The year has four digits, 0000 to 9999 (also after an
+    /// offset has been taken off), the same range iso8601() writes.
+    /// Throws astro::Error for malformed text, for an invalid date, time of day
+    /// or offset, and for an unknown scale name.
     [[nodiscard]] static Time fromIso8601(std::string_view text, TimeScale defaultScale = TimeScale::UTC);
 
     /// Normalized two-part Julian Date in this time's own scale.
@@ -152,7 +154,10 @@ public:
     /// Calendar date in this scale (UTC: leap-second aware, second may be 60.x).
     [[nodiscard]] CalendarDate calendar(int decimals = 9) const;
     /// ISO-8601 text. UTC ends with 'Z'; other scales get a " TT"-style suffix
-    /// unless `withScale` is false.
+    /// unless `withScale` is false. fromIso8601() reads the text back.
+    /// Throws astro::Error if the year (after rounding the seconds to `decimals`
+    /// places) is outside 0000 to 9999: ISO-8601 text has a four-digit year.
+    /// calendar() has no such limit.
     [[nodiscard]] std::string iso8601(int decimals = 3, bool withScale = true) const;
 
     /// Unix seconds (converts to UTC). During a leap second, returns the value

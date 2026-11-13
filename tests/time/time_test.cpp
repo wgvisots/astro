@@ -352,6 +352,32 @@ TEST(Time, Iso8601RejectsExponentInSeconds) {
     EXPECT_EQ(Time::fromIso8601("2024-03-01T12:00:05.125 TT").iso8601(3), "2024-03-01T12:00:05.125 TT");
 }
 
+TEST(Time, Iso8601TextCoversYears0000To9999) {
+    // Inside the four-digit years, what iso8601() writes is read back by fromIso8601() as the same instant.
+    for (int year : {0, 1, 999, 1000, 9999}) {
+        const Time t    = Time::fromCalendar(TimeScale::TT, year, 12, 31, 23, 59, 58.5);
+        const Time back = Time::fromIso8601(t.iso8601(1));
+        EXPECT_EQ(back.scale(), TimeScale::TT) << year;
+        EXPECT_EQ(back.jd().jd1, t.jd().jd1) << year;
+        EXPECT_EQ(back.jd().jd2, t.jd().jd2) << year;
+    }
+    EXPECT_EQ(Time::fromCalendar(TimeScale::TT, 0, 1, 1).iso8601(0), "0000-01-01T00:00:00 TT");
+    EXPECT_EQ(Time::fromCalendar(TimeScale::TT, 9999, 12, 31, 23, 59, 59.0).iso8601(0), "9999-12-31T23:59:59 TT");
+
+    // Outside them there is no four-digit year to write, and both directions refuse.
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::TT, -5, 1, 1).iso8601(), Error);
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::TT, 12000, 1, 1).iso8601(), Error);
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::TT, 9999, 12, 31, 23, 59, 59.9996).iso8601(3), Error); // rounds up
+    EXPECT_THROW((void)Time::fromIso8601("-005-01-01T00:00:00 TT"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("-0005-01-01T00:00:00 TT"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("12000-01-01T00:00:00 TT"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("9999-12-31T23:30:00-01:00"), Error); // 00:30 UTC in the year 10000
+
+    // Only the text is limited: the calendar fields of such a time are still available.
+    EXPECT_EQ(Time::fromCalendar(TimeScale::TT, 12000, 1, 1).calendar().year, 12000);
+    EXPECT_EQ(Time::fromCalendar(TimeScale::TT, -5, 1, 1).calendar().year, -5);
+}
+
 TEST(Time, Ut1RequiresEop) {
     const Time t = Time::fromCalendar(TimeScale::UTC, 2020, 1, 1);
     EXPECT_THROW((void)t.to(TimeScale::UT1), Error);

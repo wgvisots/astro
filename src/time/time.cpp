@@ -40,6 +40,7 @@ namespace {
 constexpr double kJdBdtEpoch        = 2453736.5; // 2006-01-01 00:00:00 BDT
 constexpr int    kGalileoWeekOffset = 1024;      // GST week 0 == GPS week 1024
 constexpr int    kMinutesPerDay     = 1440;      // of the civil clock
+constexpr int    kMaxIsoYear        = 9999;      // ISO-8601 text has a four-digit year, 0000 to 9999
 
 // --------------------------------------------------------------- UTC helpers
 //
@@ -444,6 +445,9 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
         dateFromJulianDayNumber(julianDayNumber(year, month, day) + dayShift, year, month, day);
         hour   = minuteOfDay / 60;
         minute = minuteOfDay % 60;
+        if (year < 0 || year > kMaxIsoYear) {
+            throw Error("Time::fromIso8601: the UTC year is outside 0000-9999 in '" + std::string(text) + "'");
+        }
     }
     return fromCalendar(scale, year, month, day, hour, minute, second);
 }
@@ -480,7 +484,13 @@ CalendarDate Time::calendar(int decimals) const {
 
 std::string Time::iso8601(int decimals, bool withScale) const {
     const CalendarDate c = calendar(decimals);
-    char               sec[32];
+    // ISO-8601 text has a four-digit year. Any other year would be written in a form that fromIso8601 cannot
+    // read back ("-005", "12000"), so it is refused here instead.
+    if (c.year < 0 || c.year > kMaxIsoYear) {
+        throw Error("Time::iso8601: year " + std::to_string(c.year)
+                    + " cannot be written as ISO-8601 text (years 0000 to 9999 only)");
+    }
+    char sec[32];
     if (decimals > 0) {
         std::snprintf(sec, sizeof(sec), "%0*.*f", decimals + 3, decimals, c.second);
     } else {
