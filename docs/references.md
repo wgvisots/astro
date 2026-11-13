@@ -2,8 +2,8 @@
 
 The standards, papers and books the implementations follow, grouped by topic, with what each is
 used for. DOIs and links were checked when this list was written (November 2026); the two marked
-"link not checked" could not be reached from the checking machine. Third-party tables and test data
-included in the repository are credited in
+"link not checked" could not be reached from the checking machine. Third-party tables, test data and
+ported code included in the repository are credited in
 [THIRD_PARTY_NOTICES.md](https://github.com/wgvisots/astro/blob/main/THIRD_PARTY_NOTICES.md).
 
 ## Standards and reference software
@@ -18,7 +18,8 @@ included in the repository are credited in
   (precession-nutation, frames).
 - **ERFA**, *Essential Routines for Fundamental Astronomy* (a BSD-licensed SOFA derivative),
   <https://github.com/liberfa/erfa>, and its Python wrapper **pyerfa**,
-  <https://github.com/liberfa/pyerfa>. The reference values in the tests.
+  <https://github.com/liberfa/pyerfa>. The reference values in the tests; several functions of the
+  time, frames and astrometry modules follow ERFA routines (listed in THIRD_PARTY_NOTICES.md).
 - **Urban, S. E. & Seidelmann, P. K. (eds.) (2013).** *Explanatory Supplement to the Astronomical
   Almanac*, 3rd ed. University Science Books. <https://aa.usno.navy.mil/publications/exp_supp>.
   The project's primary reference; rotation conventions, time scales, frames, astrometry.
@@ -84,8 +85,8 @@ included in the repository are credited in
 ## Orbits and propagation
 
 - **Battin, R. H. (1999).** *An Introduction to the Mathematics and Methods of Astrodynamics*,
-  revised ed. AIAA. <https://doi.org/10.2514/4.861543>. Universal variables and the two-body state
-  transition matrix.
+  revised ed. AIAA. <https://doi.org/10.2514/4.861543>. Universal variables, the two-body state
+  transition matrix, and the hypergeometric series for the Lambert time of flight near the parabola.
 - **Shepperd, S. W. (1985).** Universal Keplerian state transition matrix. *Celestial Mechanics*
   35(2), 129-144. <https://doi.org/10.1007/BF01227666>. The closed-form two-body Phi
   (`propagateKeplerStm`).
@@ -99,13 +100,19 @@ included in the repository are credited in
   Lambert example in the tests.
 - **Vallado, D. A., Crawford, P., Hujsak, R. & Kelso, T. S. (2006).** Revisiting Spacetrack Report
   #3. AIAA 2006-6753. <https://doi.org/10.2514/6.2006-6753>; paper, code and the SGP4-VER test set:
-  <https://celestrak.org/publications/AIAA/2006-6753/>. SGP4/SDP4.
+  <https://celestrak.org/publications/AIAA/2006-6753/>. SGP4/SDP4: `Sgp4` is a port of the paper's
+  reference code.
 - **Hoots, F. R. & Roehrich, R. L. (1980).** *Models for Propagation of NORAD Element Sets*.
   Spacetrack Report No. 3. <https://celestrak.org/NORAD/documentation/spacetrk.pdf>.
 - **Brouwer, D. (1959).** Solution of the problem of artificial satellite theory without drag.
   *Astron. J.* 64, 378. <https://doi.org/10.1086/107958>. J2, J2^2, J4 secular rates.
 - **Izzo, D. (2015).** Revisiting Lambert's problem. *Celest. Mech. Dyn. Astr.* 121, 1-15.
-  <https://doi.org/10.1007/s10569-014-9587-y>.
+  <https://doi.org/10.1007/s10569-014-9587-y>; preprint <https://arxiv.org/abs/1403.2705>. The
+  Lambert solver (`lambertIzzo`), written from the paper's equations: time of flight (eq. 18 and 20),
+  its derivatives (eq. 22), starting values (eq. 30 and 31) and the velocities (Algorithm 1).
+- **Lancaster, E. R. & Blanchard, R. C. (1969).** *A Unified Form of Lambert's Theorem*. NASA
+  TN D-5368. <https://ntrs.nasa.gov/citations/19690027552>. The variable x and the time-of-flight
+  curves that Izzo's method iterates on.
 - **Conway, B. A. (1986).** An improved algorithm due to Laguerre for the solution of Kepler's
   equation. *Celest. Mech.* 39, 199-211. <https://doi.org/10.1007/BF01230852>.
 - **Danby, J. M. A. (1987).** The solution of Kepler's equation, III. *Celest. Mech.* 40, 303-312.

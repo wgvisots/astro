@@ -66,10 +66,39 @@ std::cout << "two-body differs from J2/J4 by " << norm(kepler.r - grid.back().r)
 `propagateKepler` uses universal variables with the Laguerre-Conway iteration
 [Conway (1986)](https://doi.org/10.1007/BF01230852), valid for elliptic, parabolic and hyperbolic orbits.
 `propagateKeplerStm` adds its state transition matrix in closed form, and
-`propagateKeplerWithCovariance` a propagated covariance. `lambertIzzo`
-solves Lambert's problem, including multi-revolution branches [Izzo (2015)](https://doi.org/10.1007/s10569-014-9587-y). Classical
+`propagateKeplerWithCovariance` a propagated covariance. Classical
 and equinoctial elements [Broucke & Cefola (1972)](https://doi.org/10.1007/BF01228432) convert to and from states in
 `orbit/elements.h`.
+
+### Lambert's problem
+
+Lambert's problem asks for the two-body orbit that joins two positions in a given time.
+
+<!-- snippet: examples/propagation.cpp#lambert -->
+```cpp
+// Lambert's problem: the orbit that joins two positions in a given time. These two are 40 minutes
+// apart on the two-body orbit above, so the solution gives back its velocity.
+const StateVector     later    = propagateKepler(s0, 2400.0);
+const LambertSolution transfer = lambert(s0.r, later.r, 2400.0);
+std::cout << "Lambert recovers the velocity to " << norm(transfer.v1 - s0.v) * 1e6 << " um/s\n";
+// With 5 hours to spare, other orbits make complete revolutions on the way: two for each number.
+const std::vector<LambertSolution> all = lambertIzzo(s0.r, later.r, 18000.0, constants::gmEarth, true, 3);
+std::cout << all.size() << " orbits join the same points in 5 h with up to 3 revolutions\n";
+```
+
+- `lambert` returns the solution without a complete revolution.
+- `lambertIzzo` returns that one first, then two solutions for each number of complete revolutions
+  the time allows, up to `maxRevolutions`.
+- `prograde` picks the direction of motion: counter-clockwise seen from +z, or clockwise.
+- The method is Izzo's [Izzo (2015)](https://doi.org/10.1007/s10569-014-9587-y), written from the paper: a
+  third-order iteration on the variable of Lancaster and Blanchard
+  [Lancaster & Blanchard (1969)](https://ntrs.nasa.gov/citations/19690027552). One problem takes about 0.3 us
+  ([Performance](../performance.md)).
+- The arrival point is reproduced to about 1e-12 of its radius. Three kinds of problem are
+  sensitive by nature, whatever the solver: positions within about 1e-6 rad of opposite, flights
+  of very many time units on one arc, and the long way round in a very short time
+  ([Accuracy](../accuracy.md)).
+- Positions that are exactly collinear with the centre leave the orbit plane undefined, and throw.
 
 ## Analytic J2/J4 (secular), and its limits
 

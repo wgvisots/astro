@@ -16,6 +16,9 @@
  *         limitations under the License.
  **********************************************************************/
 
+// earthRotationAngle, gmst06, gmst82 and equationOfOrigins follow the ERFA routines eraEra00,
+// eraGmst06, eraGmst82 and eraEors. See THIRD_PARTY_NOTICES.md.
+
 #include "astro/frames/earth_rotation.h"
 
 #include <cmath>

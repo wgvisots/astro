@@ -17,7 +17,8 @@
  **********************************************************************/
 
 // Propagation throughput: one state propagated from its epoch out X seconds at Y-second steps,
-// repeated over many states. Compares the per-time calls with the grid APIs.
+// repeated over many states. Compares the per-time calls with the grid APIs. Also times Lambert's
+// problem.
 //
 //   astro_propagation_bench [X seconds] [Y seconds] [number of states]   (defaults 86400 60 100)
 
@@ -30,6 +31,7 @@
 #include "astro/orbit/elements.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
+#include "astro/orbit/two_body.h"
 
 using namespace astro;
 
@@ -140,6 +142,22 @@ int main(int argc, char** argv) {
                    sink += out12.back().r.x;
                }
            }));
+    // Lambert's problem between pairs of the states above, half an orbit to two days apart.
+    std::printf("\n%-46s %12s\n", "Lambert (per problem)", "us");
+    for (int revolutions : {0, 3}) {
+        const double seconds = secondsPerRun([&] {
+            for (std::size_t k = 0; k + 1 < states.size(); ++k) {
+                const double tof = 3000.0 + 1700.0 * static_cast<double>(k);
+                for (const LambertSolution& l :
+                     lambertIzzo(states[k].r, 2.0 * states[k + 1].r, tof, constants::gmEarth, true, revolutions)) {
+                    sink += l.v1.x;
+                }
+            }
+        });
+        std::printf("%-46s %12.2f\n",
+                    revolutions == 0 ? "lambertIzzo, no complete revolution" : "lambertIzzo, up to 3 revolutions",
+                    seconds / static_cast<double>(states.size() - 1) * 1e6);
+    }
     std::printf("\n(checksum %g)\n", sink);
     return 0;
 }

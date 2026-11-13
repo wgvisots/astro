@@ -24,7 +24,7 @@ the end of the page).
 | JPL SPK reader, both byte orders | `jplephem` on DE440s | 1e-12 relative + 1 mm |
 | Low-precision Sun / Moon | DE440 | tested 0.01 deg / 0.1 deg; measured 1950-2050: Sun < 30", 6e-5 in distance; Moon < 6', 0.14% |
 | SGP4 / SDP4 | Vallado's verification set, all cases [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/) | 1 mm, 1 um/s (largest difference measured: 0.12 mm) |
-| Kepler, elements, Lambert | Vallado Examples 2-4, 2-5, 7-5; Curtis Example 5.2 [Curtis](https://shop.elsevier.com/books/orbital-mechanics-for-engineering-students/curtis/978-0-12-824025-0) | about the printed precision (Kepler 1 m, 1 mm/s; Lambert 0.1-0.5 m/s) |
+| Kepler, elements, Lambert | Vallado Examples 2-4, 2-5, 7-5; Curtis Example 5.2 [Curtis](https://shop.elsevier.com/books/orbital-mechanics-for-engineering-students/curtis/978-0-12-824025-0) | about the printed precision (Kepler 1 m, 1 mm/s; Lambert 2 mm/s and 0.06 m/s) |
 | Numerical J2/J4 | energy integral; Brouwer secular rates | energy 1e-10 over 10 days; node rate 0.3% |
 | State transition matrix | finite differences of propagations; symplectic identity | 1e-6 relative; 1e-8 |
 | Interpolated STM between steps | integration to the exact time | 2e-8 (default tolerance), 2e-6 (relTol 1e-9) |
@@ -155,6 +155,44 @@ cross-track sigmas of the analytic covariances over those of the numerical J2/J4
 which dominates, is Keplerian shear, so the two-body covariance is as good as the secular one. The
 small radial sigma oscillates through the orbit, and over a day the analytic trajectories reach a
 different phase of it.
+
+## Lambert's problem
+
+From `astro_study_lambert`: `lambertIzzo` on 10 000 random problems per regime (non-dimensional, mu = 1,
+unless stated). Each solution is checked by propagating the departure state over the time of flight
+in extended precision and comparing with the arrival point. The **closure** is the miss,
+`|r(t) - r2| / |r2|`.
+
+| Regime | Max revolutions | Solutions | Worst closure | Above 1e-10 | Above 1e-6 | Beyond conditioning | Non-finite |
+|---|---|---|---|---|---|---|---|
+| Izzo's test box: components in [-4, 4], t in [0.1, 100] | 5 | 49 098 | 9.4e-11 | 0 | 0 | 0 | 0 |
+| Earth orbits, SI units: radii 6600-66 600 km, 5 min to 3.5 d | 10 | 59 540 | 6.8e-12 | 0 | 0 | 0 | 0 |
+| Many revolutions: t in [10, 1500] | 50 | 38 136 | 2.6e-10 | 8 | 0 | 0 | 0 |
+| Transfer angle within 1e-2 to 1e-6 rad of 0 or 360 deg | 5 | 85 520 | 2.3e-11 | 0 | 0 | 0 | 0 |
+| Transfer angle within 1e-2 to 1e-6 rad of 180 deg | 5 | 51 620 | 2.7e-9 | 8322 | 0 | 0 | 0 |
+| Within 1e-2 to 1e-9 of the parabolic time | 0 | 20 000 | 5.2e-14 | 0 | 0 | 0 | 0 |
+| Very short flights, t in [1e-6, 0.1], the short way round | 0 | 10 000 | 9.6e-14 | 0 | 0 | 0 | 0 |
+| Very short flights, the long way round (past the centre) | 0 | 1523 checked | 2.5e-9 | 329 | 0 | 0 | 0 |
+| Very long flights, t in [1e2, 1e8] | 0 | 10 000 | 1.6e-2 | 6997 | 3039 | 0 | 0 |
+
+How to read the table:
+
+- **Closure measures the problem as well as the solver.** Where the arrival point is very sensitive
+  to the departure velocity, a velocity that is correct to the last bit still misses. So the study
+  also finds what a change of the velocity by one unit in the last place does. A solution is
+  "beyond conditioning" if it misses by more than 20 times that (plus 1e-12). None does, in any
+  regime.
+- **Near 180 deg** the orbit plane is fixed only to rounding divided by the sine of the angle.
+- **Very long flights** span so many time units on one near-parabolic arc that a double-precision
+  velocity cannot resolve the arrival point: the 1.6e-2 is the conditioning, not the solver.
+- **The long way round in a very short time** is a fast hyperbola that swings past the centre.
+  Errors along it grow by the exponential of its hyperbolic anomaly, so 8477 of the 10 000
+  solutions cannot be checked by propagation at all, in any arithmetic available here. The study
+  reports them separately; all are finite.
+
+The tests also check the solver against Vallado's Example 7-5 and Curtis's Example 5.2, Euler's
+equation at the parabolic time, the minimum-energy ellipse, the number of revolutions of every
+multi-revolution solution, and the appearance of solutions exactly at the minimum time.
 
 ## Closest-approach search
 
@@ -291,6 +329,7 @@ build/studies/astro_study_propagation        # < 1 s
 build/studies/astro_study_consistency        # ~1 min; optional argument: samples per row
 build/studies/astro_study_impact             # ~2 s; optional argument: Monte Carlo samples
 build/studies/astro_study_conjunctions       # ~45 s; optional argument: orbit pairs
+build/studies/astro_study_lambert            # ~11 s; optional argument: problems per regime
 ```
 
 Regenerating the ERFA and JPL reference data needs Python with `numpy`, `pyerfa`, `sgp4` and

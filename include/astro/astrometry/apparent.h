@@ -28,7 +28,7 @@
 /// \file
 /// Apparent and observed places of stars and solar-system bodies.
 ///
-/// Pipeline (as in SOFA/ERFA): catalog ICRS place -> space motion -> parallax
+/// Pipeline (as in ERFA, the open-source derivative of SOFA): catalog ICRS place -> space motion -> parallax
 /// -> gravitational light deflection by the Sun -> aberration (annual and
 /// diurnal, from the observer's barycentric velocity) -> GCRS apparent
 /// direction -> ITRS -> local horizon -> optional refraction.
@@ -60,12 +60,12 @@ observerEphemeris(const Time& t, const Ephemeris& eph, const StateVector& geocen
 
 /// Gravitational deflection of direction p by a body of `massSolar` solar masses.
 /// q: unit vector from the body to the source; e: unit vector from the body to the
-/// observer; emAu: body-observer distance (au). (SOFA iauLd.)
+/// observer; emAu: body-observer distance (au). (ERFA eraLd.)
 [[nodiscard]] Vec3
 lightDeflection(const Vec3& p, const Vec3& q, const Vec3& e, double emAu, double massSolar = 1.0) noexcept;
 
 /// Stellar aberration: natural direction p -> proper direction, given observer
-/// barycentric velocity in units of c and Sun-observer distance (au). (SOFA iauAb.)
+/// barycentric velocity in units of c and Sun-observer distance (au). (ERFA eraAb.)
 [[nodiscard]] Vec3 aberration(const Vec3& p, const Vec3& vOverC, double sunDistanceAu) noexcept;
 
 /// Star position (ICRS, at time t) after space motion: barycentric unit vector or, if

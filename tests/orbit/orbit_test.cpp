@@ -181,54 +181,6 @@ TEST(TwoBody, AgreesWithElementPropagation) {
     expectVecNear(propagateKepler(p1, -3600.0).r, p0.r, 1e-2);
 }
 
-TEST(Lambert, CurtisExample5_2) {
-    // Curtis, Orbital Mechanics for Engineering Students, Example 5.2 (mu = 398600 km^3/s^2).
-    const double          mu = 398600e9;
-    const Vec3            r1{5000 * km, 10000 * km, 2100 * km}, r2{-14600 * km, 2500 * km, 7000 * km};
-    const LambertSolution s = lambert(r1, r2, 3600.0, mu);
-    expectVecNear(s.v1, {-5.9925 * km, 1.9254 * km, 3.2456 * km}, 0.1);
-    expectVecNear(s.v2, {-3.3125 * km, -4.1966 * km, -0.38529 * km}, 0.1);
-}
-
-TEST(Lambert, ValladoExample7_5) {
-    const double          mu = 398600.4418e9;
-    const Vec3            r1{15945.34 * km, 0, 0}, r2{12214.83899 * km, 10249.46731 * km, 0};
-    const LambertSolution s = lambert(r1, r2, 76.0 * 60.0, mu);
-    expectVecNear(s.v1, {2.058913 * km, 2.915965 * km, 0}, 0.5);
-    expectVecNear(s.v2, {-3.451565 * km, 0.910315 * km, 0}, 0.5);
-}
-
-TEST(Lambert, ConsistentWithKeplerIncludingMultiRev) {
-    std::mt19937                           rng(23);
-    std::uniform_real_distribution<double> u(0.0, 1.0);
-    int                                    multi = 0;
-    for (int k = 0; k < 100; ++k) {
-        const Vec3 r1{(7000 + 20000 * u(rng)) * km * (u(rng) - 0.5),
-                      (7000 + 20000 * u(rng)) * km * (u(rng) - 0.5),
-                      3000 * km * (u(rng) - 0.5)};
-        const Vec3 r2{(7000 + 20000 * u(rng)) * km * (u(rng) - 0.5),
-                      (7000 + 20000 * u(rng)) * km * (u(rng) - 0.5),
-                      3000 * km * (u(rng) - 0.5)};
-        if (norm(r1) < 6600 * km || norm(r2) < 6600 * km) {
-            continue;
-        }
-        const double tof      = 1800.0 + 80000.0 * u(rng);
-        const bool   prograde = u(rng) > 0.3;
-        for (const LambertSolution& s : lambertIzzo(r1, r2, tof, constants::gmEarth, prograde, 3)) {
-            const StateVector end = propagateKepler({r1, s.v1}, tof);
-            expectVecNear(end.r, r2, 1e-3 * norm(r2) * 1e-3);
-            expectVecNear(end.v, s.v2, 1e-6 * norm(s.v2));
-            const double hz = cross(r1, s.v1).z;
-            if (std::abs(hz) > 1e3) {
-                EXPECT_EQ(hz > 0.0, prograde);
-            }
-            multi += s.revolutions > 0;
-        }
-    }
-    EXPECT_GT(multi, 10);
-    EXPECT_THROW((void)lambert({7000 * km, 0, 0}, {14000 * km, 0, 0}, 3600.0), Error);
-}
-
 TEST(Gravity, ZonalMatchesClosedFormAndPotentialGradient) {
     const Vec3 r{5000 * km, -3000 * km, 4000 * km};
     expectVecNear(zonalAcceleration(r, {0, 0, constants::J2}), j2Acceleration(r), 1e-15);

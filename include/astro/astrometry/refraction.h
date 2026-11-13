@@ -31,17 +31,17 @@ struct Atmosphere {
     double wavelengthMicron{0.574}; ///< > 100 means radio
 };
 
-/// Refraction constants for the model  dZ = A tan Z + B tan^3 Z  (rad), computed as in SOFA/ERFA refco
+/// Refraction constants for the model  dZ = A tan Z + B tan^3 Z  (rad), computed as in ERFA's eraRefco
 /// (Green 1987 / Hohenkerk & Sinclair). Valid for zenith distances up to ~75-80 deg.
 struct RefractionConstants {
     double A{0.0}; ///< coefficient of tan Z (rad)
     double B{0.0}; ///< coefficient of tan^3 Z (rad)
 };
 /// Refraction constants for the given conditions (inputs are clamped to safe
-/// ranges, as in SOFA refco).
+/// ranges, as in ERFA's eraRefco).
 [[nodiscard]] RefractionConstants refractionConstants(const Atmosphere& atm) noexcept;
 
-/// Observed elevation from true elevation using the A/B model, with the SOFA
+/// Observed elevation from true elevation using the A/B model, with ERFA's (eraAtioq)
 /// treatment near the horizon (refraction is held constant below ~3 deg).
 [[nodiscard]] double refractTrueToObserved(double trueElevation, const RefractionConstants& k) noexcept;
 /// True elevation from observed elevation (A/B model).

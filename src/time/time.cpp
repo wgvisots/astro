@@ -41,6 +41,9 @@ constexpr double kJdBdtEpoch        = 2453736.5; // 2006-01-01 00:00:00 BDT
 constexpr int    kGalileoWeekOffset = 1024;      // GST week 0 == GPS week 1024
 
 // --------------------------------------------------------------- UTC helpers
+//
+// UTC to and from TAI follows ERFA's eraUtctai and eraTaiutc, including the "quasi-JD" day fraction
+// on a day with a leap second and the rate changes before 1972. See THIRD_PARTY_NOTICES.md.
 
 struct UtcDay {
     int    year, month, day;
@@ -524,6 +527,8 @@ std::partial_ordering operator<=>(const Time& a, const Time& b) {
 }
 
 // ------------------------------------------------------------------ TDB - TT
+//
+// Follows ERFA's eraDtdb (same series, topocentric terms and adjustments). See THIRD_PARTY_NOTICES.md.
 
 double tdbMinusTt(const JulianDate& tt, double ut1Fraction, double elong, double uKm, double vKm) noexcept {
     using constants::degToRad;
