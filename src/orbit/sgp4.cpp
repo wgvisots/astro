@@ -60,6 +60,15 @@ const char* errorMessage(int code) {
     }
 }
 
+// Throws astro::Error naming the element if it is NaN or infinite. The range tests of the reference code
+// (e >= 1, n <= 0, ...) are all false for NaN, so a non-finite element would pass them and come out as a NaN state
+// with error code 0.
+void requireFinite(double value, const char* name) {
+    if (!std::isfinite(value)) {
+        throw Error(std::string("Sgp4: ") + name + " is not finite");
+    }
+}
+
 // Outputs of dscom needed later.
 struct DsCom {
     double snodm, cnodm, sinim, cosim, sinomm, cosomm, day, e3, ee2, em, emsq, gam, peo, pgho, pho, pinco, plo, rtemsq,
@@ -923,6 +932,20 @@ struct Sgp4::Impl {
 
 Sgp4::Sgp4(const Tle& tle, Sgp4Gravity gravity, Sgp4OpsMode mode)
     : impl_(std::make_unique<Impl>()) {
+    // Check what the theory uses (the two derivatives of the mean motion are carried but not used).
+    requireFinite(tle.epoch.jd().jd1 + tle.epoch.jd().jd2, "epoch");
+    requireFinite(tle.bstar, "B*");
+    requireFinite(tle.inclination, "inclination");
+    requireFinite(tle.raan, "right ascension of the ascending node");
+    requireFinite(tle.eccentricity, "eccentricity");
+    requireFinite(tle.argPerigee, "argument of perigee");
+    requireFinite(tle.meanAnomaly, "mean anomaly");
+    requireFinite(tle.meanMotion, "mean motion");
+    // The reference code tests for error 2 after the Kozai correction, which takes a fractional power of the mean
+    // motion: a negative one has turned into NaN by then and is not caught.
+    if (tle.meanMotion < 0.0) {
+        throw Sgp4Error(2, std::string(errorMessage(2)) + " (at epoch)");
+    }
     Impl& s     = *impl_;
     s.tle       = tle;
     s.epochTime = tle.epoch;
@@ -949,6 +972,13 @@ Sgp4::Sgp4(const Tle& tle, Sgp4Gravity gravity, Sgp4OpsMode mode)
     const int   code = s.sgp4(0.0, tmp);
     if (code != 0 && code != 6) {
         throw Sgp4Error(code, std::string(errorMessage(code)) + " (at epoch)");
+    }
+    // Finite elements can still overflow on the way (a drag term of 1e300, say). No range test catches that,
+    // because the tests are false for NaN, so look at the state itself.
+    for (const double component : {tmp.r.x, tmp.r.y, tmp.r.z, tmp.v.x, tmp.v.y, tmp.v.z}) {
+        if (!std::isfinite(component)) {
+            throw Error("Sgp4: the elements give a non-finite state at the epoch");
+        }
     }
 }
 

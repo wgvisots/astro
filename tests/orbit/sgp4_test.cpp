@@ -18,6 +18,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <sstream>
 
@@ -181,4 +182,67 @@ TEST(Sgp4, TimeInterfaceAndDeepSpaceFlag) {
     EXPECT_NEAR(norm(a.r) / 1000.0, 6720.0, 30.0);
     const Sgp4 copy = s;
     test::expectVecNear(copy.propagate(10.0).r, s.propagate(10.0).r, 0.0);
+}
+
+TEST(Sgp4, RejectsNonFiniteElements) {
+    // SGP4's own range tests (e >= 1, n <= 0, ...) are all false for NaN, so a NaN element used to go through to a
+    // NaN state with error code 0. Each element the theory uses must be refused when the propagator is built.
+    const Tle good = Tle::parse("1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927",
+                                "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537");
+    struct Element {
+        const char* name;
+        double Tle::*member;
+    };
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    for (const Element& e : {
+             Element{"B*",                                    &Tle::bstar       },
+             Element{"inclination",                           &Tle::inclination },
+             Element{"right ascension of the ascending node", &Tle::raan        },
+             Element{"eccentricity",                          &Tle::eccentricity},
+             Element{"argument of perigee",                   &Tle::argPerigee  },
+             Element{"mean anomaly",                          &Tle::meanAnomaly },
+             Element{"mean motion",                           &Tle::meanMotion  }
+    }) {
+        for (const double bad : {nan, inf, -inf}) {
+            Tle tle       = good;
+            tle.*e.member = bad;
+            try {
+                const Sgp4 sgp4{tle};
+                // What used to happen: the propagator was built and gave NaN with code 0.
+                StateVector state;
+                const int   code = sgp4.propagate(10.0, state);
+                ADD_FAILURE() << e.name << " = " << bad << " was accepted; propagate gave code " << code
+                              << " and r.x = " << state.r.x;
+            } catch (const Error& error) {
+                EXPECT_NE(std::string(error.what()).find(e.name), std::string::npos)
+                    << e.name << " = " << bad << " gave: " << error.what();
+            }
+        }
+    }
+    Tle tle   = good;
+    tle.epoch = Time(JulianDate{nan, 0.0}, TimeScale::UTC);
+    EXPECT_THROW(Sgp4{tle}, Error) << "epoch";
+    EXPECT_NO_THROW(Sgp4{good});
+}
+
+TEST(Sgp4, RejectsFiniteElementsThatGiveNoState) {
+    const Tle good = Tle::parse("1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927",
+                                "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537");
+    // A negative mean motion is SGP4's error 2. The reference test for it (n <= 0, made on the mean motion after
+    // the Kozai correction) never sees it, because the correction takes a fractional power of the negative
+    // number first and gives NaN.
+    Tle tle        = good;
+    tle.meanMotion = -2.0;
+    try {
+        const Sgp4 sgp4{tle};
+        ADD_FAILURE() << "a mean motion of -2 rev/day was accepted";
+    } catch (const Sgp4Error& e) {
+        EXPECT_EQ(e.code(), 2);
+    }
+    // A drag term so large that the drag coefficients overflow: there is no error code for that, and no state
+    // either.
+    tle       = good;
+    tle.bstar = 1e300;
+    EXPECT_THROW(Sgp4{tle}, Error);
 }

@@ -76,7 +76,12 @@ private:
 class Sgp4 {
 public:
     /// Initialize from `tle`. Throws Sgp4Error (an astro::Error) if the elements fail at the epoch (codes 1-4; a
-    /// decayed state, code 6, is accepted).
+    /// decayed state, code 6, is accepted). A negative mean motion is code 2.
+    ///
+    /// Throws astro::Error if the epoch or an element the theory uses is not finite (B*, the inclination, the
+    /// right ascension of the node, the eccentricity, the argument of perigee, the mean anomaly, the mean motion),
+    /// or if finite elements give a non-finite state at the epoch. So a propagator that was built never starts
+    /// from NaN.
     explicit Sgp4(const Tle& tle, Sgp4Gravity gravity = Sgp4Gravity::WGS72, Sgp4OpsMode mode = Sgp4OpsMode::Improved);
     ~Sgp4();
     /// Deep copy.
