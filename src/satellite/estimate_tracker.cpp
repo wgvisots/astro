@@ -97,7 +97,16 @@ std::optional<double> elementsDistance(const StateCovariance& pred, StateVector 
         c.semiMajorAxisSigma    = 0.0;
         return std::numeric_limits<double>::infinity();
     }
-    const EquinoctialElements   ep = stateToEquinoctial(p, mu);
+    // Equinoctial elements exist for ellipses only. A prediction that is not elliptic cannot be tested
+    // this way at all: stateToEquinoctial throws for it.
+    const EquinoctialElements ep = stateToEquinoctial(p, mu);
+    // A new state on an open orbit (v^2 r >= 2 mu) is, like a reversed one, beyond any plausible
+    // covariance of an elliptic prediction: infinitely far.
+    if (!(norm2(next.v) * norm(next.r) < 2.0 * mu)) {
+        c.semiMajorAxisResidual = 0.0;
+        c.semiMajorAxisSigma    = 0.0;
+        return std::numeric_limits<double>::infinity();
+    }
     const EquinoctialElements   en = stateToEquinoctial(next, mu);
     const Mat6                  Pe = congruence(stateToEquinoctialJacobian(p, mu), P);
     const std::array<double, 6> d{en.a - ep.a,

@@ -71,6 +71,10 @@ enum class ConsistencyTest {
     /// longitude), against the predicted covariance mapped into elements (6 degrees of freedom). The
     /// error stays nearly linear in elements (it grows mostly in mean longitude), so this has the
     /// sensitivity of PositionVelocity with the nominal false-alarm rate of Position.
+    ///
+    /// The elements exist for elliptic orbits only. A new estimate on an open orbit is infinitely
+    /// far from an elliptic prediction (p-value 0). If the prediction itself is not elliptic the
+    /// check throws astro::Error: use Position or PositionVelocity for such an object.
     Elements,
 };
 

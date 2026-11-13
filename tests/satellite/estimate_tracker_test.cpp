@@ -113,6 +113,34 @@ TEST(EstimateTracker, OrbitTurnedOverIsInfinitelyFarWithZeroPValue) {
     EXPECT_FALSE(c.consistent);
 }
 
+TEST(EstimateTracker, NewEstimateOnAnOpenOrbitIsInfinitelyFarInElements) {
+    // The same position at one and a half times the speed: a hyperbola, which has no equinoctial
+    // elements. Against an elliptic prediction that is infinitely far, with p-value 0; the other two
+    // tests still give their (finite, enormous) distances.
+    const StateVector   s0 = leo();
+    const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
+    const StateVector   truth = truthAt(s0, 60.0);
+    const StateEstimate next{
+        kEpoch + 60.0,
+        {truth.r, 1.5 * truth.v},
+        diagonal(100.0, 1e-4)
+    };
+    const auto c = checkConsistency(prior, next);
+    EXPECT_TRUE(c.valid);
+    EXPECT_EQ(c.elementsMahalanobis2, std::numeric_limits<double>::infinity());
+    EXPECT_EQ(c.elementsPValue, 0.0);
+    EXPECT_FALSE(c.consistent);
+    EXPECT_TRUE(std::isfinite(c.mahalanobis2));
+    EXPECT_GT(c.mahalanobis2, 1e6);
+    // A prediction that is itself hyperbolic cannot be tested in elements at all.
+    const StateEstimate openPrior{
+        kEpoch,
+        {s0.r, 1.5 * s0.v},
+        diagonal(100.0, 1e-4)
+    };
+    EXPECT_THROW((void)checkConsistency(openPrior, next), Error);
+}
+
 TEST(EstimateTracker, Mahalanobis) {
     const Mat6                  D = diagonal(4.0, 1e-4);
     const std::array<double, 6> d{2.0, 0.0, -4.0, 0.01, 0.0, 0.0};
