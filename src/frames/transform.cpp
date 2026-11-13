@@ -18,6 +18,8 @@
 
 #include "astro/frames/transform.h"
 
+#include <string>
+
 #include "../core/enum_io.h"
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
@@ -115,9 +117,12 @@ StateVector FrameTransformer::transform(const StateVector& s, Frame from, Frame 
 
 namespace {
 
+/// The precession-nutation model of gcrsToCelestialMatrix() and poleOfDateMatrix().
+constexpr PrecessionNutationModel kFastModel = PrecessionNutationModel::IAU2006_2000B;
+
 FrameTransformer fastCelestialTransformer(const Time& t) {
     FrameOptions options;
-    options.model            = PrecessionNutationModel::IAU2006_2000B;
+    options.model            = kFastModel;
     options.applyPoleOffsets = false;
     return FrameTransformer(t, ConstantEop{}, options);
 }
@@ -128,14 +133,38 @@ void requireCelestial(Frame f) {
     }
 }
 
+/// GCRS -> f at `t` for the frames that precession-nutation alone defines: GCRS, J2000, MOD, TOD and
+/// CIRS. These are functions of TT only (the celestial matrix Q(t) of IERS Conventions 2010, eq. 5.1,
+/// with t of eq. 5.2), so, unlike a FrameTransformer, this needs neither UT1 nor UTC and serves epochs
+/// before 1960, where UTC does not exist. Each matrix is the one a FrameTransformer builds for
+/// kFastModel without pole offsets.
+Mat3 precessionNutationFrame(Frame f, const Time& t) {
+    // As in FrameTransformer with no Earth-orientation data, a UT1 epoch is read as UTC.
+    const auto ttCenturies = [&] { return t.to(TimeScale::TT, ConstantEop{}).centuriesSinceJ2000(); };
+    switch (f) {
+    case Frame::GCRS:  return Mat3::identity();
+    case Frame::J2000: return frameBiasMatrix06(); // fixed: the same at every epoch
+    case Frame::MOD:   return biasPrecessionMatrix06(ttCenturies());
+    case Frame::TOD:   return npbMatrix06(ttCenturies(), kFastModel);
+    case Frame::CIRS:  {
+        const double T  = ttCenturies();
+        const CipXY  xy = cipXY(T, kFastModel);
+        return celestialToIntermediateMatrix(xy, cioLocatorS06(T, xy));
+    }
+    default: throw Error("no precession-nutation matrix for frame " + std::string(toString(f)));
+    }
+}
+
 } // namespace
 
 Mat3 gcrsToCelestialMatrix(Frame f, const Time& t) {
     requireCelestial(f);
-    if (f == Frame::GCRS) {
-        return Mat3::identity();
+    if (f == Frame::TEME) {
+        // The equinox of TEME is placed with GMST 1982, a function of UT1, so this one frame needs
+        // the Earth-rotation side as well (UT1 taken as UTC, there being no Earth-orientation data).
+        return fastCelestialTransformer(t).gcrsTo(f);
     }
-    return fastCelestialTransformer(t).gcrsTo(f);
+    return precessionNutationFrame(f, t);
 }
 
 Mat3 poleOfDateMatrix(Frame from, const Time& t) {
@@ -143,7 +172,7 @@ Mat3 poleOfDateMatrix(Frame from, const Time& t) {
     if (from == Frame::TOD || from == Frame::TEME || from == Frame::CIRS) {
         return Mat3::identity(); // z is already the true pole of date
     }
-    return fastCelestialTransformer(t).matrix(from, Frame::CIRS);
+    return precessionNutationFrame(Frame::CIRS, t) * precessionNutationFrame(from, t).transpose();
 }
 
 Mat3 gcrsToItrsMatrix(const Time& t, const EopProvider& eop, const FrameOptions& options) {

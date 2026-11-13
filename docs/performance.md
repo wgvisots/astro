@@ -53,7 +53,7 @@ What makes the grids fast:
 | `checkConsistency` / `EstimateTracker::update`, gap 10 min / 30 min / 4 h | 15 / 26 / 137 us |
 | `FrameTransformer`, IAU 2006/2000A | 125 us |
 | `FrameTransformer`, IAU 2006/2000B | 6 us |
-| `poleOfDateMatrix(Frame::GCRS, t)` | 6 us |
+| `poleOfDateMatrix(Frame::GCRS, t)` | 3 us |
 
 ## Impact prediction
 
