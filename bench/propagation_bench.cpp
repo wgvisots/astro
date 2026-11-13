@@ -18,7 +18,7 @@
 
 // Propagation throughput: one state propagated from its epoch out X seconds at Y-second steps,
 // repeated over many states. Compares the per-time calls with the grid APIs. Also times Lambert's
-// problem.
+// problem and single calls of propagateKepler and SGP4.
 //
 //   astro_propagation_bench [X seconds] [Y seconds] [number of states]   (defaults 86400 60 100)
 
@@ -31,6 +31,8 @@
 #include "astro/orbit/elements.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
+#include "astro/orbit/sgp4.h"
+#include "astro/orbit/tle.h"
 #include "astro/orbit/two_body.h"
 
 using namespace astro;
@@ -157,6 +159,50 @@ int main(int argc, char** argv) {
         std::printf("%-46s %12.2f\n",
                     revolutions == 0 ? "lambertIzzo, no complete revolution" : "lambertIzzo, up to 3 revolutions",
                     seconds / static_cast<double>(states.size() - 1) * 1e6);
+    }
+    // Single calls of the closed-form propagators: one state or element set, many times.
+    std::printf("\n%-46s %12s\n", "Analytic propagators (per call)", "ns");
+    {
+        const double seconds = secondsPerRun([&] {
+            for (const StateVector& s : states) {
+                for (int k = 1; k <= 100; ++k) {
+                    sink += propagateKepler(s, 60.0 * k).r.x;
+                }
+            }
+        });
+        std::printf("%-46s %12.0f\n", "propagateKepler", seconds / (100.0 * static_cast<double>(states.size())) * 1e9);
+    }
+    // Element sets of the SGP4 verification set: the ISS (near-Earth) and a 12 h Molniya orbit
+    // (deep-space, resonant; its cost grows with the time from the epoch, here up to 1 day).
+    const struct {
+        const char* label;
+        const char* line1;
+        const char* line2;
+    } sets[] = {
+        {"Sgp4::propagate, near-Earth",
+         "1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927", "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537"},
+        {"Sgp4::propagate, deep-space (within 1 day)",
+         "1 08195U 75081A   06176.33215444  .00000099  00000-0  11873-3 0   813", "2 08195  64.1586 279.0717 6877146 264.7651  20.2257  2.00491383225656"},
+    };
+    for (const auto& set : sets) {
+        const Sgp4   sgp4(Tle::parse(set.line1, set.line2));
+        const double seconds = secondsPerRun([&] {
+            for (int k = 0; k < 1440; ++k) {
+                sink += sgp4.propagate(static_cast<double>(k)).r.x;
+            }
+        });
+        std::printf("%-46s %12.0f\n", set.label, seconds / 1440.0 * 1e9);
+    }
+    {
+        // The resonance terms are integrated in 12 h steps from the epoch on every call, so a
+        // resonant orbit costs more the further the time is from its epoch.
+        const Sgp4   sgp4(Tle::parse(sets[1].line1, sets[1].line2));
+        const double seconds = secondsPerRun([&] {
+            for (int k = 0; k < 100; ++k) {
+                sink += sgp4.propagate(525600.0 + static_cast<double>(k)).r.x;
+            }
+        });
+        std::printf("%-46s %12.0f\n", "Sgp4::propagate, deep-space, 1 year out", seconds / 100.0 * 1e9);
     }
     std::printf("\n(checksum %g)\n", sink);
     return 0;

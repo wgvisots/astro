@@ -74,16 +74,20 @@ they are in alphabetical order.
 |---|---|---|
 | Closest approach | | the smallest distance between two objects, where their range rate is zero (`closestApproach`) |
 | Conjunction | | a close approach of two objects, usually below a screening distance (`closeApproaches`) |
+| Equinoctial elements | | (a, h, k, p, q, mean longitude): elements without the singularities of the classical set at zero eccentricity and inclination; for ellipses only (`EquinoctialElements`) |
 | Event | | a zero crossing of a function of time and state, such as height at impact (`propagateToEvent`) |
 | Flight-path angle | | angle of the velocity above (launch) or below (impact) the local horizontal |
 | GEO | Geostationary Earth Orbit | circular equatorial orbit with a one-sidereal-day period |
 | GM, mu | Gravitational constant times Mass | gravitational parameter of a body (m^3/s^2) |
 | HEO | Highly Elliptical Orbit | e.g. Molniya |
 | J2, J3, J4 | | zonal harmonics of the Earth's gravity field: J2 for the equatorial bulge, J3 for the pear shape, J4 next |
+| Jerk | | the time derivative of acceleration (m/s^3): the fourth part of a 12-component state (`StateVector12`) |
 | Lambert's problem | | find the two-body orbit that joins two positions in a given time (`lambertIzzo`) |
 | LEO | Low Earth Orbit | altitudes up to about 2000 km |
+| Mean elements | | elements with the short-period effects of the perturbations averaged out, as SGP4 and `SecularPropagator` use; not interchangeable with osculating elements |
 | NORAD | North American Aerospace Defense Command | its catalogue numbers identify objects in TLEs |
 | ODE | Ordinary Differential Equation | the equations of motion the integrators solve |
+| Osculating elements | | the elements of the two-body orbit that matches a position and velocity at one instant (`stateToElements`) |
 | RAAN | Right Ascension of the Ascending Node | orientation of the orbit plane |
 | RK4 | Runge-Kutta, 4th order | fixed-step integrator (`integrateRk4`) |
 | RKF7(8) | Runge-Kutta-Fehlberg 7(8) | adaptive-step integrator used by `NumericalPropagator` |
@@ -91,6 +95,7 @@ they are in alphabetical order.
 | SSO | Sun-Synchronous Orbit | orbit whose plane turns with the Sun, through J2 |
 | TCA | Time of Closest Approach | when the distance between two objects is smallest (`CloseApproach::time`) |
 | TLE | Two-Line Element set | the NORAD element format for SGP4 (`Tle`) |
+| Universal variables | | a form of two-body motion that covers ellipses, parabolas and hyperbolas with one equation (`propagateKepler`) |
 
 ## Covariance, tracking and impact
 
@@ -109,7 +114,7 @@ they are in alphabetical order.
 | NTW, VNC | Normal-Tangential-W, Velocity-Normal-Co-normal | orbit-following frames (`ntwMatrix`, `vncMatrix`) |
 | Pc | Probability of collision | chance that two objects pass within the hard-body radius (`collisionProbability`) |
 | Probability dilution | | a larger covariance can lower Pc for the same miss: a small Pc may only mean the data are poor |
-| Process noise | | extra uncertainty added during propagation for unmodelled forces (`accelerationNoisePsd`) |
+| Process noise | | extra uncertainty added during propagation for unmodeled forces (`accelerationNoisePsd`) |
 | PSD | Power Spectral Density | strength of white process noise (m^2/s^3 for acceleration noise) |
 | RIC / RSW | Radial, In-track, Cross-track | orbit-following frame for residuals and covariances (`ricMatrix`) |
 | Rotation (of an ellipse) | | direction of the semi-major axis, clockwise from north |

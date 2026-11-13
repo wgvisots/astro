@@ -8,7 +8,7 @@
 | `SecularPropagator` | J2, J2^2, J4 mean-element drift (Brouwer) | **tens to hundreds of km** from a state vector; ~2-6 km with fitted mean elements | 40 ns per output | mean-element studies: node and perigee drift, sun-synchronous and repeat-track design |
 | `SecularPropagatorCorrected` | the same positions; velocity = d(position)/dt | the same | ~2 % more | the same, when velocity must agree with position (range rate, Doppler, closest approach) |
 | `NumericalPropagator` | point mass + zonal harmonics (+ third bodies, custom forces) | set by tolerance: 0.2 m over 4 h at relTol 1e-9, 0.2 mm at the default | 55 us per propagation at relTol 1e-9 | accurate J2/J4 trajectories, covariance |
-| `Sgp4` | SGP4/SDP4 from two-line elements | that of the TLE (typically ~km) | 0.3 us per call (1.3 us deep space) | catalogue element sets |
+| `Sgp4` | SGP4/SDP4 from two-line elements | that of the TLE (typically ~km) | 0.2 us per call (0.45 us deep space) | catalogue element sets |
 
 Numbers are from [Accuracy](../accuracy.md) and [Performance](../performance.md). All of them except
 `Sgp4` also propagate a covariance: see [Covariance and tracking](covariance-tracking.md).
@@ -139,7 +139,7 @@ gets the period wrong and the error grows every orbit:
 | SSO 800 km, e = 0.01 | 136 km | 5.9 km |
 | 1000 x 20000 km | 219 km | 3.8 km |
 
-Even fitted, the residual stays at the 1-4 km level: those are the short-period oscillations a
+Even fitted, the residual stays at the 2-6 km level: those are the short-period oscillations a
 mean-element theory leaves out. For metre-level work use `NumericalPropagator`. The state's frame
 must have z along the pole (TOD, TEME, CIRS), or be rotated with `poleOfDateMatrix` first.
 
