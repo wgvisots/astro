@@ -25,6 +25,7 @@
 #include "astro/orbit/sgp4.h"
 
 #include <cmath>
+#include <limits>
 #include <string>
 
 #include "../core/enum_io.h"
@@ -57,9 +58,13 @@ const char* errorMessage(int code) {
     case 3:  return "SGP4: perturbed eccentricity out of range";
     case 4:  return "SGP4: semi-latus rectum less than zero";
     case 6:  return "SGP4: satellite has decayed";
+    case 7:  return "SGP4: the time is not finite";
     default: return "SGP4: propagation error";
     }
 }
+
+/// Error code for a time that is not finite: not one of the reference code's (1-6).
+constexpr int kTimeNotFinite = 7;
 
 // Throws astro::Error naming the element if it is NaN or infinite. The range tests of the reference code
 // (e >= 1, n <= 0, ...) are all false for NaN, so a non-finite element would pass them and come out as a NaN state
@@ -1000,12 +1005,23 @@ Sgp4::Sgp4(Sgp4&&) noexcept            = default;
 Sgp4& Sgp4::operator=(Sgp4&&) noexcept = default;
 
 int Sgp4::propagate(double minutes, StateVector& out) const noexcept {
+    // The theory's own range tests are all false for a NaN, which would come out as a NaN state
+    // with code 0, and the deep-space resonance integration steps towards the requested time, so an
+    // infinite one would never be reached. Code 7 is this library's, not one of the reference code's.
+    if (!std::isfinite(minutes)) {
+        constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+        out                  = {
+            {nan, nan, nan},
+            {nan, nan, nan}
+        };
+        return kTimeNotFinite;
+    }
     return impl_->sgp4(minutes, out);
 }
 
 StateVector Sgp4::propagate(double minutes) const {
     StateVector out;
-    const int   code = impl_->sgp4(minutes, out);
+    const int   code = propagate(minutes, out);
     if (code != 0) {
         throw Sgp4Error(code, errorMessage(code));
     }

@@ -184,6 +184,42 @@ TEST(Sgp4, TimeInterfaceAndDeepSpaceFlag) {
     test::expectVecNear(copy.propagate(10.0).r, s.propagate(10.0).r, 0.0);
 }
 
+TEST(Sgp4, TimeThatIsNotFiniteIsAnError) {
+    // A NaN time used to come back as a NaN state with code 0: success. An infinite one on a resonant
+    // deep-space orbit would never return, because the resonance terms are integrated step by step
+    // towards the time asked for. (So only NaN is tried on such an orbit before the fix.)
+    const Tle iss = Tle::parse("1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927",
+                               "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537");
+    // Molniya 2-14, 12 h resonant, from the verification set.
+    const Tle    molniya = Tle::parse("1 08195U 75081A   06176.33215444  .00000099  00000-0  11873-3 0   813",
+                                   "2 08195  64.1586 279.0717 6877146 264.7651  20.2257  2.00491383225656");
+    const double nan     = std::numeric_limits<double>::quiet_NaN();
+    const double inf     = std::numeric_limits<double>::infinity();
+    EXPECT_FALSE(Sgp4(iss).isDeepSpace());
+    EXPECT_TRUE(Sgp4(molniya).isDeepSpace());
+    for (const Tle& tle : {iss, molniya}) {
+        const Sgp4 sgp4(tle);
+        for (double minutes : {nan, inf, -inf}) {
+            StateVector s{
+                {1.0, 2.0, 3.0},
+                {4.0, 5.0, 6.0}
+            };
+            EXPECT_EQ(sgp4.propagate(minutes, s), 7) << minutes;
+            EXPECT_TRUE(std::isnan(s.r.x) && std::isnan(s.r.z) && std::isnan(s.v.y)) << minutes;
+            try {
+                (void)sgp4.propagate(minutes);
+                ADD_FAILURE() << "no exception for " << minutes;
+            } catch (const Sgp4Error& e) {
+                EXPECT_EQ(e.code(), 7) << minutes;
+            }
+        }
+        // An ordinary time still works after those.
+        StateVector s;
+        EXPECT_EQ(sgp4.propagate(10.0, s), 0);
+        EXPECT_TRUE(std::isfinite(norm(s.r)));
+    }
+}
+
 TEST(Sgp4, RejectsNonFiniteElements) {
     // SGP4's own range tests (e >= 1, n <= 0, ...) are all false for NaN, so a NaN element used to go through to a
     // NaN state with error code 0. Each element the theory uses must be refused when the propagator is built.

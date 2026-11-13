@@ -58,7 +58,8 @@ std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value);
 
 /// SGP4 error codes (Vallado): 1 mean eccentricity out of range, 2 mean motion
 /// negative, 3 perturbed eccentricity out of range, 4 semi-latus rectum negative,
-/// 6 satellite has decayed.
+/// 6 satellite has decayed. One more is this library's own: 7, the time asked for
+/// is not finite.
 class Sgp4Error : public Error {
 public:
     /// `code` is the SGP4 error code, `what` the message.
@@ -103,7 +104,8 @@ public:
     /// TEME state at a time (any scale).
     [[nodiscard]] StateVector propagate(const Time& t) const;
     /// Non-throwing variant: returns the SGP4 error code (0 on success). For
-    /// code 6 (decayed) the state is still filled in, as in Vallado's code.
+    /// code 6 (decayed) the state is still filled in, as in Vallado's code. For
+    /// code 7 (the time is NaN or infinite) every component of the state is NaN.
     [[nodiscard]] int propagate(double minutesSinceEpoch, StateVector& out) const noexcept;
 
     /// The element set this propagator was built from.
