@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <string>
 #include <vector>
@@ -29,6 +30,7 @@
 #include "test_util.h"
 
 using namespace astro;
+using astro::test::dataPath;
 
 namespace {
 
@@ -624,4 +626,52 @@ TEST(Tle, ParseManyAcceptsNamesBlankLinesCommentsAndBothLineEndings) {
     }
     EXPECT_TRUE(Tle::parseMany("").empty());
     EXPECT_TRUE(Tle::parseMany("# nothing here\n\n").empty());
+}
+
+// --- The verification set -------------------------------------------------------------------------------------------
+
+TEST(Tle, VerificationSetSurvivesParseFormatParse) {
+    // Every element set of Vallado's SGP4 verification file (which has several odd ones: blank fields, a blank
+    // international designator, exponents written "+0" and "-0", 0.99999999 rev/day^2) must be read, written
+    // and read again without any field changing. Several sets have a deliberately wrong checksum, and line 2
+    // carries the test's start, stop and step times after column 69, so the file is read without verification;
+    // the lines written must verify.
+    std::ifstream file(dataPath("SGP4-VER.TLE"));
+    ASSERT_TRUE(file) << "cannot open " << dataPath("SGP4-VER.TLE");
+    std::string line, line1;
+    int         sets = 0;
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        if (line[0] == '1') {
+            line1 = line;
+            continue;
+        }
+        ASSERT_EQ(line[0], '2') << line;
+        const Tle first  = Tle::parse(line1, line.substr(0, 69), "", false);
+        const Tle second = Tle::parse(first.line1(), first.line2());
+        SCOPED_TRACE(line1);
+        EXPECT_EQ(second.satnum, first.satnum);
+        EXPECT_EQ(second.classification, first.classification);
+        EXPECT_EQ(second.intlDesignator, first.intlDesignator);
+        EXPECT_TRUE(second.epoch == first.epoch) << second.epoch.iso8601(9) << " vs " << first.epoch.iso8601(9);
+        EXPECT_EQ(second.meanMotionDot, first.meanMotionDot);
+        EXPECT_EQ(second.meanMotionDdot, first.meanMotionDdot);
+        EXPECT_EQ(second.bstar, first.bstar);
+        EXPECT_EQ(second.ephemerisType, first.ephemerisType);
+        EXPECT_EQ(second.elementSetNumber, first.elementSetNumber);
+        EXPECT_EQ(second.inclination, first.inclination);
+        EXPECT_EQ(second.raan, first.raan);
+        EXPECT_EQ(second.eccentricity, first.eccentricity);
+        EXPECT_EQ(second.argPerigee, first.argPerigee);
+        EXPECT_EQ(second.meanAnomaly, first.meanAnomaly);
+        EXPECT_EQ(second.meanMotion, first.meanMotion);
+        EXPECT_EQ(second.revolutionNumber, first.revolutionNumber);
+        // Line 2 has no field with two spellings, so it comes back character for character (the checksum
+        // column aside, for the sets whose checksum is wrong on purpose).
+        EXPECT_EQ(first.line2().substr(0, 68), line.substr(0, 68));
+        ++sets;
+    }
+    EXPECT_EQ(sets, 33);
 }
