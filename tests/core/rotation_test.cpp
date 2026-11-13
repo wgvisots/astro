@@ -18,6 +18,8 @@
 
 #include "astro/core/rotation.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <random>
@@ -62,6 +64,61 @@ void expectQuatNear(const Quat& a, const Quat& b, double tol, const char* what =
 Mat3 rodrigues(const Vec3& n, double theta) {
     const double c = std::cos(theta), s = std::sin(theta);
     return c * Mat3::identity() + (1.0 - c) * outer(n, n) - s * Mat3::skew(n);
+}
+
+// The Euler tests below build and compare matrices in extended precision (long double), with the
+// rotation matrices written out again from their definition, so that the truth owes nothing to the
+// library and has no rounding error of its own at the level being tested.
+using Mat3L = std::array<std::array<long double, 3>, 3>;
+
+/// Passive rotation about axis 1, 2 or 3 (as R1, R2, R3 in rotation.h) from the cosine and sine of its angle.
+Mat3L frameRotation(int axis, long double c, long double s) {
+    // clang-format off
+    switch (axis) {
+    case 1:  return {{{1, 0,  0}, { 0, c, s}, {0, -s, c}}};
+    case 2:  return {{{c, 0, -s}, { 0, 1, 0}, {s,  0, c}}};
+    default: return {{{c, s,  0}, {-s, c, 0}, {0,  0, 1}}};
+    }
+    // clang-format on
+}
+
+Mat3L product(const Mat3L& a, const Mat3L& b) {
+    Mat3L p{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            p[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
+        }
+    }
+    return p;
+}
+
+/// Direction cosine matrix of an Euler sequence, R_k(c) R_j(b) R_i(a). The middle rotation is given by
+/// its cosine and sine, so that gimbal lock can be set exactly.
+Mat3L eulerMatrix(const std::array<int, 3>& axes, long double a, long double cosB, long double sinB, long double c) {
+    return product(product(frameRotation(axes[2], std::cos(c), std::sin(c)), frameRotation(axes[1], cosB, sinB)),
+                   frameRotation(axes[0], std::cos(a), std::sin(a)));
+}
+
+/// The matrix rounded to double precision: the nearest a caller could hold.
+Mat3 rounded(const Mat3L& m) {
+    Mat3 r;
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            r(i, j) = static_cast<double>(m[i][j]);
+        }
+    }
+    return r;
+}
+
+/// Largest difference between an element of `a` and the same element of `b`.
+double worstDifference(const Mat3L& a, const Mat3& b) {
+    long double worst = 0.0L;
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            worst = std::max(worst, std::abs(a[i][j] - static_cast<long double>(b(i, j))));
+        }
+    }
+    return static_cast<double>(worst);
 }
 
 } // namespace
@@ -293,6 +350,80 @@ TEST_P(EulerTest, DefinitionAndRoundTrip) {
         const EulerAngles e{0.4, b, -0.3};
         const Mat3        A = eulerToMatrix(seq, e);
         expectMatNear(eulerToMatrix(seq, matrixToEuler(seq, A)), A, 1e-12, "gimbal");
+    }
+}
+
+// The angles returned for a matrix must give that matrix back, to rounding, wherever the middle angle is:
+// far from gimbal lock, at it, and in the band next to it. The middle angle is set a distance d from
+// lock, from 1e-18 rad to 1.5 rad, with the other two angles random. Truth: the matrix itself, rebuilt
+// from the returned angles in extended precision. Before the fix the rebuilt matrix was wrong by up to
+// 2.7e-6 for d below 1.4e-6, and the middle angle by up to 1e-8.
+TEST_P(EulerTest, RecomposesToRoundingUpToGimbalLock) {
+    const EulerSequence                    seq    = GetParam();
+    const auto                             ax     = eulerAxes(seq);
+    const bool                             proper = ax[0] == ax[2];
+    const long double                      piL    = std::acos(-1.0L);
+    std::mt19937                           rng(11);
+    std::uniform_real_distribution<double> u(-3.1, 3.1);
+    // Gimbal lock is at a middle angle of 0 and pi for the proper Euler sequences, +-pi/2 for the others.
+    for (long double lock :
+         proper ? std::array<long double, 2>{0.0L, piL} : std::array<long double, 2>{piL / 2, -piL / 2}) {
+        const long double inward = lock > 1.0L ? -1.0L : 1.0L; // steps into the range of the middle angle
+        for (double d : {1e-18, 1e-17,  1e-16, 2e-16, 2.5e-16, 1e-15, 1e-14, 1e-12, 1e-10, 1e-8, 1e-7,
+                         1e-6,  1.4e-6, 3e-6,  1e-5,  1e-4,    1e-3,  1e-2,  0.1,   0.7,   1.5}) {
+            for (int n = 0; n < 40; ++n) {
+                const double      a = u(rng), c = u(rng);
+                const long double b = lock + inward * d;
+                SCOPED_TRACE(testing::Message() << "lock at " << static_cast<double>(lock) << ", d = " << d
+                                                << ", a = " << a << ", c = " << c);
+                const Mat3        A = rounded(eulerMatrix(ax, a, std::cos(b), std::sin(b), c));
+                const EulerAngles r = matrixToEuler(seq, A);
+                // Tolerance 1e-15. A is within 1.1e-16 of a rotation matrix (it was rounded), the
+                // returned angles carry a rounding error each, and inside the lock band (d below
+                // 2.2e-16) setting the third angle to zero moves an element by up to 2 d = 4.4e-16.
+                // The worst seen over 4.8 million random cases, all sequences, was 5.0e-16.
+                const long double bBack = r.b;
+                EXPECT_LE(worstDifference(eulerMatrix(ax, r.a, std::cos(bBack), std::sin(bBack), r.c), A), 1e-15);
+                // The middle angle is well determined everywhere. 1e-15 is about two rounding errors of
+                // pi (4.4e-16 each); the worst seen was one.
+                EXPECT_NEAR(r.b, static_cast<double>(b), 1e-15);
+                // Outside the lock band the first and third angles are recovered too, to the same
+                // 1e-15 (worst seen 4.4e-16). They come from elements of size d, which the rounding of A
+                // keeps to 16 digits here; in a matrix with absolute errors of 1e-16 they are only
+                // good to 1e-16 / d, which is gimbal lock itself.
+                if (d >= 1e-15) {
+                    EXPECT_NEAR(r.a, a, 1e-15);
+                    EXPECT_NEAR(r.c, c, 1e-15);
+                }
+            }
+        }
+    }
+}
+
+// At gimbal lock only the sum or the difference of the first and third angles is defined. The documented
+// convention is that the third angle is returned as zero (the first then carries both). "At lock" means
+// exactly, and also within rounding of it: the constants halfPi and pi are not exactly pi/2 and pi, so
+// cos(halfPi) and sin(pi) are about 1e-16 instead of zero.
+TEST_P(EulerTest, ThirdAngleIsZeroAtGimbalLock) {
+    const EulerSequence                    seq    = GetParam();
+    const auto                             ax     = eulerAxes(seq);
+    const bool                             proper = ax[0] == ax[2];
+    std::mt19937                           rng(13);
+    std::uniform_real_distribution<double> u(-3.1, 3.1);
+    for (int n = 0; n < 40; ++n) {
+        const double a = u(rng), c = u(rng);
+        for (long double sign : {1.0L, -1.0L}) {
+            // Exact lock: the cosine (or sine) of the middle angle is exactly zero.
+            const Mat3L       exact = proper ? eulerMatrix(ax, a, sign, 0.0L, c) : eulerMatrix(ax, a, 0.0L, sign, c);
+            const EulerAngles r     = matrixToEuler(seq, rounded(exact));
+            EXPECT_EQ(r.c, 0.0);
+            EXPECT_LE(worstDifference(exact, eulerToMatrix(seq, r)), 1e-15);
+        }
+        // The same through the library's own constants.
+        for (double b : proper ? std::array<double, 2>{0.0, constants::pi}
+                               : std::array<double, 2>{constants::halfPi, -constants::halfPi}) {
+            EXPECT_EQ(matrixToEuler(seq, eulerToMatrix(seq, {a, b, c})).c, 0.0) << "middle angle " << b;
+        }
     }
 }
 

@@ -151,8 +151,15 @@ struct EulerAngles {
 [[nodiscard]] Mat3 eulerToMatrix(EulerSequence seq, const EulerAngles& angles) noexcept;
 
 /// Inverse of eulerToMatrix. Middle angle is in [-pi/2, pi/2] for Tait-Bryan
-/// sequences and in [0, pi] for proper Euler sequences. At gimbal lock the third
-/// angle is set to zero.
+/// sequences and in [0, pi] for proper Euler sequences. The angles returned give `dcm` back through
+/// eulerToMatrix to rounding (about 1e-15) wherever the middle angle is.
+///
+/// At gimbal lock only the sum or the difference of the first and third angles is defined: the third
+/// angle is set to zero and the first carries both. Gimbal lock is a middle angle within rounding
+/// (2e-16 rad) of +-pi/2 for a Tait-Bryan sequence, or of 0 or pi for a proper Euler sequence. Just
+/// outside it the first and third angles are returned separately, but they are only as well
+/// determined as the matrix allows: an error of 1e-16 in `dcm` moves them by 1e-16 divided by the
+/// distance from lock.
 [[nodiscard]] EulerAngles matrixToEuler(EulerSequence seq, const Mat3& dcm) noexcept;
 
 /// Re-orthonormalize a nearly-orthogonal rotation matrix (via quaternion).

@@ -216,30 +216,49 @@ EulerAngles matrixToEuler(EulerSequence seq, const Mat3& dcm) noexcept {
     // Third axis distinct from i and j.
     const std::size_t k = proper ? 3 - i - j : static_cast<std::size_t>(ax[2] - 1);
     // +1 if (i, j, k) is a cyclic permutation of (0, 1, 2), else -1.
-    const double     s       = ((j == (i + 1) % 3) ? 1.0 : -1.0);
-    constexpr double lockTol = 1e-12;
+    const double s = ((j == (i + 1) % 3) ? 1.0 : -1.0);
+
+    // The angles are found in the order b, c, a, so that together they give M back to rounding
+    // everywhere, the neighbourhood of gimbal lock included:
+    //  - b from its sine and its cosine with atan2. One of the two is a single element of M and the
+    //    other is the length of a pair of elements, which is what tells b from +-pi/2 (or from 0 and pi).
+    //    The single element alone, through asin or acos, loses half the digits near lock, where it is
+    //    close to +-1 and flat in b.
+    //  - c from that same pair of elements. Near lock the pair is small, and c is as uncertain as
+    //    the pair is small: that is gimbal lock, not a fault of the formula.
+    //  - a from M Rot_k(c)^T = Rot_i(a) Rot_j(b), using the c just found. Whatever error c has, a
+    //    takes up, so the three still recompose to M. (Taking a from a second small pair,
+    //    independently of c, does not: the two errors are unrelated.)
+    // At lock itself only a + c or a - c is defined, and c is set to zero as documented. "At lock"
+    // means that the pair is shorter than lockTol. One unit of rounding is the widest band that costs
+    // nothing: setting c to zero moves an element of the recomposed matrix by at most twice the
+    // length of the pair. (The band used to be 1.4e-6 wide, and the result was wrong by 2.7e-6 inside it.)
+    constexpr double lockTol = std::numeric_limits<double>::epsilon();
 
     EulerAngles e;
+    double      sinC = 0.0, cosC = 1.0; // of the third angle: zero unless found below
     if (!proper) {
-        const double sb = std::clamp(s * M(i, k), -1.0, 1.0);
-        e.b             = std::asin(sb);
-        if (1.0 - std::abs(sb) > lockTol) {
-            e.a = std::atan2(-s * M(j, k), M(k, k));
-            e.c = std::atan2(-s * M(i, j), M(i, i));
-        } else {
-            e.a = std::atan2(s * M(k, j), M(j, j));
-            e.c = 0.0;
+        // Row i of M is (cos b cos c, -s cos b sin c, s sin b) in columns (i, j, k).
+        const double cosB = std::hypot(M(i, i), M(i, j));
+        e.b               = std::atan2(s * M(i, k), cosB);
+        if (!(cosB < lockTol)) { // written so that a not-a-number (NaN) goes on to give NaN
+            e.c  = std::atan2(-s * M(i, j), M(i, i));
+            sinC = std::sin(e.c);
+            cosC = std::cos(e.c);
         }
+        // Column j of M Rot_k(c)^T is (0, cos a, s sin a) in rows (i, j, k).
+        e.a = std::atan2(sinC * M(k, i) + s * cosC * M(k, j), s * sinC * M(j, i) + cosC * M(j, j));
     } else {
-        const double cb = std::clamp(M(i, i), -1.0, 1.0);
-        e.b             = std::acos(cb);
-        if (1.0 - std::abs(cb) > lockTol) {
-            e.a = std::atan2(M(j, i), -s * M(k, i));
-            e.c = std::atan2(M(i, j), s * M(i, k));
-        } else {
-            e.a = std::atan2(s * M(k, j), M(j, j));
-            e.c = 0.0;
+        // Here Rot_k is Rot_i again. Row i of M is (cos b, sin b sin c, s sin b cos c) in columns (i, j, k).
+        const double sinB = std::hypot(M(i, j), M(i, k));
+        e.b               = std::atan2(sinB, M(i, i));
+        if (!(sinB < lockTol)) {
+            e.c  = std::atan2(M(i, j), s * M(i, k));
+            sinC = std::sin(e.c);
+            cosC = std::cos(e.c);
         }
+        // Column j of M Rot_i(c)^T is (0, cos a, s sin a) in rows (i, j, k).
+        e.a = std::atan2(s * cosC * M(k, j) - sinC * M(k, k), cosC * M(j, j) - s * sinC * M(j, k));
     }
     return e;
 }
