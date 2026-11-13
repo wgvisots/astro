@@ -122,22 +122,32 @@ struct SpkEphemeris::Impl {
         }
         unsigned char rec[kRecordBytes];
         readBytes(0, rec, kRecordBytes);
-        if (std::memcmp(rec, "DAF/SPK ", 8) != 0) {
+        // The id word is "DAF/SPK ", or "NAIF/DAF" in kernels written by early SPICE Toolkits (the
+        // de405.bsp that NAIF distributes is one).
+        const bool older = std::memcmp(rec, "NAIF/DAF", 8) == 0;
+        if (!older && std::memcmp(rec, "DAF/SPK ", 8) != 0) {
             throw Error("SPK: not a DAF/SPK file: " + path);
         }
+        std::int32_t nd, ni, fward;
+        std::memcpy(&nd, rec + 8, 4);
+        std::memcpy(&ni, rec + 12, 4);
+        std::memcpy(&fward, rec + 76, 4);
+        const bool        hostBig = std::endian::native == std::endian::big;
         const std::string fmt(reinterpret_cast<const char*>(rec) + 88, 8);
         if (fmt == "BIG-IEEE") {
             big = true;
         } else if (fmt == "LTL-IEEE") {
             big = false;
+        } else if (older) {
+            // Those kernels were also written before the file record had a binary-format word (their
+            // bytes 88-95 are zero). An SPK file has ND = 2 and NI = 6, which read as such in one byte
+            // order only, so that is the order of the file; jplephem finds it the same way. If
+            // neither order fits, the ND/NI check below rejects the file.
+            big = (nd == 2 && ni == 6) == hostBig;
         } else {
             throw Error("SPK: unsupported binary format '" + fmt + "'");
         }
-        swap = big != (std::endian::native == std::endian::big);
-        std::int32_t nd, ni, fward;
-        std::memcpy(&nd, rec + 8, 4);
-        std::memcpy(&ni, rec + 12, 4);
-        std::memcpy(&fward, rec + 76, 4);
+        swap  = big != hostBig;
         nd    = fix(nd);
         ni    = fix(ni);
         fward = fix(fward);

@@ -56,7 +56,9 @@ struct SpkSegmentInfo {
 class SpkEphemeris final : public Ephemeris {
 public:
     /// Open the kernel at `path` and read its segment summaries. Throws astro::Error if the file
-    /// cannot be opened or read, is not a DAF/SPK file in IEEE format, or has no segments.
+    /// cannot be opened or read, is not a DAF/SPK file in IEEE format, or has no segments. The file
+    /// may begin with the id word "DAF/SPK " or with the "NAIF/DAF" of older kernels (de405.bsp, for
+    /// one); for those, which do not name their byte order, it is found from the file record.
     explicit SpkEphemeris(const std::string& path);
     ~SpkEphemeris() override;
     /// Move; the moved-from object may only be destroyed or assigned to.

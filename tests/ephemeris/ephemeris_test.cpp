@@ -230,6 +230,39 @@ TEST(Spk, SegmentInAnotherFrameIsRefused) {
     EXPECT_EQ(expectReferenceStates(spk, [](int, int target) { return target != 10; }), 100);
 }
 
+TEST(Spk, OlderNaifDafFileRecordIsAccepted) {
+    // Kernels written by early SPICE Toolkits (the de405.bsp that NAIF distributes is one) begin with
+    // the id word "NAIF/DAF" instead of "DAF/SPK ", and their file record ends after the FREE pointer:
+    // bytes 88 onward are zero, so there is no binary-format word ("BIG-IEEE" / "LTL-IEEE") and no FTP
+    // test string. The byte order then has to be found from ND = 2 and NI = 6, as NAIF's own reader and
+    // jplephem find it. The rest of the file is laid out the same, so the states must be the kernel's.
+    for (const char* name : {"de440s_2024q1_le.bsp", "de440s_2024q1_be.bsp"}) {
+        const bool  big   = std::string(name).find("_be") != std::string::npos;
+        std::string bytes = fileBytes(dataPath(name));
+        ASSERT_GT(bytes.size(), 3 * 1024u);
+        const auto all = [](int, int) { return true; };
+        bytes.replace(0, 8, "NAIF/DAF");
+        { // Only the id word is the older one.
+            const TempKernel   kernel(bytes);
+            const SpkEphemeris spk(kernel.path());
+            EXPECT_EQ(spk.bigEndian(), big) << name;
+            EXPECT_EQ(expectReferenceStates(spk, all), 125) << name;
+        }
+        std::fill(bytes.begin() + 88, bytes.begin() + 1024, '\0');
+        { // The whole file record as in de405.bsp.
+            const TempKernel   kernel(bytes);
+            const SpkEphemeris spk(kernel.path());
+            EXPECT_EQ(spk.bigEndian(), big) << name;
+            EXPECT_EQ(expectReferenceStates(spk, all), 125) << name;
+        }
+        std::fill(bytes.begin() + 8, bytes.begin() + 16, '\0');
+        { // ND and NI are 2 and 6 in neither byte order: not an SPK file.
+            const TempKernel kernel(bytes);
+            EXPECT_THROW(SpkEphemeris(kernel.path()), Error) << name;
+        }
+    }
+}
+
 TEST(LowPrecision, SunAndMoonAgainstDe440) {
     const SpkEphemeris          spk(dataPath("de440s_2024q1_le.bsp"));
     const LowPrecisionEphemeris lp;
