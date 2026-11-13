@@ -19,6 +19,7 @@
 #include "astro/orbit/tle.h"
 
 #include <cctype>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <sstream>
@@ -41,66 +42,121 @@ std::string trim(std::string_view s) {
     return std::string(s.substr(b, e - b));
 }
 
-// Columns are 1-based inclusive as in the TLE specification.
-std::string_view cols(std::string_view line, std::size_t first, std::size_t last) {
-    if (line.size() < first) {
-        return {};
+// Columns `first` to `last` of `line`, counted from 1 and inclusive as in the TLE specification. The result always
+// has the full width of the field: columns past the end of a short line are blank.
+std::string cols(std::string_view line, std::size_t first, std::size_t last) {
+    std::string field(last - first + 1, ' ');
+    if (line.size() >= first) {
+        const std::string_view present = line.substr(first - 1, field.size());
+        field.replace(0, present.size(), present);
     }
-    return line.substr(first - 1, std::min(last, line.size()) - first + 1);
+    return field;
 }
 
+[[noreturn]] void badField(const char* what, std::string_view field) {
+    throw Error(std::string("TLE: bad ") + what + " field '" + std::string(field) + "'");
+}
+
+bool isDigit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+// `s` without the blanks at its two ends.
+std::string_view stripBlanks(std::string_view s) {
+    while (!s.empty() && s.front() == ' ') {
+        s.remove_prefix(1);
+    }
+    while (!s.empty() && s.back() == ' ') {
+        s.remove_suffix(1);
+    }
+    return s;
+}
+
+// The number fields are read as a fixed-format (Fortran) read would take them: digits, at most one sign and one
+// decimal point, and blanks, with an all-blank field read as zero. The C library's conversions (std::stod,
+// std::stoi) are not used to decide what a number is: they also take "nan", "inf", hexadecimal and exponents,
+// none of which a TLE field can hold, and they follow the program's locale.
+
+// A field with an explicit decimal point: blanks, an optional sign, digits with at most one decimal point, blanks.
 double toDouble(std::string_view s, const char* what) {
-    const std::string t = trim(s);
+    const std::string_view t = stripBlanks(s);
     if (t.empty()) {
         return 0.0;
     }
-    try {
-        std::size_t  pos = 0;
-        const double v   = std::stod(t, &pos);
-        if (pos != t.size()) {
-            throw std::invalid_argument("trailing");
+    const bool        negative = t[0] == '-';
+    const std::size_t start    = (negative || t[0] == '+') ? 1 : 0;
+    std::size_t       digits = 0, points = 0;
+    for (std::size_t i = start; i < t.size(); ++i) {
+        if (isDigit(t[i])) {
+            ++digits;
+        } else if (t[i] == '.') {
+            ++points;
+        } else {
+            badField(what, s);
         }
-        return v;
-    } catch (const std::exception&) {
-        throw Error(std::string("TLE: bad ") + what + " field '" + t + "'");
     }
+    if (digits == 0 || points > 1) {
+        badField(what, s);
+    }
+    double      v        = 0.0;
+    const char* end      = t.data() + t.size();
+    const auto [ptr, ec] = std::from_chars(t.data() + start, end, v, std::chars_format::fixed);
+    if (ec != std::errc{} || ptr != end) {
+        badField(what, s);
+    }
+    return negative ? -v : v;
 }
 
+// A whole-number field: blanks, digits, blanks. None of these fields is signed, and none is wider than five
+// columns, so the value cannot overflow.
 int toInt(std::string_view s, const char* what) {
-    const std::string t = trim(s);
-    if (t.empty()) {
-        return 0;
+    const std::string_view t = stripBlanks(s);
+    if (t.size() > 5) {
+        badField(what, s);
     }
-    try {
-        std::size_t pos = 0;
-        const int   v   = std::stoi(t, &pos);
-        if (pos != t.size()) {
-            throw std::invalid_argument("trailing");
+    int v = 0;
+    for (const char c : t) {
+        if (!isDigit(c)) {
+            badField(what, s);
         }
-        return v;
-    } catch (const std::exception&) {
-        throw Error(std::string("TLE: bad ") + what + " field '" + t + "'");
+        v = 10 * v + (c - '0');
     }
+    return v;
 }
 
-// "-12345-6" style assumed-decimal exponent field: -0.12345e-6.
+// A field of digits with the decimal point implied before the first column: "0006703" is 0.0006703. A blank column
+// is a zero digit wherever it is, as in Vallado's reference reader (twoline2rv fills these columns with zeros
+// before it reads the number). Taking the blanks for padding instead would move the digits up and make the value
+// ten times too large for every leading blank. Returns false if a column holds anything but a digit or a blank.
+bool toImpliedDecimal(std::string_view s, double& value) {
+    double digits = 0.0, scale = 1.0;
+    for (const char c : s) {
+        if (c != ' ' && !isDigit(c)) {
+            return false;
+        }
+        digits  = 10.0 * digits + (c == ' ' ? 0 : c - '0');
+        scale  *= 10.0;
+    }
+    // Both numbers are exact, so the quotient is the double nearest to the decimal number, as a decimal read of
+    // "0.NNNNNNN" would give.
+    value = digits / scale;
+    return true;
+}
+
+// The "+NNNNN-N" fields (second derivative of the mean motion, and B*): a sign, five mantissa digits with the
+// decimal point implied before them, the sign of the exponent and one exponent digit, so "-11606-4" is
+// -0.11606e-4. A blank sign is a plus and a blank digit is a zero. The value is formed as the reference reader
+// forms it, mantissa times pow(10, exponent), so that SGP4 starts from the same B* bit for bit.
 double parseExpField(std::string_view s, const char* what) {
-    std::string t = trim(s);
-    if (t.empty()) {
-        return 0.0;
+    const auto isSign   = [](char c) { return c == ' ' || c == '+' || c == '-'; };
+    double     mantissa = 0.0;
+    if (s.size() != 8 || !isSign(s[0]) || !isSign(s[6]) || (s[7] != ' ' && !isDigit(s[7]))
+        || !toImpliedDecimal(s.substr(1, 5), mantissa)) {
+        badField(what, s);
     }
-    double sign = 1.0;
-    if (t[0] == '-' || t[0] == '+') {
-        sign = t[0] == '-' ? -1.0 : 1.0;
-        t.erase(0, 1);
-    }
-    const auto epos = t.find_last_of("+-");
-    if (epos == std::string::npos || epos == 0) {
-        return sign * toDouble("0." + t, what);
-    }
-    const double mant = toDouble("0." + trim(t.substr(0, epos)), what);
-    const int    ex   = toInt(t.substr(epos), what);
-    return sign * mant * std::pow(10.0, ex);
+    const int    exponent = s[7] == ' ' ? 0 : s[7] - '0';
+    const double value    = mantissa * std::pow(10.0, s[6] == '-' ? -exponent : exponent);
+    return s[0] == '-' ? -value : value;
 }
 
 std::string formatExpField(double v) {
@@ -224,7 +280,9 @@ Tle Tle::parse(std::string_view l1, std::string_view l2, std::string_view name, 
     t.elementSetNumber = toInt(cols(a, 65, 68), "element set number");
     t.inclination      = deg2rad(toDouble(cols(b, 9, 16), "inclination"));
     t.raan             = deg2rad(toDouble(cols(b, 18, 25), "RAAN"));
-    t.eccentricity     = toDouble("0." + trim(cols(b, 27, 33)), "eccentricity");
+    if (!toImpliedDecimal(cols(b, 27, 33), t.eccentricity)) {
+        badField("eccentricity", cols(b, 27, 33));
+    }
     t.argPerigee       = deg2rad(toDouble(cols(b, 35, 42), "argument of perigee"));
     t.meanAnomaly      = deg2rad(toDouble(cols(b, 44, 51), "mean anomaly"));
     t.meanMotion       = toDouble(cols(b, 53, 63), "mean motion");

@@ -51,6 +51,13 @@ struct Tle {
 
     /// Parse the two data lines. Throws astro::Error on malformed lines or (when
     /// `verifyChecksum`) checksum mismatch.
+    ///
+    /// The fields are read by column, as a fixed-format read would take them. A number field may hold
+    /// digits, one sign, one decimal point and blank padding; anything else ("nan", "inf", an exponent,
+    /// hexadecimal, a sign in a whole-number field) throws astro::Error naming the field. An all-blank
+    /// number field is zero. In the fields with an implied decimal point (the eccentricity, and the
+    /// mantissas of B* and of the second derivative of the mean motion) a blank column is a zero digit,
+    /// as in the SGP4 reference code: an eccentricity field of " 006703" is 0.0006703.
     [[nodiscard]] static Tle
     parse(std::string_view line1, std::string_view line2, std::string_view name = "", bool verifyChecksum = true);
     /// Parse a text block of 2-line or 3-line (name + 2 lines) element sets.
