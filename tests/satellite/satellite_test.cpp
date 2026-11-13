@@ -16,6 +16,8 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <cmath>
+
 #include "astro/core/angle.h"
 #include "astro/ephemeris/low_precision.h"
 #include "astro/frames/transform.h"
@@ -92,6 +94,110 @@ TEST(Passes, IssOverSiteMatchesBruteForce) {
         EXPECT_NEAR(p.maxElevation, best, deg2rad(0.001));
         EXPECT_GE(p.maxElevation, best - 1e-9);
     }
+}
+
+namespace {
+
+/// A satellite flying due east at a constant height above a site's horizontal plane, passing
+/// `offset` metres north of the zenith at time `peak`. `s` seconds after the peak its east, north, up
+/// position is (speed s, offset, height), so every quantity of the pass has a closed form.
+struct StraightPass {
+    Geodetic site{deg2rad(40.0), deg2rad(-105.0), 1600.0};
+    Time     peak   = Time::fromIso8601("2024-03-01T12:00:00Z");
+    double   height = 400 * km, offset = 50 * km, speed = 7 * km;
+
+    [[nodiscard]] ItrsStateFunction state() const {
+        return [*this](const Time& t) {
+            const Vec3 velocity = ecefToEnuMatrix(site.lat, site.lon).transpose() * Vec3{speed, 0.0, 0.0};
+            return StateVector{enuToEcef({speed * (t - peak), offset, height}, site), velocity};
+        };
+    }
+    /// Elevation (rad) `s` seconds after the peak; the greatest is atan(height / offset), 82.9 deg.
+    [[nodiscard]] double elevation(double s) const { return std::atan2(height, std::hypot(speed * s, offset)); }
+    /// Azimuth (rad, [0, 2 pi), clockwise from north) `s` seconds after the peak.
+    [[nodiscard]] double azimuth(double s) const { return wrapTwoPi(std::atan2(speed * s, offset)); }
+    /// Seconds from the peak to where the elevation is `mask`, on either side.
+    [[nodiscard]] double crossing(double mask) const {
+        return std::sqrt(std::pow(height / std::tan(mask), 2) - offset * offset) / speed;
+    }
+};
+
+// Rise and set are refined to 1 ms (the tolerance given to the root finder).
+constexpr double kCrossingTolerance = 1e-3;
+// Angles of the closed form against those from the ITRS position: 1e-9 m of rounding in coordinates
+// of 6e6 m, seen from 400 km, is 3e-15 rad.
+constexpr double kAngleTolerance = 1e-13;
+
+} // namespace
+
+TEST(Passes, WholePassMatchesClosedForm) {
+    const StraightPass p;
+    const double       mask = deg2rad(10.0), half = p.crossing(mask); // 324 s
+    const auto         passes = findPasses(p.state(), p.site, p.peak - 900.0, p.peak + 900.0, mask, 30.0);
+    ASSERT_EQ(passes.size(), 1u);
+    EXPECT_FALSE(passes[0].startsBeforeWindow);
+    EXPECT_FALSE(passes[0].endsAfterWindow);
+    EXPECT_NEAR(passes[0].aos - p.peak, -half, kCrossingTolerance);
+    EXPECT_NEAR(passes[0].los - p.peak, half, kCrossingTolerance);
+    // The elevation falls off as 1.2e-3 rad/s^2 times the square of the time from the peak, so the
+    // 1 ms the search promises for the time of the maximum is 1.2e-9 rad of elevation.
+    EXPECT_NEAR(passes[0].tca - p.peak, 0.0, 1e-3);
+    EXPECT_NEAR(passes[0].maxElevation, p.elevation(0.0), 1.2e-9);
+    // The azimuth turns by 6.8e-5 rad/s at rise and set: 1 ms is 7e-8 rad.
+    EXPECT_NEAR(passes[0].aosAzimuth, p.azimuth(-half), 7e-8);
+    EXPECT_NEAR(passes[0].losAzimuth, p.azimuth(half), 7e-8);
+}
+
+TEST(Passes, PassAlreadyDescendingAtWindowStartPeaksAtTheStart) {
+    // The window opens 100 s after the peak: within the window the elevation only falls, so its
+    // maximum is at the window's start.
+    const StraightPass p;
+    const double       mask   = deg2rad(10.0);
+    const Time         start  = p.peak + 100.0;
+    const auto         passes = findPasses(p.state(), p.site, start, start + 900.0, mask, 30.0);
+    ASSERT_EQ(passes.size(), 1u);
+    EXPECT_TRUE(passes[0].startsBeforeWindow);
+    EXPECT_FALSE(passes[0].endsAfterWindow);
+    EXPECT_EQ(passes[0].aos, start);
+    EXPECT_EQ(passes[0].tca, start);
+    EXPECT_NEAR(passes[0].maxElevation, p.elevation(100.0), kAngleTolerance); // 29.6 deg
+    EXPECT_NEAR(passes[0].aosAzimuth, p.azimuth(100.0), kAngleTolerance);
+    EXPECT_NEAR(passes[0].los - p.peak, p.crossing(mask), kCrossingTolerance);
+}
+
+TEST(Passes, PassStillRisingAtWindowEndPeaksAtTheEnd) {
+    // The window closes 100 s before the peak.
+    const StraightPass p;
+    const double       mask   = deg2rad(10.0);
+    const Time         end    = p.peak - 100.0;
+    const auto         passes = findPasses(p.state(), p.site, end - 900.0, end, mask, 30.0);
+    ASSERT_EQ(passes.size(), 1u);
+    EXPECT_FALSE(passes[0].startsBeforeWindow);
+    EXPECT_TRUE(passes[0].endsAfterWindow);
+    EXPECT_NEAR(passes[0].aos - p.peak, -p.crossing(mask), kCrossingTolerance);
+    EXPECT_EQ(passes[0].los, end);
+    EXPECT_EQ(passes[0].tca, end);
+    EXPECT_NEAR(passes[0].maxElevation, p.elevation(-100.0), kAngleTolerance);
+    EXPECT_NEAR(passes[0].losAzimuth, p.azimuth(-100.0), kAngleTolerance);
+}
+
+TEST(Passes, MaximumInsideAWindowThatCutsThePassIsFound) {
+    // The window opens 7 s before the peak, or closes 7 s after it: the pass is cut, and its maximum
+    // is inside the window, in the first or the last sample interval.
+    const StraightPass p;
+    const double       mask = deg2rad(10.0);
+    const auto         late = findPasses(p.state(), p.site, p.peak - 7.0, p.peak + 893.0, mask, 30.0);
+    ASSERT_EQ(late.size(), 1u);
+    EXPECT_TRUE(late[0].startsBeforeWindow);
+    EXPECT_EQ(late[0].aos, p.peak - 7.0);
+    EXPECT_NEAR(late[0].tca - p.peak, 0.0, 1e-3);
+    EXPECT_NEAR(late[0].maxElevation, p.elevation(0.0), 1.2e-9); // see WholePassMatchesClosedForm
+    const auto early = findPasses(p.state(), p.site, p.peak - 893.0, p.peak + 7.0, mask, 30.0);
+    ASSERT_EQ(early.size(), 1u);
+    EXPECT_TRUE(early[0].endsAfterWindow);
+    EXPECT_EQ(early[0].los, p.peak + 7.0);
+    EXPECT_NEAR(early[0].tca - p.peak, 0.0, 1e-3);
+    EXPECT_NEAR(early[0].maxElevation, p.elevation(0.0), 1.2e-9);
 }
 
 TEST(Eclipse, ShadowGeometry) {

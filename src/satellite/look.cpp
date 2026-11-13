@@ -51,13 +51,17 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
     auto              elevation = [&](const Time& t) { return lookAngles(sat(t), site, ell).el; };
     const auto        events    = findElevationEvents(elevation, start, end, minElevation, step);
     std::vector<Pass> passes;
-    bool              open = elevation(start) > minElevation;
+    const double      elStart = elevation(start);
+    bool              open    = elStart > minElevation;
     Pass              cur;
     if (open) {
+        // A pass cut by the start of the window. Its maximum within the window is the elevation at
+        // the start, unless a transit inside the window is higher (the pass was still rising).
         cur.aos                = start;
         cur.startsBeforeWindow = true;
         cur.aosAzimuth         = lookAngles(sat(start), site, ell).az;
-        cur.maxElevation       = -1e9;
+        cur.maxElevation       = elStart;
+        cur.tca                = start;
     }
     for (const SkyEvent& e : events) {
         switch (e.type) {
@@ -89,6 +93,8 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
         }
     }
     if (open) {
+        // A pass cut by the end of the window: likewise, the elevation at the end is its maximum
+        // within the window unless a transit (or the start) was higher.
         cur.los             = end;
         cur.endsAfterWindow = true;
         cur.losAzimuth      = lookAngles(sat(end), site, ell).az;
@@ -96,13 +102,6 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
         if (elEnd > cur.maxElevation) {
             cur.maxElevation = elEnd;
             cur.tca          = end;
-        }
-        if (cur.startsBeforeWindow) {
-            const double elStart = elevation(start);
-            if (elStart > cur.maxElevation) {
-                cur.maxElevation = elStart;
-                cur.tca          = start;
-            }
         }
         passes.push_back(cur);
     }
