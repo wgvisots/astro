@@ -34,6 +34,7 @@ namespace {
 
 constexpr std::size_t kRecordBytes = 1024;
 constexpr std::size_t kMaxChain    = 32; // longest center chain followed (real kernels need 2-3 hops)
+constexpr int         kFrameJ2000  = 1;  // NAIF frame id "J2000": the ICRF axes in the JPL planetary kernels
 
 template <class T>
 T swapBytes(T v) {
@@ -211,6 +212,15 @@ struct SpkEphemeris::Impl {
             if (it->info.target == target && et >= it->info.startEt && et <= it->info.endEt) {
                 if (it->info.type != 2 && it->info.type != 3) {
                     throw Error("SPK: unsupported segment type " + std::to_string(it->info.type));
+                }
+                // States are returned as ICRF axes, which is right for a segment in frame 1 only. One in
+                // another frame would need a rotation this reader does not have: refuse it rather than
+                // return its numbers as if they were frame 1.
+                if (it->info.frame != kFrameJ2000) {
+                    throw Error("SPK: segment '" + it->info.name + "' (body " + std::to_string(target)
+                                + " relative to body " + std::to_string(it->info.center) + ") of " + path
+                                + " is in reference frame " + std::to_string(it->info.frame)
+                                + "; only frame 1 (J2000 / ICRF) is supported");
                 }
                 return *it;
             }
