@@ -55,7 +55,9 @@ namespace astro {
 [[nodiscard]] double parabolicToTrueAnomaly(double D) noexcept;
 /// Barker's equation M = D + D^3/3.
 [[nodiscard]] double parabolicToMeanAnomaly(double D) noexcept;
-/// Solve Barker's equation for D (closed form).
+/// Solve Barker's equation M = D + D^3/3 for D (closed form), to rounding for every M of either
+/// sign. D has the sign of M and is finite for every finite M; an infinite M gives an infinite D
+/// and a NaN M gives NaN.
 [[nodiscard]] double meanToParabolicAnomaly(double M) noexcept;
 
 /// Mean anomaly <-> true anomaly for any eccentricity.

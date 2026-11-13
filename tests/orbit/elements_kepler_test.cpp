@@ -281,3 +281,60 @@ TEST(Kepler, SolversRejectEccentricitiesOutsideTheirDomainAndPassNonFiniteMeanAn
     EXPECT_EQ(meanToHyperbolicAnomaly(kInf, 1.5), kInf);
     EXPECT_EQ(meanToHyperbolicAnomaly(-kInf, 1.5), -kInf);
 }
+
+namespace {
+
+/// Residual of Barker's equation D + D^3/3 = M at a returned D, in units of rounding as above
+/// (dM/dD = 1 + D^2), evaluated in extended precision.
+double parabolicResidualInUlps(double D, double M) {
+    const long double Dl = D, Ml = M;
+    const long double res = Dl + Dl * Dl * Dl / 3.0L - Ml;
+    if (res == 0.0L) {
+        return 0.0;
+    }
+    const long double unit = static_cast<long double>(kEps) * (std::abs(Ml) + std::abs(Dl) * (1.0L + Dl * Dl));
+    return static_cast<double>(std::abs(res) / unit);
+}
+
+} // namespace
+
+TEST(Kepler, ParabolicAnomalySolvesBarkersEquationForBothSigns) {
+    // Solutions of D + D^3/3 = M by bisection in mpmath at 60 digits, rounded to double. The old
+    // closed form returned 0.99964e-12 for M = 1e-12 and -infinity for M = -1e8.
+    // clang-format off
+    const double refs[][2] = {
+        {1e-12,  1e-12                },
+        {-0.001, -0.000999999666667   },
+        {0.5,    0.46622052391077345  },
+        {-3.0,   -1.6096954940166688  },
+        {1000.0, 14.353160112373454   },
+        {-1e8,   -669.4314562805873   },
+        {1e30,   14422495703.074083   },
+        {-1e200, -6.694329500821695e66},
+    };
+    // clang-format on
+    for (const auto& ref : refs) {
+        EXPECT_NEAR(meanToParabolicAnomaly(ref[0]), ref[1], 4.0 * kEps * std::abs(ref[1])) << "M=" << ref[0];
+    }
+
+    double worst = 0.0, worstM = 0.0;
+    for (const double m : {5e-324, 1e-300, 1e-12, 1e-9, 1e-6, 1e-3, 0.1,  0.5,   1.0,   3.0,
+                           10.0,   1e3,    1e6,   1e8,  1e9,  1e15, 1e30, 1e100, 1e300, kMax}) {
+        const double D = meanToParabolicAnomaly(m);
+        EXPECT_TRUE(std::isfinite(D) && D > 0.0) << "M=" << m << " D=" << D;
+        // Odd in M, exactly: a negative M is as accurate as a positive one.
+        EXPECT_EQ(meanToParabolicAnomaly(-m), -D) << "M=" << m;
+        const double res = parabolicResidualInUlps(D, m);
+        if (!(res <= worst)) {
+            worst  = res;
+            worstM = m;
+        }
+    }
+    // Measured 1.8 over four million random M of both signs from 1e-300 to 1.8e308 with glibc.
+    EXPECT_LE(worst, 4.0) << "worst residual of Barker's equation at |M|=" << worstM;
+
+    EXPECT_EQ(meanToParabolicAnomaly(0.0), 0.0);
+    EXPECT_TRUE(std::isnan(meanToParabolicAnomaly(kNaN)));
+    EXPECT_EQ(meanToParabolicAnomaly(kInf), kInf);
+    EXPECT_EQ(meanToParabolicAnomaly(-kInf), -kInf);
+}

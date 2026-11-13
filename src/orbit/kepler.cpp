@@ -228,9 +228,23 @@ double parabolicToMeanAnomaly(double D) noexcept {
 }
 
 double meanToParabolicAnomaly(double M) noexcept {
-    // Closed-form solution of Barker's equation.
-    const double w = std::cbrt(1.5 * M + std::sqrt(1.0 + 2.25 * M * M));
-    return w - 1.0 / w;
+    // Barker's equation D + D^3/3 = M is odd: solve for |M| and restore the sign. With
+    // w^3 = 3|M|/2 + sqrt(1 + 9 M^2/4) the solution is D = w - 1/w. For M < 0 the cube itself
+    // cancelled (to zero from M = -1e8 on, giving -infinity), and w - 1/w cancels for small |M|.
+    const double m = std::abs(M);
+    if (m >= 0x1p100) {
+        // D = cbrt(3 |M|) to rounding (1/w is below 1e-20 of w), scaled so that 3 |M| cannot
+        // overflow. Infinite M gives infinite D.
+        return std::copysign(2.0 * std::cbrt(0.375 * m), M);
+    }
+    // From w^3 - 1/w^3 = 3|M|: D = 3|M| / (w^2 + 1 + 1/w^2), a quotient of positive terms.
+    const double a  = 1.5 * m;
+    const double w  = std::cbrt(a + std::sqrt(1.0 + a * a));
+    const double w2 = w * w;
+    double       D  = 3.0 * m / (w2 + 1.0 + 1.0 / w2);
+    // One Newton step takes out the rounding of the cube root (a few units in the last place).
+    D -= (D + D * D * D / 3.0 - m) / (1.0 + D * D);
+    return std::copysign(D, M);
 }
 
 double meanToTrueAnomaly(double M, double e) {
