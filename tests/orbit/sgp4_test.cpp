@@ -246,3 +246,59 @@ TEST(Sgp4, RejectsFiniteElementsThatGiveNoState) {
     tle.bstar = 1e300;
     EXPECT_THROW(Sgp4{tle}, Error);
 }
+
+namespace {
+// ITALSAT 2 of the verification set (24 h resonant, deep space), to be given other epochs. The sidereal time and
+// the Sun and Moon terms of a deep-space orbit depend on the epoch's day count, so its states show how the epoch
+// field was read; a near-Earth orbit's do not.
+const char* const kItalsatLine1 = "1 24208U 96044A   06177.04061740 -.00000094  00000-0  10000-3 0  1600";
+const char* const kItalsatLine2 = "2 24208   3.8536  80.0121 0026640 311.0977  48.3000  1.00778054 36119";
+
+Tle italsatWithEpoch(const char* epochField) {
+    std::string line1 = kItalsatLine1;
+    line1.replace(18, 14, epochField);
+    return Tle::parse(line1, kItalsatLine2, "", false); // the checksum no longer fits
+}
+} // namespace
+
+TEST(Sgp4, EpochOnALeapSecondDayMatchesTheReferenceCode) {
+    // The reference code reads the epoch field as a day count of 86400 s days (twoline2rv: days2mdhms, then jday),
+    // also on 2016-12-31, which was 86401 s long. These rows are the output of Vallado's reference SGP4.cpp
+    // (version 2020-07-13, WGS-72, improved mode: the code and settings that produced tcppver.out) for the element
+    // set above with its epoch field changed to 16366.50000000. km and km/s, as in tcppver.out.
+    // clang-format off
+    const VerRow reference[] = {
+        {    0.0, {  7545.707119046, 41264.404476331,   -5.035794759},
+                  {    -3.026983938287,   0.559715911174,    0.208189999904}},
+        { 1440.0, {  5513.450880877, 41588.726691865,  133.462716926},
+                  {    -3.050551758799,   0.410130497634,    0.208086913514}},
+        {43200.0, {-40413.070053964, 11424.877684897, 2875.559644864},
+                  {    -0.840794413663,  -2.957214324862,    0.020695747422}},
+    };
+    // clang-format on
+    const Tle  tle = italsatWithEpoch("16366.50000000");
+    const Sgp4 sgp4(tle);
+    ASSERT_TRUE(sgp4.isDeepSpace());
+    for (const VerRow& row : reference) {
+        const StateVector s = sgp4.propagate(row.t);
+        // The tolerances of the verification set above: 1 mm and 1 micrometre per second. A day count that is
+        // half a second off (the epoch at 12:00:00.5 instead of 12:00:00) moves this orbit by 8 mm at the epoch
+        // and by 33 m at 30 days.
+        EXPECT_LT(norm(s.r / 1000.0 - row.r), 1e-6) << "t = " << row.t << " min (km)";
+        EXPECT_LT(norm(s.v / 1000.0 - row.v), 1e-9) << "t = " << row.t << " min (km/s)";
+    }
+    // And the epoch is the instant the field names: 0.5 x 86400 s after 0h UTC.
+    EXPECT_NEAR(tle.epoch - Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 12, 0, 0.0), 0.0, 1e-7);
+}
+
+TEST(Sgp4, EpochDayCountRunsSmoothlyAcrossALeapSecond) {
+    // In the reference code's day count 2016 day 366.99999999 and 2017 day 1.00000000 are 1e-8 day apart, although
+    // a leap second lies between them. Two element sets that differ only by that step in the epoch must therefore
+    // give almost the same state at the same time since epoch: the reference code's own two states at 30 days are
+    // 6 cm apart. With a day count that jumps by the leap second they are 68 m apart.
+    const Sgp4   before(italsatWithEpoch("16366.99999999")), after(italsatWithEpoch("17001.00000000"));
+    const double thirtyDays = 30.0 * 1440.0; // minutes
+    EXPECT_LT(norm(before.propagate(thirtyDays).r - after.propagate(thirtyDays).r), 0.5);
+    // The instants themselves are a leap second and 0.864 ms (1e-8 day) apart.
+    EXPECT_NEAR(after.epoch() - before.epoch(), 1.000864, 1e-6);
+}

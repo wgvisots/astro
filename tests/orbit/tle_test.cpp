@@ -55,6 +55,11 @@ std::string withField(std::string line, std::size_t column, const std::string& t
     return withChecksum(line);
 }
 
+// Columns `first` to `last` of `line` (counted from 1, inclusive).
+std::string columns(const std::string& line, std::size_t first, std::size_t last) {
+    return line.substr(first - 1, last - first + 1);
+}
+
 // Expects `f` to throw an astro::Error whose message contains `name`: the field, line or function at fault.
 template <class F>
 void expectErrorNaming(F&& f, const std::string& name) {
@@ -68,6 +73,66 @@ void expectErrorNaming(F&& f, const std::string& name) {
 }
 
 } // namespace
+
+// --- The epoch ------------------------------------------------------------------------------------------------------
+
+TEST(Tle, EpochDayFractionIsOfAn86400SecondDayAlsoOnALeapSecondDay) {
+    // The epoch field holds the day of the year and a fraction of an 86400 s day counted from 0h UTC. That is how
+    // element sets are produced and how the SGP4 reference code reads them (twoline2rv in Vallado et al. 2006
+    // turns the fraction into hours, minutes and seconds of a 24 h day). 2016-12-31 (day 366 of 2016) and
+    // 2015-06-30 (day 181 of 2015) end with a leap second and are 86401 s long.
+    struct Case {
+        const char* field;
+        int         year, month, day, hour, minute;
+        double      second;
+    };
+    // clang-format off
+    const Case cases[] = {
+        {"16366.50000000", 2016, 12, 31, 12,  0,  0.0     }, // 0.5        x 86400 s = 43200 s
+        {"16366.75000000", 2016, 12, 31, 18,  0,  0.0     }, // 0.75       x 86400 s = 64800 s
+        {"16366.99998843", 2016, 12, 31, 23, 59, 59.000352}, // 0.99998843 x 86400 s = 86399.000352 s
+        {"15181.50000000", 2015,  6, 30, 12,  0,  0.0     },
+        {"16365.75000000", 2016, 12, 30, 18,  0,  0.0     }, // ordinary days
+        {"17001.00000000", 2017,  1,  1,  0,  0,  0.0     },
+        {"08264.51782528", 2008,  9, 20, 12, 25, 40.104192}, // 0.51782528 x 86400 s = 44740.104192 s
+    };
+    // clang-format on
+    for (const Case& c : cases) {
+        const std::string line1 = withField(kLine1, 19, c.field);
+        const Tle         tle   = Tle::parse(line1, kLine2);
+        const Time expected = Time::fromCalendar(TimeScale::UTC, c.year, c.month, c.day, c.hour, c.minute, c.second);
+        // 0.1 microsecond: the expected seconds above are exact products, and a two-part Julian date carries the
+        // time of day to about 1e-11 s. The defect was up to 1 s.
+        EXPECT_NEAR(tle.epoch - expected, 0.0, 1e-7) << c.field << " was read as " << tle.epoch.iso8601(6);
+        // Writing is the inverse of reading.
+        EXPECT_EQ(tle.line1(), line1);
+    }
+}
+
+TEST(Tle, Line1WritesTheEpochAsAFractionOfAn86400SecondDay) {
+    Tle tle = Tle::parse(kLine1, kLine2);
+    // 18:00:00 is 64800 s after 0h, 0.75 of 86400 s, whether or not the day ends with a leap second.
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 18, 0, 0.0); // leap-second day
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "16366.75000000");
+    tle.epoch = Time::fromCalendar(TimeScale::UTC, 2016, 12, 30, 18, 0, 0.0); // ordinary day
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "16365.75000000");
+    // An epoch held in another time scale is the same instant: 2017-01-01 00:00:37 TAI is 2016-12-31 23:59:60
+    // UTC (TAI - UTC was 36 s until then), so 18:00:36 TAI on the 31st is 18:00:00 UTC.
+    tle.epoch = Time::fromCalendar(TimeScale::TAI, 2016, 12, 31, 18, 0, 36.0);
+    EXPECT_EQ(columns(tle.line1(), 19, 32), "16366.75000000");
+}
+
+TEST(Tle, ParseRejectsAnEpochDayThatIsNotInTheYear) {
+    // Days are numbered from 1; 2008 is a leap year (366 days), 2007 is not.
+    expectErrorNaming([] { (void)Tle::parse(withField(kLine1, 19, "08000.50000000"), kLine2); }, "epoch day");
+    expectErrorNaming([] { (void)Tle::parse(withField(kLine1, 19, "08367.00000000"), kLine2); }, "epoch day");
+    expectErrorNaming([] { (void)Tle::parse(withField(kLine1, 19, "07366.00000000"), kLine2); }, "epoch day");
+    expectErrorNaming([] { (void)Tle::parse(withField(kLine1, 19, "08964.51782528"), kLine2); }, "epoch day");
+    const Tle last = Tle::parse(withField(kLine1, 19, "08366.99999999"), kLine2);
+    EXPECT_EQ(last.epoch.iso8601(3), "2008-12-31T23:59:59.999Z"); // 0.99999999 x 86400 s = 86399.999136 s
+    const Tle first = Tle::parse(withField(kLine1, 19, "07001.00000000"), kLine2);
+    EXPECT_EQ(first.epoch.iso8601(0), "2007-01-01T00:00:00Z");
+}
 
 // --- Reading number fields ------------------------------------------------------------------------------------------
 

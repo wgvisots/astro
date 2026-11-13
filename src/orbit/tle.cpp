@@ -159,6 +159,38 @@ double parseExpField(std::string_view s, const char* what) {
     return s[0] == '-' ? -value : value;
 }
 
+// The epoch of an element set is a day of the year and a fraction of an 86400 s day, counted from 0h UTC, whatever
+// the length of that day. The sets are produced from, and read back into, a Julian date that knows nothing of leap
+// seconds (in the reference code, twoline2rv turns the fraction into hours, minutes and seconds of a 24 h day).
+// astro::Time holds UTC differently: as a quasi-Julian date whose day fraction is the time of day over the length
+// of *that* day, which is 86401 s when the day ends with a leap second (see time.h). The two fractions differ by
+// up to 1 s on such a day, 7.7 km along the track in low Earth orbit.
+//
+// This is the factor between them for the UTC day that starts at the Julian date `midnight`: (86400 s) / (length of
+// the day). 12:00:00 is 43200 s into any day, so it is twice the quasi-Julian fraction of noon. It is exactly 1 on
+// an ordinary day. (Sgp4 needs the same factor and has a copy of this function.)
+double tleDayPerUtcDay(double midnight) {
+    int year = 0, month = 0, day = 0;
+    dateFromJulianDayNumber(std::llround(midnight + 0.5), year, month, day);
+    return 2.0 * Time::fromCalendar(TimeScale::UTC, year, month, day, 12).jd().jd2;
+}
+
+// The epoch from the two-digit year (columns 19-20) and the day of the year with its fraction (columns 21-32).
+Time parseEpoch(std::string_view yearField, std::string_view dayField) {
+    const int    yy   = toInt(yearField, "epoch year");
+    const double day  = toDouble(dayField, "epoch day");
+    const int    year = yy < 57 ? 2000 + yy : 1900 + yy;
+    // Days are numbered from 1, so the field runs from 1.0 to just under 366.0 (367.0 in a leap year).
+    const int    daysInYear = isLeapYear(year) ? 366 : 365;
+    const double wholeDay   = std::floor(day);
+    if (!(wholeDay >= 1.0 && wholeDay <= daysInYear)) {
+        throw Error("TLE: bad epoch day field '" + std::string(dayField) + "' (" + std::to_string(year)
+                    + " has days 1 to " + std::to_string(daysInYear) + ")");
+    }
+    const double midnight = static_cast<double>(julianDayNumber(year, 1, 1)) - 0.5 + (wholeDay - 1.0);
+    return Time(JulianDate{midnight, (day - wholeDay) * tleDayPerUtcDay(midnight)}, TimeScale::UTC);
+}
+
 std::string formatExpField(double v) {
     // Format as " 12345-6" (8 chars): sign, 5-digit mantissa, signed exponent digit.
     if (v == 0.0) {
@@ -267,12 +299,9 @@ Tle Tle::parse(std::string_view l1, std::string_view l2, std::string_view name, 
     if (decodeAlpha5(cols(b, 3, 7)) != t.satnum) {
         throw Error("TLE: catalog numbers on lines 1 and 2 differ");
     }
-    t.classification  = a.size() >= 8 ? a[7] : 'U';
-    t.intlDesignator  = trim(cols(a, 10, 17));
-    const int    yy   = toInt(cols(a, 19, 20), "epoch year");
-    const double day  = toDouble(cols(a, 21, 32), "epoch day");
-    const int    year = yy < 57 ? 2000 + yy : 1900 + yy;
-    t.epoch = Time(JulianDate{static_cast<double>(julianDayNumber(year, 1, 1)) - 0.5, day - 1.0}, TimeScale::UTC);
+    t.classification   = a.size() >= 8 ? a[7] : 'U';
+    t.intlDesignator   = trim(cols(a, 10, 17));
+    t.epoch            = parseEpoch(cols(a, 19, 20), cols(a, 21, 32));
     t.meanMotionDot    = toDouble(cols(a, 34, 43), "n-dot");
     t.meanMotionDdot   = parseExpField(cols(a, 45, 52), "n-ddot");
     t.bstar            = parseExpField(cols(a, 54, 61), "B*");
@@ -316,11 +345,12 @@ std::vector<Tle> Tle::parseMany(std::string_view text, bool verifyChecksum) {
 }
 
 std::string Tle::line1() const {
-    // Epoch: year and fractional day of year.
-    const CalendarDate c = epoch.to(TimeScale::UTC).calendar(9);
-    const JulianDate   jan1{static_cast<double>(julianDayNumber(c.year, 1, 1)) - 0.5, 0.0};
-    const double       day = epoch.to(TimeScale::UTC).jd().daysSince(jan1) + 1.0;
-    char               nd[16];
+    // Epoch: the year, and the day of the year with the time of day as a fraction of 86400 s (see tleDayPerUtcDay).
+    const JulianDate utc  = epoch.to(TimeScale::UTC).jd();
+    int              year = 0, month = 0, dayOfMonth = 0;
+    dateFromJulianDayNumber(std::llround(utc.jd1 + 0.5), year, month, dayOfMonth);
+    const double day = dayOfYear(year, month, dayOfMonth) + utc.jd2 / tleDayPerUtcDay(utc.jd1);
+    char         nd[16];
     std::snprintf(nd, sizeof(nd), "%.8f", meanMotionDot);
     std::string ndot = nd;
     // " .00002182" / "-.00002182" style.
@@ -336,7 +366,7 @@ std::string Tle::line1() const {
                   encodeAlpha5(satnum).c_str(),
                   classification,
                   intlDesignator.c_str(),
-                  c.year % 100,
+                  year % 100,
                   day,
                   ndot.c_str(),
                   formatExpField(meanMotionDdot).c_str(),

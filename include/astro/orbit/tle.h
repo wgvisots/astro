@@ -58,6 +58,11 @@ struct Tle {
     /// number field is zero. In the fields with an implied decimal point (the eccentricity, and the
     /// mantissas of B* and of the second derivative of the mean motion) a blank column is a zero digit,
     /// as in the SGP4 reference code: an eccentricity field of " 006703" is 0.0006703.
+    ///
+    /// The epoch field is the day of the year (from 1) and a fraction of an 86400 s day counted from 0h UTC.
+    /// That holds on a day that ends with a leap second too: element sets are produced that way, and the
+    /// SGP4 reference code reads them that way. So "16366.50000000" is 2016-12-31 12:00:00 UTC exactly. A
+    /// day that the year does not have throws astro::Error.
     [[nodiscard]] static Tle
     parse(std::string_view line1, std::string_view line2, std::string_view name = "", bool verifyChecksum = true);
     /// Parse a text block of 2-line or 3-line (name + 2 lines) element sets.
@@ -65,7 +70,8 @@ struct Tle {
 
     /// @{
 
-    /// Format back into the two 69-column lines (with checksums).
+    /// Format back into the two 69-column lines (with checksums). The epoch is written as parse() reads it:
+    /// the time of day as a fraction of 86400 s, also on a day that ends with a leap second.
     [[nodiscard]] std::string line1() const;
     [[nodiscard]] std::string line2() const;
     /// @}

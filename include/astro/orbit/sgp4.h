@@ -82,6 +82,10 @@ public:
     /// right ascension of the node, the eccentricity, the argument of perigee, the mean anomaly, the mean motion),
     /// or if finite elements give a non-finite state at the epoch. So a propagator that was built never starts
     /// from NaN.
+    ///
+    /// The theory counts the epoch in days of 86400 s, as the element set gives it. On a day that ends with a
+    /// leap second the count is taken from the time of day of `tle.epoch` over 86400 s, as the reference code
+    /// takes it from the epoch field.
     explicit Sgp4(const Tle& tle, Sgp4Gravity gravity = Sgp4Gravity::WGS72, Sgp4OpsMode mode = Sgp4OpsMode::Improved);
     ~Sgp4();
     /// Deep copy.
