@@ -225,6 +225,49 @@ TEST(Time, LeapSecondHandling) {
     EXPECT_TRUE(a < b);
 }
 
+TEST(Time, LastMinuteOfAShortenedUtcDayIsShorter) {
+    // TAI-UTC stepped down by 0.05 s at 0h on 1961-08-01 and by 0.1 s on 1968-02-01 (USNO tai-utc.dat), so the UTC
+    // days before those dates were 86399.95 s and 86399.9 s long and their last minutes end at 23:59:59.95 and
+    // 23:59:59.9. A later reading of the clock did not exist, just as 23:59:60 does not exist on an ordinary day.
+    //
+    // The readings 0.01 s before those ends are 0.01 s before the next midnight. Tolerance 1e-8 s: a UTC second
+    // was up to 3e-8 longer than an SI second then (3e-10 s here), and the conversion, like ERFA's, treats the
+    // step and the rate separately, which leaves step * rate = 0.1 s * 3e-8 = 3e-9 s at such a midnight.
+    const Time aug1961 = Time::fromCalendar(TimeScale::UTC, 1961, 8, 1);
+    EXPECT_NEAR(aug1961 - Time::fromCalendar(TimeScale::UTC, 1961, 7, 31, 23, 59, 59.94), 0.01, 1e-8);
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 1961, 7, 31, 23, 59, 59.96), Error);
+    EXPECT_THROW((void)Time::fromIso8601("1961-07-31T23:59:59.999Z"), Error);
+    const Time feb1968 = Time::fromCalendar(TimeScale::UTC, 1968, 2, 1);
+    EXPECT_NEAR(feb1968 - Time::fromCalendar(TimeScale::UTC, 1968, 1, 31, 23, 59, 59.89), 0.01, 1e-8);
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 1968, 1, 31, 23, 59, 59.91), Error);
+    // Only the last minute of such a day is shorter, and the days either side are ordinary.
+    EXPECT_NO_THROW((void)Time::fromCalendar(TimeScale::UTC, 1961, 7, 31, 23, 58, 59.99));
+    EXPECT_NO_THROW((void)Time::fromCalendar(TimeScale::UTC, 1961, 7, 30, 23, 59, 59.99));
+    EXPECT_NO_THROW((void)Time::fromCalendar(TimeScale::UTC, 1961, 8, 1, 23, 59, 59.99));
+}
+
+TEST(Time, NegativeLeapSecondRemovesTheLastSecondOfTheDay) {
+    // None has happened yet. If TAI-UTC went from 37 s to 36 s at the start of 2030, the UTC day 2029-12-31 would
+    // be 86399 s long and end at 23:59:59 (Recommendation ITU-R TF.460-6): 23:59:58.5 is in its last second.
+    struct RestoreTable {
+        ~RestoreTable() { setLeapSecondTable(LeapSecondTable::builtin()); }
+    } restore;
+    std::vector<LeapSecondEntry> entries = LeapSecondTable::builtin().entries();
+    entries.push_back({2030, 1, 36.0});
+    setLeapSecondTable(LeapSecondTable(entries));
+
+    const Time last = Time::fromCalendar(TimeScale::UTC, 2029, 12, 31, 23, 59, 58.5);
+    // 23:59:58.5 UTC + 37 s is 00:00:35.5 TAI on 2030-01-01, half a second before 00:00:00 UTC (00:00:36 TAI).
+    EXPECT_NEAR(last.to(TimeScale::TAI).jd().secondsSince(JulianDate::fromCalendar(2030, 1, 1)), 35.5, 1e-9);
+    EXPECT_NEAR(Time::fromCalendar(TimeScale::UTC, 2030, 1, 1) - last, 0.5, 1e-9);
+    EXPECT_EQ(last.iso8601(1), "2029-12-31T23:59:58.5Z");
+    EXPECT_EQ((last + 0.5).iso8601(1), "2030-01-01T00:00:00.0Z");
+    // 23:59:59 is not a time on that day.
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 2029, 12, 31, 23, 59, 59.5), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2029-12-31T23:59:59Z"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2030-01-01T00:59:59+01:00"), Error);
+}
+
 TEST(Time, Unix) {
     EXPECT_EQ(Time::fromUnix(0.0).iso8601(3), "1970-01-01T00:00:00.000Z");
     const Time t = Time::fromUnix(1483228800.25); // 2017-01-01T00:00:00.25Z

@@ -97,9 +97,11 @@ public:
     /// From a Modified Julian Date (JD - 2400000.5) in `scale`.
     [[nodiscard]] static Time fromMjd(double mjd, TimeScale scale);
     /// From calendar fields in the given scale. For UTC, second may be in
-    /// [60, 61) on a day that ends in a leap second. Throws astro::Error for an
-    /// invalid date or time of day, which includes a second that is not finite
-    /// (NaN or infinity).
+    /// [60, 61) on a day that ends in a leap second; on a day that ends early
+    /// (a negative leap second, or the shortened days 1961-07-31 and 1968-01-31)
+    /// the last minute is that much shorter. Throws astro::Error for an invalid
+    /// date or time of day, which includes a second that is not finite (NaN or
+    /// infinity) and a second at or after the end of the UTC day.
     /// @{
     [[nodiscard]] static Time
     fromCalendar(TimeScale scale, int year, int month, int day, int hour = 0, int minute = 0, double second = 0.0);

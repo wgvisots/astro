@@ -310,8 +310,12 @@ Time Time::fromCalendar(TimeScale scale, int year, int month, int day, int hour,
         }
         return Time(JulianDate{jd1, sod / secondsPerDay}, scale);
     }
+    // The last minute of a UTC day is as long as the step at the end of the day makes it: 61 s before a leap
+    // second, 59 s before a negative one, and 59.95 s and 59.9 s on the two shortened days before 1972
+    // (1961-07-31, 1968-01-31). This is the limit of ERFA's eraDtf2d. On other days dleap is zero, or
+    // rounding noise (2e-15 s) too small to move the limit from exactly 60.
     const double dleap    = utcDay(jd1).dleap;
-    const double secLimit = (hour == 23 && minute == 59) ? 60.0 + std::max(dleap, 0.0) : 60.0;
+    const double secLimit = (hour == 23 && minute == 59) ? 60.0 + dleap : 60.0;
     if (second >= secLimit) {
         throw Error("Time::fromCalendar: seconds out of range for this UTC day");
     }
