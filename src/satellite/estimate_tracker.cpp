@@ -42,7 +42,13 @@ double chiSquareSurvival3(double x) noexcept {
     if (!(x > 0.0)) {
         return 1.0;
     }
-    return std::erfc(std::sqrt(0.5 * x)) + std::sqrt(2.0 * x / constants::pi) * std::exp(-0.5 * x);
+    // Once exp(-x/2) underflows (x > 1490) the tail is below the smallest double. Returning 0 there
+    // also keeps a huge or infinite x from giving infinity * 0 = NaN.
+    const double e = std::exp(-0.5 * x);
+    if (e == 0.0) {
+        return 0.0;
+    }
+    return std::erfc(std::sqrt(0.5 * x)) + std::sqrt(2.0 * x / constants::pi) * e;
 }
 
 double chiSquareSurvival6(double x) noexcept {
@@ -53,7 +59,11 @@ double chiSquareSurvival6(double x) noexcept {
         return 1.0;
     }
     const double h = 0.5 * x;
-    return std::exp(-h) * (1.0 + h + 0.5 * h * h);
+    const double e = std::exp(-h);
+    if (e == 0.0) { // as in chiSquareSurvival3: the polynomial overflows from x = 2.7e154
+        return 0.0;
+    }
+    return e * (1.0 + h + 0.5 * h * h);
 }
 
 NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions& options) {

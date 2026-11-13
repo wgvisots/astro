@@ -138,7 +138,8 @@ struct ConsistencyCheck {
 /// @{
 
 /// Survival function of the chi-square distribution with 3 and 6 degrees of freedom, P(X >= x).
-/// NaN for NaN, so a NaN statistic never passes a p-value test.
+/// 1 for x <= 0; 0 for +infinity and for any x so large that the value is below the smallest double
+/// (x > 1490). NaN for NaN, so a NaN statistic never passes a p-value test.
 [[nodiscard]] double chiSquareSurvival3(double x) noexcept;
 [[nodiscard]] double chiSquareSurvival6(double x) noexcept;
 /// @}
