@@ -70,6 +70,8 @@ elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp, 
 ///   h = e sin(raan + argp), k = e cos(raan + argp),
 ///   p = tan(i/2) sin(raan), q = tan(i/2) cos(raan), lambda = mean longitude.
 /// Non-singular for circular and equatorial orbits (singular at i = 180 deg).
+/// Defined for elliptic orbits only (a > 0, e < 1), as in Broucke & Cefola (1972): the mean
+/// longitude is an angle only when the mean anomaly is one, and a hyperbolic mean anomaly is not.
 struct EquinoctialElements {
     double a{0.0};      ///< semi-major axis (m)
     double h{0.0};      ///< e sin(raan + argp)
@@ -79,13 +81,15 @@ struct EquinoctialElements {
     double lambda{0.0}; ///< mean longitude raan + argp + M (rad, [0, 2pi))
 };
 
-/// Equinoctial elements from Keplerian ones (lambda from the mean anomaly).
+/// Equinoctial elements from Keplerian ones (lambda from the mean anomaly). If the orbit is not
+/// elliptic (a <= 0 or e >= 1, or either is NaN) every element returned is NaN.
 [[nodiscard]] EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el) noexcept;
 /// Keplerian elements from equinoctial ones (RAAN and argp set to 0 where undefined). Throws
-/// astro::Error if the mean-to-true anomaly conversion does (see meanToTrueAnomaly).
+/// astro::Error unless the elements are those of an ellipse (a > 0, h^2 + k^2 < 1).
 [[nodiscard]] KeplerianElements equinoctialToKeplerian(const EquinoctialElements& eq);
 /// Equinoctial elements of an inertial state (m, m/s), computed directly from the vectors (no
-/// classical singularities). Throws astro::Error for a retrograde equatorial orbit (i = 180 deg).
+/// classical singularities). Throws astro::Error for a retrograde equatorial orbit (i = 180 deg)
+/// and for a state that is not on an elliptic orbit (parabolic, hyperbolic or rectilinear).
 [[nodiscard]] EquinoctialElements stateToEquinoctial(const StateVector& s, double mu = constants::gmEarth);
 /// Inertial position (m) and velocity (m/s) from equinoctial elements, via equinoctialToKeplerian
 /// and elementsToState; throws astro::Error as they do.
@@ -94,7 +98,8 @@ struct EquinoctialElements {
 /// Partial derivatives of stateToEquinoctial: row i is element i (a, h, k, p, q, lambda), column j
 /// is state component j (x, y, z, vx, vy, vz). Central differences with steps of 1e-7 |r| and
 /// 1e-7 |v| (relative accuracy ~1e-8); lambda differences are wrapped. Use it to map a position /
-/// velocity covariance P into elements as J P J^T. Same singularity as stateToEquinoctial.
+/// velocity covariance P into elements as J P J^T. Same singularity as stateToEquinoctial, and
+/// throws astro::Error where it does, for the state or any of the twelve perturbed states.
 [[nodiscard]] Mat6 stateToEquinoctialJacobian(const StateVector& s, double mu = constants::gmEarth);
 
 /// Orbital period (s) for a > 0.

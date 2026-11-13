@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
@@ -126,6 +127,12 @@ KeplerianElements elementsFromMeanAnomaly(double a, double e, double i, double r
 }
 
 EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el) noexcept {
+    // The set is defined for ellipses (Broucke & Cefola 1972): the mean longitude is an angle only
+    // when the mean anomaly is one. A hyperbolic mean anomaly is unbounded and must not be wrapped.
+    if (!(el.a > 0.0) || !(el.e < 1.0)) {
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        return {nan, nan, nan, nan, nan, nan};
+    }
     const double lonPeri = el.raan + el.argp;
     const double t       = std::tan(0.5 * el.i);
     return {el.a,
@@ -138,8 +145,11 @@ EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el) noexcept
 
 KeplerianElements equinoctialToKeplerian(const EquinoctialElements& q) {
     KeplerianElements el;
-    el.a                 = q.a;
-    el.e                 = std::hypot(q.h, q.k);
+    el.a = q.a;
+    el.e = std::hypot(q.h, q.k);
+    if (!(el.a > 0.0) || !(el.e < 1.0)) {
+        throw Error("equinoctialToKeplerian: requires an elliptic orbit (a > 0, h^2 + k^2 < 1)");
+    }
     el.i                 = 2.0 * std::atan(std::hypot(q.p, q.q));
     el.raan              = (q.p == 0.0 && q.q == 0.0) ? 0.0 : wrapTwoPi(std::atan2(q.p, q.q));
     const double lonPeri = (q.h == 0.0 && q.k == 0.0) ? 0.0 : std::atan2(q.h, q.k);
@@ -168,6 +178,9 @@ EquinoctialElements stateToEquinoctial(const StateVector& s, double mu) {
     q.h                  = dot(ev, g);
     const double trueLon = std::atan2(dot(s.r, g), dot(s.r, f));
     const double e       = std::hypot(q.h, q.k);
+    if (!(q.a > 0.0) || std::isinf(q.a) || !(e < 1.0)) {
+        throw Error("stateToEquinoctial: requires an elliptic orbit (the mean longitude is not defined for e >= 1)");
+    }
     const double lonPeri = (e == 0.0) ? 0.0 : std::atan2(q.h, q.k);
     q.lambda             = wrapTwoPi(lonPeri + trueToMeanAnomaly(trueLon - lonPeri, e));
     return q;

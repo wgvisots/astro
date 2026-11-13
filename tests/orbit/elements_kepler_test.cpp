@@ -586,3 +586,89 @@ TEST(Secular, PropagatorReproducesItsInputStateAtTheEpochNearSingularAngles) {
         }
     }
 }
+
+// ------------------------------------------------------------------------- Equinoctial elements
+
+namespace {
+
+// Measured 1.2e-14 in a, h, k, p, q (worst in p and q at i = 2.8 rad, where 1 / (1 + cos i) = 17
+// multiplies the rounding), 1.8e-15 rad in the mean longitude, and 1.8e-14 of |r| for the state
+// rebuilt from the elements (worst at e = 0.9).
+constexpr double kEquinoctialElementTolerance   = 5e-14;
+constexpr double kMeanLongitudeTolerance        = 1e-14; // rad
+constexpr double kEquinoctialRoundTripTolerance = 1e-13;
+
+/// Mean anomaly of an elliptic orbit from the true anomaly, in extended precision.
+long double meanFromTrueAnomaly(double nu, double e) {
+    using L    = long double;
+    const L el = e;
+    const L E  = 2.0L * std::atan(std::sqrt((1.0L - el) / (1.0L + el)) * std::tan(0.5L * static_cast<L>(nu)));
+    return E - el * std::sin(E);
+}
+
+} // namespace
+
+TEST(Elements, EquinoctialElementsMatchTheirDefinitionForEllipses) {
+    // h = e sin(raan + argp), k = e cos(raan + argp), p = tan(i/2) sin(raan), q = tan(i/2) cos(raan),
+    // lambda = raan + argp + M (Broucke & Cefola 1972), from the elements the state was built with.
+    double worstElement = 0.0, worstLambda = 0.0, worstR = 0.0;
+    for (const double e : {0.0, 0.01, 0.3, 0.7, 0.9}) {
+        for (const double i : {0.0, 1e-9, 0.4, 1.5, 2.8}) {
+            for (const double nu : {0.0, 1e-9, 1.0, 3.0, kPi, 4.0, 6.0}) {
+                const double              a = 12000.0 * km / (1.0 - e), raan = 1.0, argp = 2.0;
+                const StateVector         s = stateFromElements(a, e, i, raan, argp, nu);
+                const EquinoctialElements q = stateToEquinoctial(s);
+                const double              t = std::tan(0.5 * i);
+                worstElement                = std::max({worstElement,
+                                                        std::abs(q.a / a - 1.0),
+                                                        std::abs(q.h - e * std::sin(raan + argp)),
+                                                        std::abs(q.k - e * std::cos(raan + argp)),
+                                                        std::abs(q.p - t * std::sin(raan)),
+                                                        std::abs(q.q - t * std::cos(raan))});
+                const double lambda =
+                    static_cast<double>(static_cast<long double>(raan) + argp + meanFromTrueAnomaly(nu, e));
+                EXPECT_TRUE(q.lambda >= 0.0 && q.lambda < kTwoPi);
+                worstLambda = std::max(worstLambda, std::abs(angleDifference(q.lambda, lambda)));
+                // ... and back to the state.
+                const StateVector back = equinoctialToState(q);
+                worstR                 = std::max(worstR, norm(back.r - s.r) / norm(s.r));
+            }
+        }
+    }
+    EXPECT_LE(worstElement, kEquinoctialElementTolerance);
+    EXPECT_LE(worstLambda, kMeanLongitudeTolerance);
+    EXPECT_LE(worstR, kEquinoctialRoundTripTolerance);
+}
+
+TEST(Elements, EquinoctialElementsAreDefinedForEllipsesOnly) {
+    // The mean longitude is an angle only when the mean anomaly is one. For a hyperbola its wrapped
+    // value was returned without warning and the round trip was off by 1.6e8 m (audit reproducer:
+    // a = -20000 km, e = 1.5, i = 0.5, raan = 1, argp = 2, nu = 1.5).
+    const KeplerianElements hyperbola{-20000.0 * km, 1.5, 0.5, 1.0, 2.0, 1.5};
+    const StateVector       s =
+        stateFromElements(hyperbola.a, hyperbola.e, hyperbola.i, hyperbola.raan, hyperbola.argp, hyperbola.nu);
+    EXPECT_THROW((void)stateToEquinoctial(s), Error);
+    EXPECT_THROW((void)stateToEquinoctialJacobian(s), Error);
+    // Escape speed exactly: parabolic.
+    const double      r = 7000.0 * km;
+    const StateVector parabola{
+        {r,   0.0,                                     0.0},
+        {0.0, std::sqrt(2.0 * constants::gmEarth / r), 0.0}
+    };
+    EXPECT_THROW((void)stateToEquinoctial(parabola), Error);
+    // h^2 + k^2 >= 1, or a <= 0, is not an ellipse.
+    EXPECT_THROW((void)equinoctialToKeplerian({-20000.0 * km, 1.2, 0.9, 0.1, 0.2, 1.0}), Error);
+    EXPECT_THROW((void)equinoctialToKeplerian({20000.0 * km, 0.6, 0.8, 0.1, 0.2, 1.0}), Error);
+    EXPECT_THROW((void)equinoctialToKeplerian({-20000.0 * km, 0.1, 0.2, 0.1, 0.2, 1.0}), Error);
+    EXPECT_THROW((void)equinoctialToKeplerian({kNaN, 0.1, 0.2, 0.1, 0.2, 1.0}), Error);
+    EXPECT_THROW((void)equinoctialToState({-20000.0 * km, 1.2, 0.9, 0.1, 0.2, 1.0}), Error);
+    // keplerianToEquinoctial is noexcept: every element is NaN.
+    const EquinoctialElements q = keplerianToEquinoctial(hyperbola);
+    EXPECT_TRUE(std::isnan(q.a) && std::isnan(q.h) && std::isnan(q.k) && std::isnan(q.p) && std::isnan(q.q)
+                && std::isnan(q.lambda));
+    // An ellipse close to the parabola is still converted.
+    const StateVector         nearParabolic = stateFromElements(7000.0 * km / (1.0 - 0.999), 0.999, 0.5, 1.0, 2.0, 1.5);
+    const EquinoctialElements qe            = stateToEquinoctial(nearParabolic);
+    EXPECT_NEAR(std::hypot(qe.h, qe.k), 0.999, 1e-14);
+    EXPECT_NO_THROW((void)equinoctialToKeplerian(qe));
+}
