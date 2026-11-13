@@ -151,21 +151,32 @@ Vec3 Quat::rotate(const Vec3& v) const noexcept {
 }
 
 Quat slerp(const Quat& a, const Quat& b0, double t) noexcept {
-    Quat   b = b0;
-    double d = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
-    if (d < 0.0) {
+    // b and -b are the same rotation: take the one on a's side, for the shorter arc.
+    Quat b = b0;
+    if (a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z < 0.0) {
         b = {-b.w, -b.x, -b.y, -b.z};
-        d = -d;
     }
-    double wa, wb;
-    if (d > 0.9995) {
+    // Angle between a and b as unit four-vectors, in [0, pi/2]. For unit vectors |b - a| =
+    // 2 sin(theta/2) and |b + a| = 2 cos(theta/2), so theta = 2 atan2(|b - a|, |b + a|): accurate
+    // for every angle, where acos(a.b) loses half its digits as the angle goes to zero (W. Kahan,
+    // "How Futile are Mindless Assessments of Roundoff in Floating-Point Computation?", 2006,
+    // section "Mangled Angles").
+    const double theta = 2.0
+                       * std::atan2(Quat{b.w - a.w, b.x - a.x, b.y - a.y, b.z - a.z}.norm(),
+                                    Quat{b.w + a.w, b.x + a.x, b.y + a.y, b.z + a.z}.norm());
+    // The weights sin((1 - t) theta) / sin(theta) and sin(t theta) / sin(theta) are 0/0 at theta = 0.
+    // Their series is (1 - t) and t times 1 + O(theta^2 / 6), so below 1e-8 rad the linear weights are
+    // exact to 2e-17, less than a rounding error. (The linear form was once used for all angles under
+    // 0.0316 rad, where it is wrong by up to 1e-6 rad.)
+    constexpr double linearBelow = 1e-8;
+    double           wa, wb;
+    if (theta < linearBelow) {
         wa = 1.0 - t;
         wb = t;
     } else {
-        const double theta = std::acos(std::clamp(d, -1.0, 1.0));
-        const double s     = std::sin(theta);
-        wa                 = std::sin((1.0 - t) * theta) / s;
-        wb                 = std::sin(t * theta) / s;
+        const double s = std::sin(theta);
+        wa             = std::sin((1.0 - t) * theta) / s;
+        wb             = std::sin(t * theta) / s;
     }
     return Quat{wa * a.w + wb * b.w, wa * a.x + wb * b.x, wa * a.y + wb * b.y, wa * a.z + wb * b.z}.normalized();
 }

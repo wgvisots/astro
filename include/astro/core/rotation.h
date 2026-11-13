@@ -108,7 +108,9 @@ struct Quat {
             a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w};
 }
 
-/// Spherical linear interpolation between unit quaternions (shortest path), t in [0, 1].
+/// Spherical linear interpolation between unit quaternions (shortest path), t in [0, 1]: the rotation
+/// that turns from a to b at a constant rate, a fraction t of the way along. Accurate to rounding
+/// however small or large the angle between a and b.
 [[nodiscard]] Quat slerp(const Quat& a, const Quat& b, double t) noexcept;
 
 /// Euler angle sequence: the axes (1=x, 2=y, 3=z) of the three successive

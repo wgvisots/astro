@@ -21,7 +21,6 @@
 #include <cmath>
 #include <limits>
 #include <random>
-#include <string>
 
 #include "astro/core/angle.h"
 #include "test_util.h"
@@ -51,7 +50,7 @@ void expectAllNaN(const Mat3& m) {
     }
 }
 
-void expectQuatNear(const Quat& a, const Quat& b, double tol, const std::string& what = "") {
+void expectQuatNear(const Quat& a, const Quat& b, double tol, const char* what = "") {
     EXPECT_NEAR(a.w, b.w, tol) << what << " w";
     EXPECT_NEAR(a.x, b.x, tol) << what << " x";
     EXPECT_NEAR(a.y, b.y, tol) << what << " y";
@@ -142,14 +141,14 @@ TEST(Quat, AxisOfAnyLengthIsNormalized) {
     for (int power : {-1074, -1000, -600, -300, -1, 0, 300, 600, 1019}) {
         const Vec3 axis{std::ldexp(3.0, power), std::ldexp(-4.0, power), std::ldexp(12.0, power)};
         for (double theta : {1.0, -2.5, 3.0}) {
-            const std::string what = "axis scaled by 2^" + std::to_string(power) + ", theta " + std::to_string(theta);
-            const double      c = std::cos(0.5 * theta), s = std::sin(0.5 * theta);
+            SCOPED_TRACE(testing::Message() << "axis scaled by 2^" << power << ", theta " << theta);
+            const double c = std::cos(0.5 * theta), s = std::sin(0.5 * theta);
             // Tolerances. Quaternion: two rounding errors of 1.1e-16, one in the unit vector and one in
             // the product. Matrix: each element is a sum of four squares or products of those
             // components, and the reference has its own rounding; 5.6e-16 was the worst seen over all
             // angles, 1e-15 allows for a different compiler.
-            expectQuatNear(Quat::fromAxisAngle(axis, theta), Quat{c, s * n.x, s * n.y, s * n.z}, 2.3e-16, what);
-            expectMatNear(axisAngleToMatrix(axis, theta), rodrigues(n, theta), 1e-15, what.c_str());
+            expectQuatNear(Quat::fromAxisAngle(axis, theta), Quat{c, s * n.x, s * n.y, s * n.z}, 2.3e-16);
+            expectMatNear(axisAngleToMatrix(axis, theta), rodrigues(n, theta), 1e-15);
         }
     }
     // The shortest axis there is: the smallest double, along -z.
@@ -224,6 +223,48 @@ TEST(Quat, Slerp) {
     const Quat b = Quat::fromAxisAngle({0, 0, 1}, 1.0);
     expectMatNear(slerp(a, b, 0.25).toMatrix(), R3(0.25), 1e-14);
     expectMatNear(slerp(a, b, 1.0).toMatrix(), R3(1.0), 1e-14);
+}
+
+// Truth: a and b are frame rotations about one axis n by the angles alpha and alpha + sep, so the
+// interpolant is the rotation about n by alpha + t sep, known in closed form as
+// (cos(angle/2), sin(angle/2) n). Multiplying everything on the left by a fixed quaternion g moves the
+// arc to a general place without changing the answer. Separations run from 0 to 3 rad; before the fix
+// those up to 0.063 rad were interpolated linearly, which is wrong by up to 1e-6 (1e-7 in a component
+// at sep = 0.0632, t = 0.25).
+TEST(Quat, SlerpIsAccurateForEveryAngle) {
+    const Vec3 n{3.0 / 13.0, -4.0 / 13.0, 12.0 / 13.0}; // unit: 3-4-12-13
+    const auto about = [&](double angle) {
+        const double c = std::cos(0.5 * angle), s = std::sin(0.5 * angle);
+        return Quat{c, s * n.x, s * n.y, s * n.z};
+    };
+    const Quat   g     = Quat(1.0, 2.0, -3.0, 4.0).normalized();
+    const double alpha = 0.7;
+    for (double sep :
+         {0.0, 1e-300, 1e-12, 1e-9, 2e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 0.02, 0.0632, 0.07, 0.3, 1.0, 3.0}) {
+        const Quat a = about(alpha), b = about(alpha + sep);
+        for (double t : {0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0}) {
+            SCOPED_TRACE(testing::Message() << "sep " << sep << ", t " << t);
+            const Quat expected = about(alpha + t * sep);
+            // Tolerance: both sides are double precision and each carries a few rounding errors of
+            // 1.1e-16 (the reference in its angle, sine and cosine; slerp in its end points, weights and
+            // sum). The largest difference over 2 million random (alpha, sep, t) was 5.6e-16.
+            expectQuatNear(slerp(a, b, t), expected, 1e-15);
+            expectQuatNear(slerp(g * a, g * b, t), g * expected, 1e-15, "moved by g:");
+        }
+    }
+}
+
+// b and -b are the same rotation, so the interpolation takes the shorter arc. With the end points more
+// than pi apart as rotations (their quaternions more than pi/2 apart) that arc runs the other way round:
+// by sep - 2 pi instead of sep. Same closed-form truth as above.
+TEST(Quat, SlerpTakesTheShorterArc) {
+    const auto aboutZ = [](double angle) { return Quat{std::cos(0.5 * angle), 0.0, 0.0, std::sin(0.5 * angle)}; };
+    for (double sep : {3.2, 4.0, 6.0}) {
+        for (double t : {0.0, 0.25, 0.5, 1.0}) {
+            SCOPED_TRACE(testing::Message() << "sep " << sep << ", t " << t);
+            expectQuatNear(slerp(aboutZ(0.0), aboutZ(sep), t), aboutZ(t * (sep - constants::twoPi)), 1e-15);
+        }
+    }
 }
 
 class EulerTest : public ::testing::TestWithParam<EulerSequence> {};
