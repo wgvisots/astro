@@ -39,8 +39,18 @@ double wrapTwoPi(double rad) noexcept {
     return r >= twoPi ? 0.0 : r;
 }
 
+// wrapPi and wrap180 take the remainder first and then move it by at most one turn. Both steps are
+// exact: std::fmod has no rounding error, and the turn is added to (or subtracted from) a value within a
+// factor of two of it, which is exact by Sterbenz's lemma. A value already in range is therefore
+// returned unchanged. (Shifting by half a turn, wrapping to [0, turn) and shifting back rounds twice:
+// it moved 0.1 by 8e-17, sent 1e-20 to 0 and sent the double just below pi to -pi.)
 double wrapPi(double rad) noexcept {
-    double r = wrapTwoPi(rad + pi) - pi;
+    double r = std::fmod(rad, twoPi); // in (-2 pi, 2 pi), with the sign of rad
+    if (r >= pi) {
+        r -= twoPi;
+    } else if (r < -pi) {
+        r += twoPi;
+    }
     return r;
 }
 
@@ -53,7 +63,13 @@ double wrap360(double deg) noexcept {
 }
 
 double wrap180(double deg) noexcept {
-    return wrap360(deg + 180.0) - 180.0;
+    double r = std::fmod(deg, 360.0); // in (-360, 360), with the sign of deg
+    if (r >= 180.0) {
+        r -= 360.0;
+    } else if (r < -180.0) {
+        r += 360.0;
+    }
+    return r;
 }
 
 double hmsToRad(int h, int m, double s, bool negative) noexcept {

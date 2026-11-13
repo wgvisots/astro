@@ -52,13 +52,17 @@ namespace astro {
     return rad / constants::masToRad;
 }
 
-/// Wrap an angle to [0, 2*pi).
+/// Wrap an angle to [0, 2*pi). A value already in that range is returned unchanged, bit for bit.
+/// Not-a-number (NaN) and infinity give NaN.
 [[nodiscard]] double wrapTwoPi(double rad) noexcept;
-/// Wrap an angle to [-pi, pi).
+/// Wrap an angle to [-pi, pi). A value already in that range is returned unchanged, bit for bit.
+/// NaN and infinity give NaN.
 [[nodiscard]] double wrapPi(double rad) noexcept;
-/// Wrap an angle to [0, 360) degrees.
+/// Wrap an angle to [0, 360) degrees. A value already in that range is returned unchanged, bit for bit.
+/// NaN and infinity give NaN.
 [[nodiscard]] double wrap360(double deg) noexcept;
-/// Wrap an angle to [-180, 180) degrees.
+/// Wrap an angle to [-180, 180) degrees. A value already in that range is returned unchanged, bit for bit.
+/// NaN and infinity give NaN.
 [[nodiscard]] double wrap180(double deg) noexcept;
 
 /// Sexagesimal components. `negative` carries the sign so that "-00 30 00" is
