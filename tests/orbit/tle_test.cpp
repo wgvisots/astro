@@ -20,6 +20,7 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include "astro/core/angle.h"
 #include "astro/core/constants.h"
@@ -499,4 +500,128 @@ TEST(Tle, ValuesAtTheEdgesOfTheirFieldsAreWrittenAndReadBack) {
     tle.revolutionNumber = 123456;
     EXPECT_EQ(columns(tle.line1(), 65, 68), "2345");
     EXPECT_EQ(columns(tle.line2(), 64, 68), "23456");
+}
+
+// --- Checksums, catalog numbers and files of element sets -----------------------------------------------------------
+
+TEST(Tle, ChecksumVerificationNeedsAll69ColumnsAndADigit) {
+    // Without column 69 there is nothing to verify, which is not the same as a checksum that matches.
+    expectErrorNaming([] { (void)Tle::parse(kLine1.substr(0, 68), kLine2); }, "line 1");
+    expectErrorNaming([] { (void)Tle::parse(kLine1, kLine2.substr(0, 68)); }, "line 2");
+    std::string notADigit = kLine1;
+    notADigit[68]         = 'X';
+    expectErrorNaming([&] { (void)Tle::parse(notADigit, kLine2); }, "checksum");
+    notADigit     = kLine2;
+    notADigit[68] = '-';
+    expectErrorNaming([&] { (void)Tle::parse(kLine1, notADigit); }, "checksum");
+    // Without verification the lines may stop short of column 69, as before; a field that is missing is zero.
+    const Tle tle = Tle::parse(kLine1.substr(0, 68), kLine2.substr(0, 63), "", false);
+    EXPECT_EQ(tle.satnum, 25544);
+    EXPECT_EQ(tle.elementSetNumber, 292);
+    EXPECT_EQ(tle.meanMotion, 15.72125391);
+    EXPECT_EQ(tle.revolutionNumber, 0);
+}
+
+TEST(Tle, EpochBeforeTheStartOfUtcIsATleError) {
+    // Two-digit years 57-59 are 1957-1959, before UTC and the leap-second table begin (1960-01-01).
+    for (const char* year : {"57", "58", "59"}) {
+        try {
+            (void)Tle::parse(withField(kLine1, 19, year), kLine2);
+            ADD_FAILURE() << "epoch year " << year << " was accepted";
+        } catch (const Error& e) {
+            const std::string what = e.what();
+            EXPECT_EQ(what.rfind("TLE: epoch", 0), 0u) << what;
+            EXPECT_NE(what.find("19" + std::string(year)), std::string::npos) << what;
+        }
+    }
+    // The pivot of the two-digit year: 57-99 are 1957-1999 and 00-56 are 2000-2056.
+    EXPECT_EQ(Tle::parse(withField(kLine1, 19, "60"), kLine2).epoch.iso8601(0), "1960-09-20T12:25:40Z");
+    EXPECT_EQ(Tle::parse(withField(kLine1, 19, "99"), kLine2).epoch.iso8601(0), "1999-09-21T12:25:40Z");
+    EXPECT_EQ(Tle::parse(withField(kLine1, 19, "00"), kLine2).epoch.iso8601(0), "2000-09-20T12:25:40Z");
+    EXPECT_EQ(Tle::parse(withField(kLine1, 19, "56"), kLine2).epoch.iso8601(0), "2056-09-20T12:25:40Z");
+}
+
+TEST(Tle, DecodeAlpha5AcceptsOnlyTheAlpha5Alphabet) {
+    // Five characters: all digits, or a capital letter other than I and O followed by four digits.
+    for (const char* bad : {"-1234",
+                            "+1234",
+                            "a0001",
+                            "1234567",
+                            "A12345",
+                            "A-123",
+                            "A 123",
+                            "A12",
+                            "1234",
+                            "    5",
+                            "12 34",
+                            "I0001",
+                            "O0001",
+                            "0000A",
+                            "A000B",
+                            "     ",
+                            ""}) {
+        expectErrorNaming([&] { (void)decodeAlpha5(bad); }, "catalog number");
+    }
+    // The letters count on from 10, skipping I and O: A = 10 ... H = 17, J = 18 ... N = 22, P = 23 ... Z = 33.
+    EXPECT_EQ(decodeAlpha5("00000"), 0);
+    EXPECT_EQ(decodeAlpha5("00005"), 5);
+    EXPECT_EQ(decodeAlpha5("99999"), 99999);
+    EXPECT_EQ(decodeAlpha5("A0000"), 100000);
+    EXPECT_EQ(decodeAlpha5("H9999"), 179999);
+    EXPECT_EQ(decodeAlpha5("J0000"), 180000);
+    EXPECT_EQ(decodeAlpha5("N9999"), 229999);
+    EXPECT_EQ(decodeAlpha5("P0000"), 230000);
+    EXPECT_EQ(decodeAlpha5("Z9999"), 339999);
+}
+
+TEST(Tle, ParseReadsAlpha5AndBlankPaddedCatalogNumbers) {
+    // Alpha-5 through parse and back: B = 11, so "B1234" is 111234.
+    const std::string line1 = withField(kLine1, 3, "B1234"), line2 = withField(kLine2, 3, "B1234");
+    const Tle         tle = Tle::parse(line1, line2);
+    EXPECT_EQ(tle.satnum, 111234);
+    EXPECT_EQ(tle.line1(), line1);
+    EXPECT_EQ(tle.line2(), line2);
+    // The number is right-justified in its five columns; some writers pad it with blanks instead of zeros.
+    EXPECT_EQ(Tle::parse(withField(kLine1, 3, "    5"), withField(kLine2, 3, "    5")).satnum, 5);
+    // Anything else in the field is refused, and so are two lines for different objects.
+    expectErrorNaming([] { (void)Tle::parse(withField(kLine1, 3, "b1234"), withField(kLine2, 3, "b1234")); },
+                      "catalog number");
+    expectErrorNaming([] { (void)Tle::parse(withField(kLine1, 3, "-5544"), withField(kLine2, 3, "-5544")); },
+                      "catalog number");
+    EXPECT_THROW((void)Tle::parse(kLine1, withField(kLine2, 3, "25545")), Error);
+}
+
+TEST(Tle, ParseManyReportsUnpairedLinesWithTheirLineNumber) {
+    // A line 1 at the end of the text.
+    expectErrorNaming([] { (void)Tle::parseMany(kLine1 + "\n" + kLine2 + "\n" + kLine1 + "\n"); }, "text line 3");
+    // Two line 1s in a row: the first one (text line 2, after the name) has no line 2.
+    expectErrorNaming([] { (void)Tle::parseMany("ISS (ZARYA)\n" + kLine1 + "\n" + kLine1 + "\n" + kLine2 + "\n"); },
+                      "text line 2");
+    // A line 2 on its own, here after a complete set, a blank line and a comment.
+    expectErrorNaming([] { (void)Tle::parseMany(kLine1 + "\n" + kLine2 + "\n\n# note\n" + kLine2 + "\n"); },
+                      "text line 5");
+    // Something else between the two lines.
+    expectErrorNaming([] { (void)Tle::parseMany(kLine1 + "\nISS (ZARYA)\n" + kLine2 + "\n"); }, "text line 1");
+}
+
+TEST(Tle, ParseManyAcceptsNamesBlankLinesCommentsAndBothLineEndings) {
+    const std::vector<Tle> sets =
+        Tle::parseMany("# two-line and three-line sets, mixed\n"
+                       "\n"
+                       + kLine1 + "\n" + kLine2 + "\n" + "ISS (ZARYA)\n" + kLine1 + "\r\n" + kLine2 + "\r\n" + "   \n"
+                       + "0 ISS (ZARYA)\n" + kLine1 + "\n" + "# a comment between the lines of a set\n" + kLine2 + "\n"
+                       + "1 KUNS-PF\n" + kLine1 + "\n" + kLine2 + "\n" + "2 SOPS\n" + kLine1 + "\n" + kLine2);
+    ASSERT_EQ(sets.size(), 5u);
+    EXPECT_EQ(sets[0].name, "");
+    EXPECT_EQ(sets[1].name, "ISS (ZARYA)");
+    EXPECT_EQ(sets[2].name, "ISS (ZARYA)"); // the "0 " of the three-line format is not part of the name
+    EXPECT_EQ(sets[3].name, "1 KUNS-PF");   // a short line is a name even if it starts like a data line
+    EXPECT_EQ(sets[4].name, "2 SOPS");
+    for (const Tle& tle : sets) {
+        EXPECT_EQ(tle.satnum, 25544);
+        EXPECT_EQ(tle.line1(), kLine1);
+        EXPECT_EQ(tle.line2(), kLine2);
+    }
+    EXPECT_TRUE(Tle::parseMany("").empty());
+    EXPECT_TRUE(Tle::parseMany("# nothing here\n\n").empty());
 }

@@ -52,6 +52,14 @@ struct Tle {
     /// Parse the two data lines. Throws astro::Error on malformed lines or (when
     /// `verifyChecksum`) checksum mismatch.
     ///
+    /// With `verifyChecksum` each line must have all 69 columns and a digit in column 69: a line without a
+    /// checksum is refused, not passed. Without it, shorter lines are read: line 1 needs at least 64
+    /// columns and line 2 at least 63, not counting blanks at the end, and a field that is missing is
+    /// zero. Anything after column 69 is ignored.
+    ///
+    /// The catalog number is five digits or Alpha-5 (see decodeAlpha5()); leading blanks in place of
+    /// zeros are accepted. It must be the same on both lines.
+    ///
     /// The fields are read by column, as a fixed-format read would take them. A number field may hold
     /// digits, one sign, one decimal point and blank padding; anything else ("nan", "inf", an exponent,
     /// hexadecimal, a sign in a whole-number field) throws astro::Error naming the field. An all-blank
@@ -62,10 +70,18 @@ struct Tle {
     /// The epoch field is the day of the year (from 1) and a fraction of an 86400 s day counted from 0h UTC.
     /// That holds on a day that ends with a leap second too: element sets are produced that way, and the
     /// SGP4 reference code reads them that way. So "16366.50000000" is 2016-12-31 12:00:00 UTC exactly. A
-    /// day that the year does not have throws astro::Error.
+    /// day that the year does not have throws astro::Error. Two-digit years 57-99 are 1957-1999 and
+    /// 00-56 are 2000-2056; an epoch before UTC begins in the leap-second table (1960-01-01 in the
+    /// built-in one) throws astro::Error, because astro::Time cannot hold it as UTC.
     [[nodiscard]] static Tle
     parse(std::string_view line1, std::string_view line2, std::string_view name = "", bool verifyChecksum = true);
-    /// Parse a text block of 2-line or 3-line (name + 2 lines) element sets.
+    /// Parse a text block of 2-line or 3-line (name + 2 lines) element sets, with either line ending.
+    ///
+    /// Blank lines, and lines whose first character is '#' (comments), are skipped wherever they are. A
+    /// data line starts with "1 " or "2 " and is at least 64 (line 1) or 63 (line 2) columns long; any
+    /// other line is a name, and the last name before a line 1 belongs to that set. Throws astro::Error
+    /// with the line number in `text` (from 1) for a line 1 that is not followed by its line 2 and for a
+    /// line 2 without a line 1 before it, and whatever parse() throws for a set.
     [[nodiscard]] static std::vector<Tle> parseMany(std::string_view text, bool verifyChecksum = true);
 
     /// @{
@@ -103,7 +119,9 @@ struct Tle {
 
 /// TLE line checksum (sum of digits, '-' counts as 1, modulo 10) over columns 1-68.
 [[nodiscard]] int tleChecksum(std::string_view line) noexcept;
-/// Decode an Alpha-5 / numeric 5-character catalog number.
+/// Decode an Alpha-5 / numeric 5-character catalog number: five digits, or a capital letter other than
+/// I and O followed by four digits ("A0001" is 100001, "Z9999" is 339999). Throws astro::Error for
+/// anything else: another length, blanks, a sign, a lower-case letter.
 [[nodiscard]] int decodeAlpha5(std::string_view s);
 /// Encode a catalog number as 5 characters: zero-padded digits below 100000, Alpha-5 (a letter,
 /// skipping I and O, plus 4 digits) up to 339999. Throws astro::Error below 0 and above 339999.

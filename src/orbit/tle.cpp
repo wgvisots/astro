@@ -28,6 +28,7 @@
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
+#include "astro/time/leap_seconds.h"
 
 namespace astro {
 
@@ -189,6 +190,25 @@ Time parseEpoch(std::string_view yearField, std::string_view dayField) {
         throw Error("TLE: bad epoch day field '" + std::string(dayField) + "' (" + std::to_string(year)
                     + " has days 1 to " + std::to_string(daysInYear) + ")");
     }
+    // Two-digit years 57 to 59 are 1957 to 1959, before UTC and the leap-second table begin. Say so here: the time
+    // module could only report that TAI - UTC is undefined, which does not tell the caller what is wrong with the
+    // element set.
+    int month = 0, dayOfMonth = 0;
+    monthDayFromDayOfYear(year, static_cast<int>(wholeDay), month, dayOfMonth);
+    const auto             table = leapSecondTable();
+    const LeapSecondEntry& first = table->entries().front();
+    if (year < first.year || (year == first.year && month < first.month)) {
+        char text[96];
+        std::snprintf(text,
+                      sizeof(text),
+                      "TLE: epoch %04d-%02d-%02d is before UTC begins (%04d-%02d-01 in the leap-second table)",
+                      year,
+                      month,
+                      dayOfMonth,
+                      first.year,
+                      first.month);
+        throw Error(text);
+    }
     const double midnight = static_cast<double>(julianDayNumber(year, 1, 1)) - 0.5 + (wholeDay - 1.0);
     return Time(JulianDate{midnight, (day - wholeDay) * tleDayPerUtcDay(midnight)}, TimeScale::UTC);
 }
@@ -326,6 +346,30 @@ std::string epochField(const Time& epoch) {
     return buf;
 }
 
+// Verifying a checksum needs the checksum: all 69 columns, with a digit in the last. A line without one is not a
+// line whose checksum matches. `which` is "line 1" or "line 2".
+void requireChecksum(const std::string& line, const char* which) {
+    if (line.size() < 69) {
+        throw Error(std::string("TLE: ") + which + " has " + std::to_string(line.size())
+                    + " columns; its checksum is in column 69");
+    }
+    if (!isDigit(line[68])) {
+        throw Error(std::string("TLE: ") + which + " checksum '" + line[68] + "' is not a digit");
+    }
+    if (tleChecksum(line) != line[68] - '0') {
+        throw Error(std::string("TLE: ") + which + " checksum mismatch");
+    }
+}
+
+// The catalog number of columns 3-7. It is right-justified, and some writers pad a short one with blanks instead
+// of zeros ("    5"), so leading blanks are read as zeros; the rest is for decodeAlpha5 to judge.
+int parseCatalogNumber(std::string field) {
+    for (std::size_t i = 0; i + 1 < field.size() && field[i] == ' '; ++i) {
+        field[i] = '0';
+    }
+    return decodeAlpha5(field);
+}
+
 // Whether a character can stand in a line: printable ASCII, the blank included.
 bool isPrintable(char c) {
     return c >= ' ' && c <= '~';
@@ -359,25 +403,21 @@ int tleChecksum(std::string_view line) noexcept {
 }
 
 int decodeAlpha5(std::string_view s) {
-    const std::string t = trim(s);
-    if (t.empty()) {
-        throw Error("TLE: empty catalog number");
+    // Exactly the Alpha-5 alphabet: five digits, or a capital letter other than I and O (left out because they look
+    // like 1 and 0) followed by four digits. The letters count on from 10: A = 10 ... H = 17, J = 18 ... N = 22,
+    // P = 23 ... Z = 33.
+    const char lead  = s.empty() ? '\0' : s[0];
+    const bool digit = isDigit(lead);
+    const bool alpha = lead >= 'A' && lead <= 'Z' && lead != 'I' && lead != 'O';
+    if (s.size() != 5 || !(digit || alpha) || !std::all_of(s.begin() + 1, s.end(), isDigit)) {
+        throw Error("TLE: bad catalog number '" + std::string(s)
+                    + "' (5 characters: digits, or a capital letter other than I and O and 4 digits)");
     }
-    if (std::isalpha(static_cast<unsigned char>(t[0]))) {
-        const char c = static_cast<char>(std::toupper(static_cast<unsigned char>(t[0])));
-        if (c == 'I' || c == 'O') {
-            throw Error("TLE: invalid Alpha-5 letter");
-        }
-        int v = c - 'A' + 10;
-        if (c > 'I') {
-            --v;
-        }
-        if (c > 'O') {
-            --v;
-        }
-        return v * 10000 + toInt(t.substr(1), "catalog number");
+    int high = lead - '0';
+    if (alpha) {
+        high = lead - 'A' + 10 - (lead > 'I' ? 1 : 0) - (lead > 'O' ? 1 : 0);
     }
-    return toInt(t, "catalog number");
+    return high * 10000 + toInt(s.substr(1), "catalog number");
 }
 
 std::string encodeAlpha5(int satnum) {
@@ -411,20 +451,16 @@ Tle Tle::parse(std::string_view l1, std::string_view l2, std::string_view name, 
         throw Error("TLE: line 2 malformed");
     }
     if (verifyChecksum) {
-        if (a.size() >= 69 && std::isdigit(static_cast<unsigned char>(a[68])) && tleChecksum(a) != a[68] - '0') {
-            throw Error("TLE: line 1 checksum mismatch");
-        }
-        if (b.size() >= 69 && std::isdigit(static_cast<unsigned char>(b[68])) && tleChecksum(b) != b[68] - '0') {
-            throw Error("TLE: line 2 checksum mismatch");
-        }
+        requireChecksum(a, "line 1");
+        requireChecksum(b, "line 2");
     }
     Tle t;
     t.name = trim(name);
     if (!t.name.empty() && t.name[0] == '0' && t.name.size() > 1 && t.name[1] == ' ') {
         t.name = trim(t.name.substr(2));
     }
-    t.satnum = decodeAlpha5(cols(a, 3, 7));
-    if (decodeAlpha5(cols(b, 3, 7)) != t.satnum) {
+    t.satnum = parseCatalogNumber(cols(a, 3, 7));
+    if (parseCatalogNumber(cols(b, 3, 7)) != t.satnum) {
         throw Error("TLE: catalog numbers on lines 1 and 2 differ");
     }
     t.classification   = a.size() >= 8 ? a[7] : 'U';
@@ -448,26 +484,42 @@ Tle Tle::parse(std::string_view l1, std::string_view l2, std::string_view name, 
 }
 
 std::vector<Tle> Tle::parseMany(std::string_view text, bool verifyChecksum) {
-    std::vector<std::string> lines;
-    std::istringstream       in{std::string(text)};
-    std::string              line;
-    while (std::getline(in, line)) {
-        const std::string t = trim(line);
-        if (!t.empty() && t[0] != '#') {
-            lines.push_back(line);
+    // A data line starts with "1 " or "2 " and is at least as long as the shortest line parse() takes (64 and 63
+    // columns). Any other line that is not blank and not a '#' comment is a name. Names are at most 24 columns, so
+    // one that happens to start with "1 " is not taken for data.
+    const auto unpaired = [](std::size_t lineNumber, const char* what) {
+        throw Error("TLE: text line " + std::to_string(lineNumber) + ": " + what);
+    };
+    std::vector<Tle>   out;
+    std::istringstream in{std::string(text)};
+    std::string        raw, name, line1;
+    std::size_t        lineNumber = 0, line1Number = 0; // counted from 1; line1Number is 0 when no line 1 is waiting
+    while (std::getline(in, raw)) {
+        ++lineNumber;
+        const std::string t = trim(raw);
+        if (t.empty() || t[0] == '#') {
+            continue;
+        }
+        const bool isLine1 = t.size() >= 64 && t[0] == '1' && t[1] == ' ';
+        const bool isLine2 = t.size() >= 63 && t[0] == '2' && t[1] == ' ';
+        if (line1Number != 0) {
+            if (!isLine2) {
+                unpaired(line1Number, "line 1 of an element set is not followed by its line 2");
+            }
+            out.push_back(parse(line1, t, name, verifyChecksum));
+            name.clear();
+            line1Number = 0;
+        } else if (isLine1) {
+            line1       = t;
+            line1Number = lineNumber;
+        } else if (isLine2) {
+            unpaired(lineNumber, "line 2 of an element set without its line 1");
+        } else {
+            name = t;
         }
     }
-    std::vector<Tle> out;
-    std::string      pendingName;
-    for (std::size_t i = 0; i < lines.size(); ++i) {
-        const std::string t = trim(lines[i]);
-        if (t.size() >= 2 && t[0] == '1' && t[1] == ' ' && i + 1 < lines.size() && trim(lines[i + 1])[0] == '2') {
-            out.push_back(parse(lines[i], lines[i + 1], pendingName, verifyChecksum));
-            pendingName.clear();
-            ++i;
-        } else {
-            pendingName = t;
-        }
+    if (line1Number != 0) {
+        unpaired(line1Number, "line 1 of an element set is not followed by its line 2");
     }
     return out;
 }
