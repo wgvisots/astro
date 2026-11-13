@@ -77,7 +77,9 @@ using ItrsStateFunction = std::function<StateVector(const Time&)>;
 ///
 /// An empty window (end == start) returns no pass. Throws astro::Error if `end` is
 /// before `start`, if either time or `minElevation` is NaN, if `step` is not
-/// positive and finite, or if the window holds more than 2e9 steps.
+/// positive and finite, or if the window holds more than 2e9 steps. Also throws if
+/// `end - start` does (one of the two in UT1, or a UTC time before 1960; see Time).
+/// An exception thrown by `sat` passes through.
 [[nodiscard]] std::vector<Pass> findPasses(const ItrsStateFunction& sat,
                                            const Geodetic&          site,
                                            const Time&              start,
@@ -87,7 +89,9 @@ using ItrsStateFunction = std::function<StateVector(const Time&)>;
                                            const Ellipsoid&         ell          = Ellipsoid::wgs84());
 
 /// ITRS state function for an SGP4 satellite (TEME -> ITRS with the given EOP;
-/// the IAU 2000B nutation model is used for speed).
+/// the IAU 2000B nutation model is used for speed). The function returned throws
+/// astro::Error when it is called for a time at which `eop` has no data or which
+/// is before 1960 (see FrameTransformer), and as Sgp4::propagate does.
 [[nodiscard]] ItrsStateFunction sgp4ItrsFunction(const Sgp4& sgp4, const EopProvider& eop);
 
 } // namespace astro

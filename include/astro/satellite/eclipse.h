@@ -89,7 +89,9 @@ struct EclipseInterval {
 /// Eclipses already in progress at `start` or `end` are clipped to the window.
 /// An empty window (end == start) returns no eclipse. Throws astro::Error if `end`
 /// is before `start`, if either time is NaN, if `step` is not positive and finite,
-/// or if the window holds more than 2e9 steps.
+/// or if the window holds more than 2e9 steps. Also throws if `end - start` does
+/// (one of the two in UT1, or a UTC time before 1960; see Time). An exception
+/// thrown by `satPosition` or `sunPosition` passes through.
 [[nodiscard]] std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>& satPosition,
                                                         const std::function<Vec3(const Time&)>& sunPosition,
                                                         const Time&                             start,
