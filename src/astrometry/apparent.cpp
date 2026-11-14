@@ -33,8 +33,8 @@ namespace {
 constexpr double kSrs                  = 1.97412574336e-8;
 constexpr double kSecondsPerJulianYear = constants::daysPerJulianYear * constants::secondsPerDay;
 
-Aer horizonFromItrsDirection(const Vec3& dItrs, const Geodetic& site, double range) {
-    const Aer a = enuToAer(ecefToEnuMatrix(site.lat, site.lon) * dItrs);
+LookAngles horizonFromItrsDirection(const Vec3& dItrs, const Geodetic& site, double range) {
+    const LookAngles a = enuToLookAngles(ecefToEnuMatrix(site.lat, site.lon) * dItrs);
     return {a.az, a.el, range};
 }
 
@@ -101,26 +101,26 @@ RaDec starApparentGcrs(const CatalogStar& star, const Time& t, const Ephemeris& 
     return vectorToRaDec(starApparentDirection(star, t, observerEphemeris(t, eph)));
 }
 
-Aer starObserved(const CatalogStar& star,
-                 const Time&        t,
-                 const Geodetic&    site,
-                 const EopProvider& eop,
-                 const Ephemeris&   eph,
-                 const Atmosphere*  atm) {
+LookAngles starObserved(const CatalogStar& star,
+                        const Time&        t,
+                        const Geodetic&    site,
+                        const EopProvider& eop,
+                        const Ephemeris&   eph,
+                        const Atmosphere*  atm) {
     const FrameTransformer ft(t, eop);
     const StateVector      siteGcrs = ft.transform(StateVector{geodeticToEcef(site), {}}, Frame::ITRS, Frame::GCRS);
     const Vec3             dir      = starApparentDirection(star, t, observerEphemeris(t, eph, siteGcrs));
-    Aer                    a        = horizonFromItrsDirection(ft.gcrsTo(Frame::ITRS) * dir, site, 0.0);
+    LookAngles             a        = horizonFromItrsDirection(ft.gcrsTo(Frame::ITRS) * dir, site, 0.0);
     a.el                            = applyRefraction(a.el, atm);
     return a;
 }
 
-Aer bodyObserved(Body               body,
-                 const Time&        t,
-                 const Geodetic&    site,
-                 const EopProvider& eop,
-                 const Ephemeris&   eph,
-                 const Atmosphere*  atm) {
+LookAngles bodyObserved(Body               body,
+                        const Time&        t,
+                        const Geodetic&    site,
+                        const EopProvider& eop,
+                        const Ephemeris&   eph,
+                        const Atmosphere*  atm) {
     const FrameTransformer  ft(t, eop);
     const StateVector       siteGcrs = ft.transform(StateVector{geodeticToEcef(site), {}}, Frame::ITRS, Frame::GCRS);
     const ObserverEphemeris obs      = observerEphemeris(t, eph, siteGcrs);
@@ -134,14 +134,15 @@ Aer bodyObserved(Body               body,
     }
     const Vec3 dir =
         aberration(normalized(rho), obs.barycentric.v / constants::c, norm(obs.heliocentric) / constants::au);
-    Aer a = horizonFromItrsDirection(ft.gcrsTo(Frame::ITRS) * dir, site, norm(rho));
-    a.el  = applyRefraction(a.el, atm);
+    LookAngles a = horizonFromItrsDirection(ft.gcrsTo(Frame::ITRS) * dir, site, norm(rho));
+    a.el         = applyRefraction(a.el, atm);
     return a;
 }
 
-Aer gcrsToTopocentric(const Vec3& rGcrs, const FrameTransformer& ft, const Geodetic& site, const Ellipsoid& ell) {
+LookAngles
+gcrsToTopocentric(const Vec3& rGcrs, const FrameTransformer& ft, const Geodetic& site, const Ellipsoid& ell) {
     const Vec3 rItrs = ft.gcrsTo(Frame::ITRS) * rGcrs;
-    return ecefToAer(rItrs, site, ell);
+    return ecefToLookAngles(rItrs, site, ell);
 }
 
 double localMeanSiderealTime(const Time& t, const EopProvider& eop, double lon) {

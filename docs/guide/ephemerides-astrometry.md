@@ -67,8 +67,9 @@ light deflection by the Sun, annual and diurnal aberration, precession-nutation,
 polar motion, and optionally refraction:
 
 - `starApparentGcrs` gives the apparent geocentric direction;
-- `starObserved` and `bodyObserved` give azimuth, elevation (and range for bodies) at a site,
-  with refraction when an `Atmosphere` is passed.
+- `starObserved` and `bodyObserved` give a `LookAngles` at a site: azimuth, elevation, and range
+  for bodies (0 for stars), with refraction when an `Atmosphere` is passed. They compute no
+  velocity, so the range rate is NaN; so does `gcrsToTopocentric`, the geometric direction.
 
 For stars the result agrees with ERFA's `atco13` to 1 mas without refraction, and above 10 deg
 with it ([Accuracy](../accuracy.md)). `bodyObserved` takes the same steps with the light time in

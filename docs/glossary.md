@@ -60,12 +60,14 @@ they are in alphabetical order.
 
 | Term | Stands for | What it means here |
 |---|---|---|
-| AER | Azimuth, Elevation, Range | look angles from a site; azimuth clockwise from north (`ecefToAer`) |
+| AER | Azimuth, Elevation, Range | the look angles from a site; azimuth clockwise from north (`LookAngles`, `ecefToLookAngles`) |
 | Ellipsoid height | | height above the reference ellipsoid along its normal (`Geodetic::h`); not height above sea level |
 | ENU | East, North, Up | local horizontal frame at a site (`ecefToEnuMatrix`) |
 | Geoid | | the equipotential surface that mean sea level follows; up to ~100 m above or below the WGS84 ellipsoid |
 | GRS80 | Geodetic Reference System 1980 | reference ellipsoid, within 0.1 mm of WGS84 (`Ellipsoid::grs80`) |
+| Look angles | | azimuth, elevation, range and range rate from a site to a target (`LookAngles`); the range rate is NaN when no velocity was given |
 | NED | North, East, Down | local frame common in aviation (`ecefToNedMatrix`) |
+| Range rate | | rate of change of the range, m/s, positive receding (`LookAngles::rangeRate`) |
 | WGS72 / WGS84 | World Geodetic System 1972 / 1984 | WGS84 is the GPS reference ellipsoid and frame (`Ellipsoid::wgs84`); WGS72 constants are used by SGP4 |
 
 ## Orbits and propagation

@@ -65,13 +65,14 @@ for (const Pass& p : passes) {
 ```cpp
 // Look angles and the Doppler shift of a 437 MHz downlink at the first pass's closest approach.
 if (!passes.empty()) {
-    const LookAngles look = lookAngles(iss.state(passes[0].tca), station);
+    const LookAngles look = ecefToLookAngles(iss.state(passes[0].tca), station);
     std::cout << "  at maximum elevation: range " << look.range / 1e3 << " km, range rate " << look.rangeRate
               << " m/s, Doppler " << dopplerShift(437e6, look.rangeRate) << " Hz\n";
 }
 ```
 
-`lookAngles` gives azimuth, elevation, range and range rate from a site to a satellite's ITRS state;
+`ecefToLookAngles` (`astro/geodesy/local.h`) gives azimuth, elevation, range and range rate from a
+site to a satellite's ITRS state (given only a position, it leaves the range rate NaN);
 `dopplerShift` (first order) and `dopplerShiftRelativistic` turn range rate into a frequency shift.
 
 ## Eclipses and beta angle

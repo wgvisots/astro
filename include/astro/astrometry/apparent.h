@@ -86,33 +86,35 @@ lightDeflection(const Vec3& p, const Vec3& q, const Vec3& e, double emAu, double
 [[nodiscard]] RaDec starApparentGcrs(const CatalogStar& star, const Time& t, const Ephemeris& eph);
 
 /// Observed azimuth / elevation of a star from a site. With `atm` null, the
-/// elevation is unrefracted; range is set to 0 (unknown) for stars. Throws
-/// astro::Error if `eop` has no data at `t` or `t` is before 1960 (see
-/// FrameTransformer), and as starApparentGcrs does.
-[[nodiscard]] Aer starObserved(const CatalogStar& star,
-                               const Time&        t,
-                               const Geodetic&    site,
-                               const EopProvider& eop,
-                               const Ephemeris&   eph,
-                               const Atmosphere*  atm = nullptr);
+/// elevation is unrefracted; range is set to 0 (unknown) for stars, and the range
+/// rate is NaN (not computed). Throws astro::Error if `eop` has no data at `t` or
+/// `t` is before 1960 (see FrameTransformer), and as starApparentGcrs does.
+[[nodiscard]] LookAngles starObserved(const CatalogStar& star,
+                                      const Time&        t,
+                                      const Geodetic&    site,
+                                      const EopProvider& eop,
+                                      const Ephemeris&   eph,
+                                      const Atmosphere*  atm = nullptr);
 
 /// Observed azimuth / elevation / range of a solar-system body from a site,
-/// including light time and aberration (light deflection is neglected, < 2 arcsec).
+/// including light time and aberration (light deflection is neglected, < 2 arcsec);
+/// the range rate is NaN (not computed).
 /// Throws astro::Error if `eop` has no data at `t` or `t` is before 1960 (see
 /// FrameTransformer), as observerEphemeris does, and if `eph` has no data for
 /// `body` at `t` less the light time.
-[[nodiscard]] Aer bodyObserved(Body               body,
-                               const Time&        t,
-                               const Geodetic&    site,
-                               const EopProvider& eop,
-                               const Ephemeris&   eph,
-                               const Atmosphere*  atm = nullptr);
+[[nodiscard]] LookAngles bodyObserved(Body               body,
+                                      const Time&        t,
+                                      const Geodetic&    site,
+                                      const EopProvider& eop,
+                                      const Ephemeris&   eph,
+                                      const Atmosphere*  atm = nullptr);
 
-/// Geometric topocentric az/el/range of a GCRS position (no light time or aberration).
-[[nodiscard]] Aer gcrsToTopocentric(const Vec3&             rGcrs,
-                                    const FrameTransformer& ft,
-                                    const Geodetic&         site,
-                                    const Ellipsoid&        ell = Ellipsoid::wgs84());
+/// Geometric topocentric az/el/range of a GCRS position `rGcrs` (m; no light time or
+/// aberration); the range rate is NaN (not computed).
+[[nodiscard]] LookAngles gcrsToTopocentric(const Vec3&             rGcrs,
+                                           const FrameTransformer& ft,
+                                           const Geodetic&         site,
+                                           const Ellipsoid&        ell = Ellipsoid::wgs84());
 
 /// Local mean / apparent sidereal time (rad, [0, 2pi)) at east longitude `lon`
 /// (rad): GMST (IAU 2006) / GAST (IAU 2006/2000A) plus `lon`. `t` may be in any
