@@ -13,6 +13,26 @@ const double lat = degToRad(38.8895);
 std::cout << formatDms(lat) << '\n';
 ```
 
+A few inputs keep the unit of their source instead (a reference code, a file format or a catalogue);
+each says so in its name or its documentation:
+
+| Where                                                                       | Unit                                                       |
+|-----------------------------------------------------------------------------|------------------------------------------------------------|
+| `Sgp4::propagateMinutes(minutes)`                                           | minutes since the TLE epoch, as in the SGP4 reference code |
+| `Tle::meanMotion`, `meanMotionDot`, `meanMotionDdot`                        | rev/day, rev/day^2, rev/day^3, as printed in the TLE       |
+| `Tle::bstar`                                                                | 1 / Earth radii                                            |
+| `tdbMinusTt(tt, ut1Fraction, elong, uKm, vKm)`                              | observer distances `uKm`, `vKm` in km (as in ERFA)         |
+| `lightDeflection(p, q, e, emAu, massSolar)`                                 | distance in au, mass in solar masses (as in ERFA)          |
+| `aberration(p, vOverC, sunDistanceAu)`                                      | velocity in units of c, distance in au (as in ERFA)        |
+| `Atmosphere{pressureHpa, temperatureC, relativeHumidity, wavelengthMicron}` | hPa, degrees Celsius, 0 to 1, micrometres                  |
+| `refractionBennett`, `refractionSaemundsson(el, pressureHpa, temperatureC)` | hPa, degrees Celsius                                       |
+| `CatalogStar::pmRaCosDec`, `pmDec`                                          | rad per Julian year                                        |
+| `HelmertTimeDependent` rates, `epoch`; `helmertTransform(..., decimalYear)` | per year; decimal years                                    |
+| `EopProvider::at(mjdUtc)`, `LeapSecondTable::taiMinusUtc(mjdUtc)`           | Modified Julian Date (MJD) in UTC, days                    |
+| `CatalogStar::epochJdTdb`                                                   | Julian Date in TDB, days                                   |
+| `SpkEphemeris::stateById(target, center, et)`                               | ephemeris time: TDB seconds since J2000.0                  |
+| precession-nutation functions (`frames/precession_nutation.h`), `t`         | Julian centuries of TT since J2000.0                       |
+
 ## Names
 
 Names follow one pattern, so that a reader who has learned one part of the library can guess the rest:
