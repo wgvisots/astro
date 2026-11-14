@@ -170,7 +170,7 @@ jobs:
     # guard against a large untested addition, not a target: raise it as the suite grows.
     - name: Report
       run: |
-        python3 tools/coverage_report.py build --min 95 | tee coverage.md
+        python3 tools/coverage_report.py build --min 97 | tee coverage.md
         cat coverage.md >> "$GITHUB_STEP_SUMMARY"
 
   format:
