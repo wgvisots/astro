@@ -23,6 +23,10 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <string>
+#include <vector>
+
+#include <boost/describe/enum_to_string.hpp>
 
 #include "astro/core/angle.h"
 #include "test_util.h"
@@ -99,6 +103,12 @@ Mat3L eulerMatrix(const std::array<int, 3>& axes, long double a, long double cos
                    frameRotation(axes[0], std::cos(a), std::sin(a)));
 }
 
+/// Axes of an Euler sequence read from its name (1 = x, 2 = y, 3 = z): "ZYX" is {3, 2, 1}.
+std::array<int, 3> axesFromName(EulerSequence seq) {
+    const std::string name = boost::describe::enum_to_string(seq, "???");
+    return {name[0] - 'X' + 1, name[1] - 'X' + 1, name[2] - 'X' + 1};
+}
+
 /// The matrix rounded to double precision: the nearest a caller could hold.
 Mat3 rounded(const Mat3L& m) {
     Mat3 r;
@@ -133,12 +143,22 @@ TEST(Rotation, PassiveConvention) {
     expectVecNear(R2(t) * Vec3{1, 0, 0}, {0, 0, 1}, 1e-15);
 }
 
-TEST(Rotation, R2MatchesExplanatorySupplement) {
-    // R2(theta) = [cos 0 -sin; 0 1 0; sin 0 cos]
-    const double t = 0.3;
-    const Mat3   m = R2(t);
-    EXPECT_DOUBLE_EQ(m(0, 2), -std::sin(t));
-    EXPECT_DOUBLE_EQ(m(2, 0), std::sin(t));
+// All nine elements of R1, R2 and R3, at angles in every quadrant, against the passive rotation matrices
+// of SOFA's iauRx, iauRy and iauRz (the convention of the Explanatory Supplement), written out again above
+// (frameRotation) in extended precision. The only rounding is in the double cosine and sine of the
+// library: half a unit in the last place, so 1.1e-16 at most (measured 5.5e-17).
+TEST(Rotation, ElementaryRotationsMatchTheirDefinitionInEveryElement) {
+    for (double t : {0.0, 0.3, 1.2, 2.0, 3.0, -0.7, -2.5, 10.0}) {
+        const long double tL = t;
+        const long double c = std::cos(tL), s = std::sin(tL);
+        SCOPED_TRACE(testing::Message() << "theta " << t);
+        EXPECT_LE(worstDifference(frameRotation(1, c, s), R1(t)), 1.2e-16);
+        EXPECT_LE(worstDifference(frameRotation(2, c, s), R2(t)), 1.2e-16);
+        EXPECT_LE(worstDifference(frameRotation(3, c, s), R3(t)), 1.2e-16);
+        EXPECT_LE(worstDifference(frameRotation(1, c, s), rotationAboutAxis(1, t)), 1.2e-16);
+        EXPECT_LE(worstDifference(frameRotation(2, c, s), rotationAboutAxis(2, t)), 1.2e-16);
+        EXPECT_LE(worstDifference(frameRotation(3, c, s), rotationAboutAxis(3, t)), 1.2e-16);
+    }
 }
 
 TEST(Rotation, CyclicConsistency) {
@@ -275,11 +295,23 @@ TEST(Quat, NaNInGivesNaNOut) {
     expectAllNaN(slerp(identity, Quat{0.0, 0.0, 0.0, 1.0}, kNaN));
 }
 
-TEST(Quat, Slerp) {
-    const Quat a = Quat::fromAxisAngle({0, 0, 1}, 0.0);
-    const Quat b = Quat::fromAxisAngle({0, 0, 1}, 1.0);
-    expectMatNear(slerp(a, b, 0.25).toMatrix(), R3(0.25), 1e-14);
-    expectMatNear(slerp(a, b, 1.0).toMatrix(), R3(1.0), 1e-14);
+// The edges of the interpolation, between two unrelated attitudes (different axes, angles in all
+// quadrants). At t = 0 and t = 1 the result is the end point itself, b taken on a's side; the end points'
+// components are exact doubles, so the only error is the rounding of the weights and the final
+// normalisation: none was seen; 2.3e-16 allows one rounding error. Interpolating between q and -q, which are the same rotation, stays
+// at that rotation for every t.
+TEST(Quat, SlerpEndPointsAndTheSameRotationWrittenTwice) {
+    const Quat a = Quat(0.5, -0.5, 0.5, 0.5);                       // unit: four halves
+    const Quat b = Quat(3.0 / 13.0, -4.0 / 13.0, 12.0 / 13.0, 0.0); // unit: 3-4-12-13
+    const Quat c = Quat(-0.6, 0.0, 0.0, -0.8);                      // unit: 3-4-5, on the far side of a
+    expectQuatNear(slerp(a, b, 0.0), a, 2.3e-16, "a to b, t = 0:");
+    expectQuatNear(slerp(a, b, 1.0), b, 2.3e-16, "a to b, t = 1:");
+    // a.c = -0.3 - 0.4 < 0, so the shorter arc ends at -c.
+    expectQuatNear(slerp(a, c, 0.0), a, 2.3e-16, "a to c, t = 0:");
+    expectQuatNear(slerp(a, c, 1.0), Quat(0.6, 0.0, 0.0, 0.8), 2.3e-16, "a to c, t = 1:");
+    for (double t : {0.0, 0.3, 0.5, 1.0}) {
+        expectQuatNear(slerp(b, Quat(-b.w, -b.x, -b.y, -b.z), t), b, 2.3e-16, "b to -b:");
+    }
 }
 
 // Truth: a and b are frame rotations about one axis n by the angles alpha and alpha + sep, so the
@@ -326,30 +358,52 @@ TEST(Quat, SlerpTakesTheShorterArc) {
 
 class EulerTest : public ::testing::TestWithParam<EulerSequence> {};
 
-TEST_P(EulerTest, DefinitionAndRoundTrip) {
+// The axes come from the name of the sequence ("ZYX" is z, then y, then x) and the matrix from the three
+// frame rotations written out in extended precision (eulerMatrix above), so nothing here is taken from the
+// library's own eulerAxes or rotation matrices. Any angles are allowed, the middle one included.
+// Tolerance: each library element is a sum of products of three double cosines and sines, each within
+// 1.1e-16 of its true value, plus the rounding of the products and sums; the worst seen over 15000
+// random angles in each sequence was 2.7e-16.
+TEST_P(EulerTest, MatrixIsTheProductOfTheThreeFrameRotations) {
+    const EulerSequence seq = GetParam();
+    const auto          ax  = axesFromName(seq);
+    EXPECT_EQ(eulerAxes(seq), ax);
+    std::mt19937                           rng(7);
+    std::uniform_real_distribution<double> u(-constants::pi, constants::pi);
+    for (int i = 0; i < 300; ++i) {
+        const double      a = u(rng), b = u(rng), c = u(rng);
+        const long double bL = b;
+        SCOPED_TRACE(testing::Message() << "a = " << a << ", b = " << b << ", c = " << c);
+        EXPECT_LE(worstDifference(eulerMatrix(ax, a, std::cos(bL), std::sin(bL), c), eulerToMatrix(seq, {a, b, c})),
+                  6e-16);
+    }
+}
+
+// What a caller does: angles to a matrix with eulerToMatrix and back with matrixToEuler. Truth: the angles
+// put in, with the middle angle anywhere in its range at least 0.01 rad from gimbal lock. The worst
+// difference seen over 15000 random angles in each sequence was 4.4e-16 (two rounding errors of an angle
+// near pi); 1e-15 allows for a different compiler. (This test once allowed 1e-9.)
+TEST_P(EulerTest, RoundTripThroughTheMatrixRecoversTheAngles) {
     const EulerSequence                    seq    = GetParam();
-    const auto                             ax     = eulerAxes(seq);
+    const auto                             ax     = axesFromName(seq);
     const bool                             proper = ax[0] == ax[2];
     std::mt19937                           rng(7);
     std::uniform_real_distribution<double> u(-3.1, 3.1);
-    std::uniform_real_distribution<double> mid(proper ? 0.01 : -1.55, proper ? 3.13 : 1.55);
+    std::uniform_real_distribution<double> mid(proper ? 0.01 : -1.56, proper ? 3.13 : 1.56);
     for (int i = 0; i < 300; ++i) {
         const EulerAngles e{u(rng), mid(rng), u(rng)};
-        const Mat3        A = eulerToMatrix(seq, e);
-        expectMatNear(A,
-                      rotationAboutAxis(ax[2], e.c) * rotationAboutAxis(ax[1], e.b) * rotationAboutAxis(ax[0], e.a),
-                      1e-15);
-        const EulerAngles r = matrixToEuler(seq, A);
-        EXPECT_NEAR(r.a, e.a, 1e-9);
-        EXPECT_NEAR(r.b, e.b, 1e-9);
-        EXPECT_NEAR(r.c, e.c, 1e-9);
+        const EulerAngles r = matrixToEuler(seq, eulerToMatrix(seq, e));
+        SCOPED_TRACE(testing::Message() << "a = " << e.a << ", b = " << e.b << ", c = " << e.c);
+        EXPECT_NEAR(r.a, e.a, 1e-15);
+        EXPECT_NEAR(r.b, e.b, 1e-15);
+        EXPECT_NEAR(r.c, e.c, 1e-15);
     }
-    // Gimbal lock still reproduces the matrix.
+    // At gimbal lock, set through the library's constants, the angles returned still give the matrix back
+    // to rounding (worst seen 2.4e-16; this once allowed 1e-12).
     for (double b : proper ? std::vector<double>{0.0, constants::pi}
                            : std::vector<double>{constants::halfPi, -constants::halfPi}) {
-        const EulerAngles e{0.4, b, -0.3};
-        const Mat3        A = eulerToMatrix(seq, e);
-        expectMatNear(eulerToMatrix(seq, matrixToEuler(seq, A)), A, 1e-12, "gimbal");
+        const Mat3 A = eulerToMatrix(seq, {0.4, b, -0.3});
+        expectMatNear(eulerToMatrix(seq, matrixToEuler(seq, A)), A, 1e-15, "gimbal");
     }
 }
 
