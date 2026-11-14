@@ -478,7 +478,7 @@ void SecularPropagator::stmGrid(double start, double step, std::span<StateVector
             for (std::size_t k = 0; k < buf.size(); ++k) {
                 const double c[6] = {buf[k].r.x, buf[k].r.y, buf[k].r.z, buf[k].v.x, buf[k].v.y, buf[k].v.z};
                 for (std::size_t i = 0; i < 6; ++i) {
-                    stm[k][i][j] += w * c[i];
+                    stm[k](i, j) += w * c[i];
                 }
             }
         }

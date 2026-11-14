@@ -547,7 +547,7 @@ CollisionProbability collisionProbability(const CloseApproach& approach,
                                           const Mat6&          covariance1,
                                           const Mat6&          covariance2,
                                           double               hardBodyRadius) {
-    return collisionProbability(approach, block(covariance1, 0, 0), block(covariance2, 0, 0), hardBodyRadius);
+    return collisionProbability(approach, covariance1.block(0, 0), covariance2.block(0, 0), hardBodyRadius);
 }
 
 namespace {
@@ -579,7 +579,7 @@ UncertainTrajectory::UncertainTrajectory(const Time&        epoch,
                                          TrajectoryModel    model,
                                          const CentralBody& body)
     : trajectory_(epoch, state, model, body) {
-    for (const auto& row : covariance) {
+    for (const auto& row : covariance.m) {
         for (double x : row) {
             if (!std::isfinite(x)) {
                 throw Error("UncertainTrajectory: covariance is not finite");

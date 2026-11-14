@@ -187,11 +187,11 @@ TEST(CollisionProbability, ProjectsOntoTheEncounterPlane) {
     Mat6 p1{}, p2{};
     for (std::size_t i = 0; i < 3; ++i) {
         for (std::size_t j = 0; j < 3; ++j) {
-            p1[i][j] = c1(i, j);
-            p2[i][j] = c2Along(i, j);
+            p1(i, j) = c1(i, j);
+            p2(i, j) = c2Along(i, j);
         }
-        p1[i + 3][i + 3] = 4.0; // velocity variances are ignored
-        p2[i + 3][i + 3] = 9.0;
+        p1(i + 3, i + 3) = 4.0; // velocity variances are ignored
+        p2(i + 3, i + 3) = 9.0;
     }
     EXPECT_EQ(collisionProbability(ca, p1, p2, 10.0).probability,
               collisionProbability(ca, c1, c2Along, 10.0).probability);

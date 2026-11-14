@@ -122,8 +122,8 @@ int main(int argc, char** argv) {
         for (const auto& sg : sigmas) {
             Mat6 P{};
             for (std::size_t i = 0; i < 3; ++i) {
-                P[i][i]         = sg[0] * sg[0];
-                P[i + 3][i + 3] = sg[1] * sg[1];
+                P(i, i)         = sg[0] * sg[0];
+                P(i + 3, i + 3) = sg[1] * sg[1];
             }
             const auto               nominal = predictImpact(kEpoch, s0, P, Frame::GCRS, eop);
             const ImpactUncertainty& u       = *nominal->uncertainty;

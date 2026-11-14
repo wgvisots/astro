@@ -22,92 +22,163 @@
 #include <cmath>
 #include <cstddef>
 #include <optional>
+#include <ostream>
 
 #include "astro/core/vec.h"
 
 /// \file
-/// 6x6 matrices for position/velocity covariances and state transition matrices. Element [i][j]
-/// is row i, column j; rows and columns 0-2 are position, 3-5 velocity.
-///
-/// Mat6 is a std::array, so the operations are named functions (operators declared here would not
-/// be found by argument-dependent lookup outside namespace astro).
+/// 6x6 matrices for position/velocity covariances and state transition matrices. Element (i, j) is
+/// row i, column j; rows and columns 0-2 are position, 3-5 velocity.
 namespace astro {
 
-/// 6x6 matrix, row-major: Mat6[i][j] is row i, column j.
-using Mat6 = std::array<std::array<double, 6>, 6>;
+/// 6x6 matrix, row-major: a(i, j) is row i, column j. Used as Mat3 is: a(i, j), a * b, a + b,
+/// a.transpose(), Mat6::identity().
+struct Mat6 {
+    /// Elements, m[row][column]; zero-initialised.
+    std::array<std::array<double, 6>, 6> m{};
 
-/// 6x6 identity matrix.
-[[nodiscard]] constexpr Mat6 identity6() noexcept {
-    Mat6 m{};
-    for (std::size_t i = 0; i < 6; ++i) {
-        m[i][i] = 1.0;
-    }
-    return m;
-}
-
-/// Transpose of a.
-[[nodiscard]] constexpr Mat6 transpose(const Mat6& a) noexcept {
-    Mat6 t{};
-    for (std::size_t i = 0; i < 6; ++i) {
-        for (std::size_t j = 0; j < 6; ++j) {
-            t[i][j] = a[j][i];
+    /// 6x6 identity matrix.
+    [[nodiscard]] static constexpr Mat6 identity() noexcept {
+        Mat6 a;
+        for (std::size_t i = 0; i < 6; ++i) {
+            a.m[i][i] = 1.0;
         }
+        return a;
     }
-    return t;
-}
 
-/// a * b
-[[nodiscard]] constexpr Mat6 multiply(const Mat6& a, const Mat6& b) noexcept {
-    Mat6 c{};
+    /// @name Element access
+    /// @{
+
+    /// Element at row r, column c (0-based, no bounds check).
+    [[nodiscard]] constexpr double  operator()(std::size_t r, std::size_t c) const noexcept { return m[r][c]; }
+    [[nodiscard]] constexpr double& operator()(std::size_t r, std::size_t c) noexcept { return m[r][c]; }
+    /// @}
+
+    /// The 3x3 block at block row br, block column bc (0 = position, 1 = velocity).
+    [[nodiscard]] constexpr Mat3 block(std::size_t br, std::size_t bc) const noexcept {
+        Mat3 b;
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                b(i, j) = m[3 * br + i][3 * bc + j];
+            }
+        }
+        return b;
+    }
+
+    /// Transpose.
+    [[nodiscard]] constexpr Mat6 transpose() const noexcept {
+        Mat6 t;
+        for (std::size_t i = 0; i < 6; ++i) {
+            for (std::size_t j = 0; j < 6; ++j) {
+                t.m[i][j] = m[j][i];
+            }
+        }
+        return t;
+    }
+
+    /// @name Compound assignment
+    /// @{
+
+    /// Element-wise in-place addition/subtraction, and scaling by a scalar.
+    constexpr Mat6& operator+=(const Mat6& o) noexcept {
+        for (std::size_t i = 0; i < 6; ++i) {
+            for (std::size_t j = 0; j < 6; ++j) {
+                m[i][j] += o.m[i][j];
+            }
+        }
+        return *this;
+    }
+    constexpr Mat6& operator-=(const Mat6& o) noexcept {
+        for (std::size_t i = 0; i < 6; ++i) {
+            for (std::size_t j = 0; j < 6; ++j) {
+                m[i][j] -= o.m[i][j];
+            }
+        }
+        return *this;
+    }
+    constexpr Mat6& operator*=(double s) noexcept {
+        for (auto& r : m) {
+            for (auto& e : r) {
+                e *= s;
+            }
+        }
+        return *this;
+    }
+    /// @}
+
+    friend constexpr bool operator==(const Mat6&, const Mat6&) noexcept = default;
+};
+
+/// @name Mat6 element-wise arithmetic
+/// @{
+
+/// Element-wise sum and difference; scaling by a scalar. (The result is a named local, so it is
+/// returned without a further copy of the 36 elements.)
+[[nodiscard]] constexpr Mat6 operator+(const Mat6& a, const Mat6& b) noexcept {
+    Mat6 c  = a;
+    c      += b;
+    return c;
+}
+[[nodiscard]] constexpr Mat6 operator-(const Mat6& a, const Mat6& b) noexcept {
+    Mat6 c  = a;
+    c      -= b;
+    return c;
+}
+[[nodiscard]] constexpr Mat6 operator*(const Mat6& a, double s) noexcept {
+    Mat6 c  = a;
+    c      *= s;
+    return c;
+}
+[[nodiscard]] constexpr Mat6 operator*(double s, const Mat6& a) noexcept {
+    Mat6 c  = a;
+    c      *= s;
+    return c;
+}
+/// @}
+
+/// Matrix product a * b.
+[[nodiscard]] constexpr Mat6 operator*(const Mat6& a, const Mat6& b) noexcept {
+    Mat6 c;
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t k = 0; k < 6; ++k) {
-            const double aik = a[i][k];
+            const double aik = a.m[i][k];
             for (std::size_t j = 0; j < 6; ++j) {
-                c[i][j] += aik * b[k][j];
+                c.m[i][j] += aik * b.m[k][j];
             }
         }
     }
     return c;
 }
 
-/// a + b
-[[nodiscard]] constexpr Mat6 add(const Mat6& a, const Mat6& b) noexcept {
-    Mat6 c = a;
+/// Writes the matrix row by row as "[[r0], [r1], ..., [r5]]" using the stream's current formatting.
+inline std::ostream& operator<<(std::ostream& os, const Mat6& a) {
+    os << '[';
     for (std::size_t i = 0; i < 6; ++i) {
+        os << (i == 0 ? "[" : ", [");
         for (std::size_t j = 0; j < 6; ++j) {
-            c[i][j] += b[i][j];
+            os << (j == 0 ? "" : ", ") << a(i, j);
         }
+        os << ']';
     }
-    return c;
+    return os << ']';
 }
 
 /// a * p * a^T, returned exactly symmetric: the upper triangle is computed and mirrored into the
 /// lower one, so a covariance stays a covariance.
 [[nodiscard]] constexpr Mat6 congruence(const Mat6& a, const Mat6& p) noexcept {
-    const Mat6 ap = multiply(a, p);
-    Mat6       c{};
+    const Mat6 ap = a * p;
+    Mat6       c;
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = i; j < 6; ++j) {
             double s = 0.0;
             for (std::size_t k = 0; k < 6; ++k) {
-                s += ap[i][k] * a[j][k];
+                s += ap(i, k) * a(j, k);
             }
-            c[i][j] = s;
-            c[j][i] = s;
+            c(i, j) = s;
+            c(j, i) = s;
         }
     }
     return c;
-}
-
-/// The 3x3 block at block row br, block column bc (0 = position, 1 = velocity).
-[[nodiscard]] constexpr Mat3 block(const Mat6& a, std::size_t br, std::size_t bc) noexcept {
-    Mat3 m;
-    for (std::size_t i = 0; i < 3; ++i) {
-        for (std::size_t j = 0; j < 3; ++j) {
-            m(i, j) = a[3 * br + i][3 * bc + j];
-        }
-    }
-    return m;
 }
 
 /// Rotate a symmetric 6x6 position/velocity covariance by a (static) 3x3 frame rotation:
@@ -116,16 +187,16 @@ using Mat6 = std::array<std::array<double, 6>, 6>;
 /// matrix products R P_ii R^T (the off-diagonal blocks are exact transposes of each other).
 [[nodiscard]] inline Mat6 rotateCovariance(const Mat6& P, const Mat3& R) noexcept {
     // Block by block: P'_ij = R P_ij R^T (the lower-left block is the transpose of the upper-right).
-    const Mat3 rr = R * block(P, 0, 0) * R.transpose();
-    const Mat3 rv = R * block(P, 0, 1) * R.transpose();
-    const Mat3 vv = R * block(P, 1, 1) * R.transpose();
-    Mat6       out{};
+    const Mat3 rr = R * P.block(0, 0) * R.transpose();
+    const Mat3 rv = R * P.block(0, 1) * R.transpose();
+    const Mat3 vv = R * P.block(1, 1) * R.transpose();
+    Mat6       out;
     for (std::size_t i = 0; i < 3; ++i) {
         for (std::size_t j = 0; j < 3; ++j) {
-            out[i][j]         = rr(i, j);
-            out[i][j + 3]     = rv(i, j);
-            out[i + 3][j]     = rv(j, i);
-            out[i + 3][j + 3] = vv(i, j);
+            out(i, j)         = rr(i, j);
+            out(i, j + 3)     = rv(i, j);
+            out(i + 3, j)     = rv(j, i);
+            out(i + 3, j + 3) = vv(i, j);
         }
     }
     return out;
@@ -144,17 +215,17 @@ mahalanobis2(const std::array<double, 6>& d, const Mat6& S, std::size_t n = 6) n
     }
     double scale[6];
     for (std::size_t i = 0; i < n; ++i) {
-        if (!(S[i][i] > 0.0) || !std::isfinite(S[i][i])) {
+        if (!(S(i, i) > 0.0) || !std::isfinite(S(i, i))) {
             return std::nullopt;
         }
-        scale[i] = 1.0 / std::sqrt(S[i][i]);
+        scale[i] = 1.0 / std::sqrt(S(i, i));
     }
     // L L^T = D S D with D = diag(scale); then solve L y = D d and return |y|^2.
     double Lm[6][6] = {};
     double y[6]     = {};
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t j = 0; j <= i; ++j) {
-            double sum = S[i][j] * scale[i] * scale[j];
+            double sum = S(i, j) * scale[i] * scale[j];
             for (std::size_t k = 0; k < j; ++k) {
                 sum -= Lm[i][k] * Lm[j][k];
             }

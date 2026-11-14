@@ -305,7 +305,7 @@ StateVector propagateKepler(const StateVector& s0, double dt, double mu) {
 
 StateTransition propagateKeplerStm(const StateVector& s0, double dt, double mu) {
     if (dt == 0.0) {
-        return {s0, identity6()};
+        return {s0, Mat6::identity()};
     }
     const Vec3&             r0  = s0.r;
     const Vec3&             v0  = s0.v;
@@ -391,13 +391,13 @@ StateTransition propagateKeplerStm(const StateVector& s0, double dt, double mu) 
     const double rc[3] = {r0.x, r0.y, r0.z}, vc[3] = {v0.x, v0.y, v0.z};
     for (std::size_t i = 0; i < 3; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            out.stm[i][j]     = rc[i] * gF[j] + vc[i] * gG[j];
-            out.stm[i + 3][j] = rc[i] * gFdot[j] + vc[i] * gGdot[j];
+            out.stm(i, j)     = rc[i] * gF[j] + vc[i] * gG[j];
+            out.stm(i + 3, j) = rc[i] * gFdot[j] + vc[i] * gGdot[j];
         }
-        out.stm[i][i]         += F;
-        out.stm[i][i + 3]     += G;
-        out.stm[i + 3][i]     += Fdot;
-        out.stm[i + 3][i + 3] += Gdot;
+        out.stm(i, i)         += F;
+        out.stm(i, i + 3)     += G;
+        out.stm(i + 3, i)     += Fdot;
+        out.stm(i + 3, i + 3) += Gdot;
     }
     return out;
 }

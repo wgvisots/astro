@@ -21,6 +21,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <sstream>
 
 #include "astro/core/rotation.h"
 #include "test_util.h"
@@ -36,7 +37,7 @@ Mat6 numbered(double offset = 0.0) {
     Mat6 m{};
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            m[i][j] = 10.0 * static_cast<double>(i) + static_cast<double>(j) + offset;
+            m(i, j) = 10.0 * static_cast<double>(i) + static_cast<double>(j) + offset;
         }
     }
     return m;
@@ -59,7 +60,7 @@ Mat6L widened(const Mat6& m) {
     Mat6L w{};
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            w[i][j] = m[i][j];
+            w[i][j] = m(i, j);
         }
     }
     return w;
@@ -90,7 +91,7 @@ Mat6 covariance() {
     Mat6 p{};
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            p[i][j] = rho[i][j] * sd[i] * sd[j];
+            p(i, j) = rho[i][j] * sd[i] * sd[j];
         }
     }
     return p;
@@ -99,55 +100,76 @@ Mat6 covariance() {
 } // namespace
 
 TEST(Mat6, IdentityTransposeAndSum) {
-    const Mat6 a = numbered(), t = transpose(a), s = add(a, identity6());
+    const Mat6 a = numbered(), t = a.transpose(), s = a + Mat6::identity();
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            EXPECT_EQ(identity6()[i][j], i == j ? 1.0 : 0.0) << i << j;
-            EXPECT_EQ(t[i][j], a[j][i]) << i << j;
-            EXPECT_EQ(s[i][j], a[i][j] + (i == j ? 1.0 : 0.0)) << i << j;
+            EXPECT_EQ(Mat6::identity()(i, j), i == j ? 1.0 : 0.0) << i << j;
+            EXPECT_EQ(t(i, j), a(j, i)) << i << j;
+            EXPECT_EQ(s(i, j), a(i, j) + (i == j ? 1.0 : 0.0)) << i << j;
         }
     }
     // Both terms of the sum count: (10 i + j) + (10 i + j + 0.5) = 20 i + 2 j + 0.5, so 50.5 at (2, 5).
-    EXPECT_EQ(add(a, numbered(0.5))[2][5], 50.5);
+    EXPECT_EQ((a + numbered(0.5))(2, 5), 50.5);
+}
+
+// Whole numbers and halves are subtracted and scaled exactly, so the comparisons are for equality.
+TEST(Mat6, DifferenceAndScaling) {
+    const Mat6 a = numbered();
+    EXPECT_EQ(numbered(0.5) - a, 0.5 * (numbered(1.0) - a)); // every element 0.5
+    for (std::size_t i = 0; i < 6; ++i) {
+        for (std::size_t j = 0; j < 6; ++j) {
+            EXPECT_EQ((a - numbered(0.5))(i, j), -0.5) << i << j;
+            EXPECT_EQ((a * 2.0)(i, j), 2.0 * a(i, j)) << i << j;
+            EXPECT_EQ((-1.0 * a)(i, j), -a(i, j)) << i << j;
+        }
+    }
+}
+
+TEST(Mat6, StreamsRowByRow) {
+    std::ostringstream os;
+    os << Mat6::identity();
+    EXPECT_EQ(os.str(),
+              "[[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], [0, 0, 0, 1, 0, 0], "
+              "[0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1]]");
 }
 
 // Whole numbers below 2^53 are added and multiplied exactly, so the brute-force product in long double is the
 // exact product and the comparison is for equality.
 TEST(Mat6, ProductOfWholeNumbersIsExact) {
-    const Mat6  a = numbered(), b = transpose(numbered(-30.0));
-    const Mat6  c = multiply(a, b);
+    const Mat6  a = numbered(), b = numbered(-30.0).transpose();
+    const Mat6  c = a * b;
     const Mat6L e = productL(widened(a), widened(b));
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            EXPECT_EQ(static_cast<long double>(c[i][j]), e[i][j]) << i << j;
+            EXPECT_EQ(static_cast<long double>(c(i, j)), e[i][j]) << i << j;
         }
     }
-    // By a permutation matrix, P[k][(k + 1) % 6] = 1: P a moves each row up by one, a P each column right by one.
+    // By a permutation matrix, P(k, (k + 1) % 6) = 1: P a moves each row up by one, a P each column right by one.
     Mat6 p{};
     for (std::size_t k = 0; k < 6; ++k) {
-        p[k][(k + 1) % 6] = 1.0;
+        p(k, (k + 1) % 6) = 1.0;
     }
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            EXPECT_EQ(multiply(p, a)[i][j], a[(i + 1) % 6][j]) << i << j;
-            EXPECT_EQ(multiply(a, p)[i][j], a[i][(j + 5) % 6]) << i << j;
+            EXPECT_EQ((p * a)(i, j), a((i + 1) % 6, j)) << i << j;
+            EXPECT_EQ((a * p)(i, j), a(i, (j + 5) % 6)) << i << j;
         }
     }
-    EXPECT_EQ(multiply(a, identity6()), a);
-    EXPECT_EQ(multiply(identity6(), a), a);
+    EXPECT_EQ(a * Mat6::identity(), a);
+    EXPECT_EQ(Mat6::identity() * a, a);
 }
 
 // congruence(a, p) is a p a^T, and mat6.h promises it exactly symmetric. Truth: the same product by brute
 // force in long double. Tolerance relative to the size of the elements: each is a sum of 36 products, with a
 // few rounding errors of 1.1e-16 each; the worst seen was 6.9e-17 of the largest element.
 TEST(Mat6, CongruenceIsTheExactlySymmetricProduct) {
-    Mat6 a = identity6(); // a state transition matrix for 600 s of free flight, with some coupling added
+    Mat6 a = Mat6::identity(); // a state transition matrix for 600 s of free flight, with some coupling added
     for (std::size_t i = 0; i < 3; ++i) {
-        a[i][i + 3] = 600.0;
+        a(i, i + 3) = 600.0;
     }
-    a[0][1]             = 0.01;
-    a[4][2]             = -3e-6;
-    a[5][3]             = 2e-3;
+    a(0, 1)             = 0.01;
+    a(4, 2)             = -3e-6;
+    a(5, 3)             = 2e-3;
     const Mat6  p       = covariance();
     const Mat6  c       = congruence(a, p);
     const Mat6L e       = productL(productL(widened(a), widened(p)), transposedL(widened(a)));
@@ -159,8 +181,8 @@ TEST(Mat6, CongruenceIsTheExactlySymmetricProduct) {
     }
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            EXPECT_EQ(c[i][j], c[j][i]) << i << j; // bit for bit
-            EXPECT_LE(static_cast<double>(std::abs(c[i][j] - e[i][j]) / largest), 5e-16) << i << j;
+            EXPECT_EQ(c(i, j), c(j, i)) << i << j; // bit for bit
+            EXPECT_LE(static_cast<double>(std::abs(c(i, j) - e[i][j]) / largest), 5e-16) << i << j;
         }
     }
 }
@@ -169,7 +191,7 @@ TEST(Mat6, BlockPicksTheThreeByThreeBlock) {
     const Mat6 a = numbered();
     for (std::size_t br = 0; br < 2; ++br) {
         for (std::size_t bc = 0; bc < 2; ++bc) {
-            const Mat3 b = block(a, br, bc);
+            const Mat3 b = a.block(br, bc);
             for (std::size_t i = 0; i < 3; ++i) {
                 for (std::size_t j = 0; j < 3; ++j) {
                     EXPECT_EQ(b(i, j), 10.0 * static_cast<double>(3 * br + i) + static_cast<double>(3 * bc + j));
@@ -188,8 +210,8 @@ TEST(Mat6, RotateCovarianceIsTheBlockDiagonalCongruence) {
     Mat6       d{};
     for (std::size_t i = 0; i < 3; ++i) {
         for (std::size_t j = 0; j < 3; ++j) {
-            d[i][j]         = r(i, j);
-            d[i + 3][j + 3] = r(i, j);
+            d(i, j)         = r(i, j);
+            d(i + 3, j + 3) = r(i, j);
         }
     }
     const Mat6  p = covariance();
@@ -206,14 +228,14 @@ TEST(Mat6, RotateCovarianceIsTheBlockDiagonalCongruence) {
             for (std::size_t i = 0; i < 3; ++i) {
                 for (std::size_t j = 0; j < 3; ++j) {
                     const std::size_t row = 3 * br + i, col = 3 * bc + j;
-                    EXPECT_LE(static_cast<double>(std::abs(q[row][col] - e[row][col]) / largest), 5e-16) << row << col;
+                    EXPECT_LE(static_cast<double>(std::abs(q(row, col) - e[row][col]) / largest), 5e-16) << row << col;
                 }
             }
         }
     }
     for (std::size_t i = 0; i < 3; ++i) {
         for (std::size_t j = 0; j < 3; ++j) {
-            EXPECT_EQ(q[i + 3][j], q[j][i + 3]) << i << j;
+            EXPECT_EQ(q(i + 3, j), q(j, i + 3)) << i << j;
         }
     }
 }

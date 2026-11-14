@@ -12,8 +12,8 @@ Acronyms are spelled out in the [Glossary](../glossary.md).
 // 1-sigma: 100 m per axis in position, 0.1 m/s per axis in velocity (GCRS, m^2 and m^2/s^2).
 Mat6 P0{};
 for (std::size_t i = 0; i < 3; ++i) {
-    P0[i][i]         = 100.0 * 100.0;
-    P0[i + 3][i + 3] = 0.1 * 0.1;
+    P0(i, i)         = 100.0 * 100.0;
+    P0(i + 3, i + 3) = 0.1 * 0.1;
 }
 const std::optional<Impact> impact = predictImpact(epoch, s0, P0, Frame::GCRS, eop);
 if (!impact) {

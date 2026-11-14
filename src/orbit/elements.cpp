@@ -215,7 +215,7 @@ Mat6 stateToEquinoctialJacobian(const StateVector& s, double mu) {
         const EquinoctialElements b  = stateToEquinoctial(minus, mu);
         const double d[6] = {a.a - b.a, a.h - b.h, a.k - b.k, a.p - b.p, a.q - b.q, wrapPi(a.lambda - b.lambda)};
         for (std::size_t i = 0; i < 6; ++i) {
-            J[i][j] = d[i] / (2.0 * h);
+            J(i, j) = d[i] / (2.0 * h);
         }
     }
     return J;

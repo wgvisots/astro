@@ -50,8 +50,8 @@ StateVector leo() {
 Mat6 diagonal(double positionVar, double velocityVar) {
     Mat6 P{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P[i][i]         = positionVar;
-        P[i + 3][i + 3] = velocityVar;
+        P(i, i)         = positionVar;
+        P(i + 3, i + 3) = velocityVar;
     }
     return P;
 }
@@ -168,16 +168,16 @@ TEST(EstimateTracker, Mahalanobis) {
     Mat6 A{};
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j <= i; ++j) {
-            A[i][j] = (i == j ? 2.0 : 0.3) * (i < 3 ? 10.0 : 0.01);
+            A(i, j) = (i == j ? 2.0 : 0.3) * (i < 3 ? 10.0 : 0.01);
         }
     }
-    const Mat6                  S = multiply(A, transpose(A));
+    const Mat6                  S = A * A.transpose();
     const std::array<double, 6> x{0.1, -0.2, 0.05, 30.0, -10.0, 4.0};
     std::array<double, 6>       Sx{};
     double                      xSx = 0.0;
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            Sx[i] += S[i][j] * x[j];
+            Sx[i] += S(i, j) * x[j];
         }
     }
     for (std::size_t i = 0; i < 6; ++i) {
@@ -186,7 +186,7 @@ TEST(EstimateTracker, Mahalanobis) {
     EXPECT_NEAR(*mahalanobis2(Sx, S) / xSx, 1.0, 1e-10);
     EXPECT_FALSE(mahalanobis2(d, Mat6{}).has_value());
     Mat6 bad  = D;
-    bad[0][1] = bad[1][0] = 5.0; // |rho| > 1
+    bad(0, 1) = bad(1, 0) = 5.0; // |rho| > 1
     EXPECT_FALSE(mahalanobis2(d, bad).has_value());
 }
 
@@ -346,7 +346,7 @@ TEST(EstimateTracker, ElementTestIsMirrorInvariant) {
     sp.r                 += Vec3{30.0, -10.0, 5.0};
     sp.v                 += Vec3{0.01, 0.02, -0.01};
     Mat6 P                = diagonal(400.0, 4e-4);
-    P[0][4] = P[4][0] = 0.05;
+    P(0, 4) = P(4, 0) = 0.05;
     const StateEstimate prior{kEpoch, sp, P};
     const StateEstimate next{kEpoch + 3600.0, truthAt(s0, 3600.0), diagonal(1e-6, 1e-12)};
     const Mat3          M{1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0};
@@ -398,7 +398,7 @@ TEST(EstimateTracker, LatestWins) {
     EXPECT_EQ(grid.front().covariance, next.covariance);
     const StateCovariance p = tracker.predict(next.epoch + 1800.0);
     astro::test::expectVecNear(p.state.r, grid.back().state.r, 1e-6);
-    EXPECT_NEAR(p.covariance[1][1] / grid.back().covariance[1][1], 1.0, 1e-6);
+    EXPECT_NEAR(p.covariance(1, 1) / grid.back().covariance(1, 1), 1.0, 1e-6);
 }
 
 TEST(EstimateTracker, InvalidCovarianceIsReported) {
@@ -419,7 +419,7 @@ TEST(EstimateTracker, NonFiniteDeliveryIsRejected) {
     bad.state.r.y = nan;
     EXPECT_THROW((void)tracker.update(bad), Error);
     bad                  = {kEpoch + 60.0, truthAt(s0, 60.0), diagonal(100.0, 1e-4)};
-    bad.covariance[4][4] = std::numeric_limits<double>::infinity();
+    bad.covariance(4, 4) = std::numeric_limits<double>::infinity();
     EXPECT_THROW((void)tracker.update(bad), Error);
     EXPECT_THROW((void)checkConsistency({kEpoch, s0, diagonal(100.0, 1e-4)}, bad), Error);
     EXPECT_EQ(tracker.current().epoch, kEpoch);
@@ -473,7 +473,7 @@ TEST(EstimateTracker, TrueOfDateDeliveries) {
         truth           = std::max(truth, norm(pt[k].state.r - toTod(truthG(dt), dt).r));
         // Covariances are the GCRS ones rotated into TOD of date.
         const Mat6 rot = rotateCovariance(pg[k].covariance, gcrsToCelestialMatrix(Frame::TOD, t0 + dt));
-        EXPECT_NEAR(pt[k].covariance[1][1] / rot[1][1], 1.0, 1e-6);
+        EXPECT_NEAR(pt[k].covariance(1, 1) / rot(1, 1), 1.0, 1e-6);
     }
     EXPECT_LT(ofDate, 0.05);
     EXPECT_GT(frozen, 0.5);
@@ -527,7 +527,7 @@ Mat3 rotatedBlock(const Mat6& P, std::size_t row, std::size_t col, const Mat3& R
             double s = 0.0;
             for (std::size_t k = 0; k < 3; ++k) {
                 for (std::size_t l = 0; l < 3; ++l) {
-                    s += R(i, k) * P[row + k][col + l] * R(j, l);
+                    s += R(i, k) * P(row + k, col + l) * R(j, l);
                 }
             }
             out(i, j) = s;
@@ -600,9 +600,9 @@ TEST(EstimateTracker, AccelerationNoiseAddsTheWhiteNoiseCovariance) {
     const Mat6          noise = checkConsistency(prior, next, noisy).predictedCovariance;
     for (std::size_t i = 0; i < 3; ++i) {
         SCOPED_TRACE(testing::Message() << "axis " << i);
-        EXPECT_NEAR((noise[i][i] - quiet[i][i]) / (q * dt * dt * dt / 3.0), 1.0, 1e-2);
-        EXPECT_NEAR((noise[i][i + 3] - quiet[i][i + 3]) / (q * dt * dt / 2.0), 1.0, 1e-2);
-        EXPECT_NEAR((noise[i + 3][i + 3] - quiet[i + 3][i + 3]) / (q * dt), 1.0, 1e-2);
+        EXPECT_NEAR((noise(i, i) - quiet(i, i)) / (q * dt * dt * dt / 3.0), 1.0, 1e-2);
+        EXPECT_NEAR((noise(i, i + 3) - quiet(i, i + 3)) / (q * dt * dt / 2.0), 1.0, 1e-2);
+        EXPECT_NEAR((noise(i + 3, i + 3) - quiet(i + 3, i + 3)) / (q * dt), 1.0, 1e-2);
     }
 }
 

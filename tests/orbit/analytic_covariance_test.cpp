@@ -49,8 +49,8 @@ double maxBlockRelDiff(const Mat6& a, const Mat6& b) {
             double num = 0.0, den = 0.0;
             for (std::size_t i = 0; i < 3; ++i) {
                 for (std::size_t j = 0; j < 3; ++j) {
-                    num = std::max(num, std::abs(a[3 * br + i][3 * bc + j] - b[3 * br + i][3 * bc + j]));
-                    den = std::max(den, std::abs(b[3 * br + i][3 * bc + j]));
+                    num = std::max(num, std::abs(a(3 * br + i, 3 * bc + j) - b(3 * br + i, 3 * bc + j)));
+                    den = std::max(den, std::abs(b(3 * br + i, 3 * bc + j)));
                 }
             }
             worst = std::max(worst, num / den);
@@ -76,7 +76,7 @@ Mat6 differences(Propagate&& propagate, const StateVector& s0, double delta) {
             component(s, j) += offset[p] * h;
             StateVector out  = propagate(s);
             for (std::size_t i = 0; i < 6; ++i) {
-                m[i][j] += weight[p] * component(out, i) / (12.0 * h);
+                m(i, j) += weight[p] * component(out, i) / (12.0 * h);
             }
         }
     }
@@ -86,8 +86,8 @@ Mat6 differences(Propagate&& propagate, const StateVector& s0, double delta) {
 Mat6 symplecticJ() {
     Mat6 J{};
     for (std::size_t i = 0; i < 3; ++i) {
-        J[i][i + 3] = 1.0;
-        J[i + 3][i] = -1.0;
+        J(i, i + 3) = 1.0;
+        J(i + 3, i) = -1.0;
     }
     return J;
 }
@@ -114,8 +114,8 @@ std::vector<Case> twoBodyCases() {
 Mat6 diagonalCovariance(double positionSigma, double velocitySigma) {
     Mat6 P{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P[i][i]         = positionSigma * positionSigma;
-        P[i + 3][i + 3] = velocitySigma * velocitySigma;
+        P(i, i)         = positionSigma * positionSigma;
+        P(i + 3, i + 3) = velocitySigma * velocitySigma;
     }
     return P;
 }
@@ -142,10 +142,10 @@ TEST(TwoBodyStm, IsSymplectic) {
     const Mat6 J = symplecticJ();
     for (const Case& c : twoBodyCases()) {
         const Mat6 phi = propagateKeplerStm(c.s0, c.dt).stm;
-        const Mat6 s   = multiply(transpose(phi), multiply(J, phi));
+        const Mat6 s   = phi.transpose() * (J * phi);
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
-                EXPECT_NEAR(s[i][j], J[i][j], 1e-8) << c.name;
+                EXPECT_NEAR(s(i, j), J(i, j), 1e-8) << c.name;
             }
         }
     }
@@ -156,7 +156,7 @@ TEST(TwoBodyStm, ComposesAlongTheTrajectory) {
     for (const Case& c : twoBodyCases()) {
         const StateTransition first  = propagateKeplerStm(c.s0, 0.4 * c.dt);
         const StateTransition second = propagateKeplerStm(first.state, 0.6 * c.dt);
-        EXPECT_LT(maxBlockRelDiff(multiply(second.stm, first.stm), propagateKeplerStm(c.s0, c.dt).stm), 1e-9) << c.name;
+        EXPECT_LT(maxBlockRelDiff(second.stm * first.stm, propagateKeplerStm(c.s0, c.dt).stm), 1e-9) << c.name;
     }
 }
 
@@ -188,14 +188,14 @@ TEST(TwoBodyStm, StateAndCovariance) {
         const Mat6 expected = congruence(t.stm, P0);
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
-                EXPECT_EQ(pc.covariance[i][j], expected[i][j]);
-                EXPECT_EQ(pc.covariance[i][j], pc.covariance[j][i]);
+                EXPECT_EQ(pc.covariance(i, j), expected(i, j));
+                EXPECT_EQ(pc.covariance(i, j), pc.covariance(j, i));
             }
         }
     }
     // dt = 0: the identity.
     const StateTransition zero = propagateKeplerStm(twoBodyCases()[0].s0, 0.0);
-    EXPECT_EQ(zero.stm, identity6());
+    EXPECT_EQ(zero.stm, Mat6::identity());
     EXPECT_EQ(propagateKeplerWithCovariance(twoBodyCases()[0].s0, 0.0, P0).covariance, P0);
 }
 
@@ -232,8 +232,8 @@ TEST(SecularStm, IsTheLinearizationOfTheSecularMap) {
         const double          d[6]  = {ds.r.x, ds.r.y, ds.r.z, ds.v.x, ds.v.y, ds.v.z};
         Vec3                  lin, linV;
         for (std::size_t j = 0; j < 6; ++j) {
-            lin  += Vec3{t.stm[0][j], t.stm[1][j], t.stm[2][j]} * d[j];
-            linV += Vec3{t.stm[3][j], t.stm[4][j], t.stm[5][j]} * d[j];
+            lin  += Vec3{t.stm(0, j), t.stm(1, j), t.stm(2, j)} * d[j];
+            linV += Vec3{t.stm(3, j), t.stm(4, j), t.stm(5, j)} * d[j];
         }
         const Vec3 dr = moved.r - t.state.r, dv = moved.v - t.state.v;
         EXPECT_LT(norm(lin - dr), 1e-3 * norm(dr)) << dt;
@@ -251,18 +251,18 @@ TEST(SecularStm, VelocityConventions) {
         const Mat6 a = original.propagateStm(dt).stm, b = corrected.propagateStm(dt).stm;
         for (std::size_t i = 0; i < 3; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
-                EXPECT_EQ(a[i][j], b[i][j]) << dt;
+                EXPECT_EQ(a(i, j), b(i, j)) << dt;
             }
         }
     }
     const Mat6 o0 = original.propagateStm(0.0).stm; // the identity, to the differences' rounding
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            EXPECT_NEAR(o0[i][j], i == j ? 1.0 : 0.0, 1e-7) << i << " " << j;
+            EXPECT_NEAR(o0(i, j), i == j ? 1.0 : 0.0, 1e-7) << i << " " << j;
         }
     }
     const Mat6 c0 = corrected.propagateStm(0.0).stm;
-    EXPECT_GT(std::abs(c0[3][3] - 1.0) + std::abs(c0[4][4] - 1.0) + std::abs(c0[5][5] - 1.0), 1e-4);
+    EXPECT_GT(std::abs(c0(3, 3) - 1.0) + std::abs(c0(4, 4) - 1.0) + std::abs(c0(5, 5) - 1.0), 1e-4);
 }
 
 TEST(SecularStm, GridMatchesSingleTimesAndConstructors) {
@@ -280,8 +280,8 @@ TEST(SecularStm, GridMatchesSingleTimesAndConstructors) {
         EXPECT_LT(norm(one.state.r - grid[k].state.r), 1e-6) << k;
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
-                const double scale = std::sqrt(one.covariance[i][i] * one.covariance[j][j]);
-                EXPECT_NEAR(grid[k].covariance[i][j], one.covariance[i][j], 1e-8 * scale) << k;
+                const double scale = std::sqrt(one.covariance(i, i) * one.covariance(j, j));
+                EXPECT_NEAR(grid[k].covariance(i, j), one.covariance(i, j), 1e-8 * scale) << k;
             }
         }
     }
@@ -332,7 +332,7 @@ TEST(SecularStm, UnmodeledForceAddsTheDerivativeOfTheResidualTerms) {
             Mat6       d{};
             for (std::size_t i = 0; i < 6; ++i) {
                 for (std::size_t j = 0; j < 6; ++j) {
-                    d[i][j] = a[i][j] - b[i][j];
+                    d(i, j) = a(i, j) - b(i, j);
                 }
             }
             return d;
@@ -341,10 +341,10 @@ TEST(SecularStm, UnmodeledForceAddsTheDerivativeOfTheResidualTerms) {
         Mat6         truth{};
         for (std::size_t i = 0; i < 3; ++i) {
             for (std::size_t j = 0; j < 3; ++j) {
-                truth[i][j]         = -G(i, j) * t2 - Jr(i, j) * t3;
-                truth[i][j + 3]     = -G(i, j) * t3;
-                truth[i + 3][j]     = -G(i, j) * dt - Jr(i, j) * t2;
-                truth[i + 3][j + 3] = -G(i, j) * t2;
+                truth(i, j)         = -G(i, j) * t2 - Jr(i, j) * t3;
+                truth(i, j + 3)     = -G(i, j) * t3;
+                truth(i + 3, j)     = -G(i, j) * dt - Jr(i, j) * t2;
+                truth(i + 3, j + 3) = -G(i, j) * t2;
             }
         }
         EXPECT_LT(maxBlockRelDiff(added, truth), 1e-8) << "dt = " << dt;

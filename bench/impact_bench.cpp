@@ -55,8 +55,8 @@ int main() {
     const Mat3        enu = ecefToEnuMatrix(site.lat, site.lon);
     Mat6              P{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P[i][i]         = 1e4;
-        P[i + 3][i + 3] = 1e-2;
+        P(i, i)         = 1e4;
+        P(i + 3, i + 3) = 1e-2;
     }
 
     for (const auto model : {PrecessionNutationModel::IAU2006_2000B, PrecessionNutationModel::IAU2006_2000A}) {

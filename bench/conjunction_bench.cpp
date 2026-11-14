@@ -115,8 +115,8 @@ int main(int argc, char** argv) {
     // From states and covariances at the epoch: search, covariances to the approach, probability.
     Mat6 P0{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P0[i][i]         = 100.0 * 100.0;
-        P0[i + 3][i + 3] = 0.1 * 0.1;
+        P0(i, i)         = 100.0 * 100.0;
+        P0(i + 3, i + 3) = 0.1 * 0.1;
     }
     const UncertainTrajectory u1{epoch, elementsToState(leo1), P0}, u2{epoch, elementsToState(leo2), P0};
     const UncertainTrajectory s1{epoch, elementsToState(leo1), P0, TrajectoryModel::SecularJ2J4};

@@ -546,7 +546,7 @@ Mat6 unpack(const double* y) noexcept {
     Mat6 m;
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            m[i][j] = y[6 * i + j];
+            m(i, j) = y[6 * i + j];
         }
     }
     return m;
@@ -774,7 +774,7 @@ void NumericalPropagator::propagateGridWithCovariance(double                    
                                                       AdaptiveStats*             stats) const {
     auto emit = [&](std::size_t k, const StateVector& s, const Mat6& phi, const Mat6& Q) {
         out[k].state      = s;
-        out[k].covariance = add(congruence(phi, P0), Q);
+        out[k].covariance = congruence(phi, P0) + Q;
     };
     if (accelerationNoisePsd > 0.0) {
         variationalGrid<78>(start, step, out.size(), accelerationNoisePsd, stats, emit);
