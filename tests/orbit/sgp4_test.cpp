@@ -123,7 +123,22 @@ TEST(Sgp4, VerificationAgainstVallado) {
     }
     ASSERT_EQ(expected.size(), cases.size());
 
-    int    compared  = 0;
+    // The cases where the reference stops before its end time, and the error code Vallado's
+    // reference implementation (sgp4unit) returns at the next step: 1, the mean eccentricity has left
+    // [0, 1) or the mean semi-major axis is below 0.95 Earth radii; 4, the semi-latus rectum is
+    // negative ("check error code 4" in SGP4-VER.TLE); 6, the satellite has decayed (28872 "lost in
+    // 50 minutes", 29141 "lost in under 420 min"). 33334, which fails at the epoch with code 3, is
+    // handled below.
+    const std::map<int, int> earlyStopCodes{
+        {22312, 1},
+        {28350, 1},
+        {28872, 6},
+        {29141, 6},
+        {33333, 4},
+        {20413, 6},
+    };
+    int    earlyStops = 0;
+    int    compared   = 0;
     double maxPosErr = 0.0, maxVelErr = 0.0;
     for (std::size_t k = 0; k < cases.size(); ++k) {
         const VerCase& c   = cases[k];
@@ -155,15 +170,19 @@ TEST(Sgp4, VerificationAgainstVallado) {
             EXPECT_LT(dv, 1e-9) << tle.satnum << " t=" << row.t << " (km/s)";
             ++compared;
         }
-        // If the reference stops early, the next step must fail.
+        // If the reference stops early, the next step must fail with the reference's error code.
         const double last = rows.back().t;
         if (c.step != 0.0 && last + 1e-6 < c.stop && rows.size() > 1) {
             const double next = std::min(last + c.step, c.stop);
             StateVector  s;
-            EXPECT_NE(sgp4.propagate(next, s), 0) << tle.satnum << " expected error at t=" << next;
+            const auto   expectedCode = earlyStopCodes.find(tle.satnum);
+            ASSERT_NE(expectedCode, earlyStopCodes.end()) << tle.satnum << " stops early in the reference";
+            EXPECT_EQ(sgp4.propagate(next, s), expectedCode->second) << tle.satnum << " at t=" << next;
+            ++earlyStops;
         }
     }
     EXPECT_GT(compared, 500);
+    EXPECT_EQ(earlyStops, static_cast<int>(earlyStopCodes.size()));
     char buf[64];
     std::snprintf(buf, sizeof(buf), "%.3e", maxPosErr);
     RecordProperty("max_position_error_km", buf);
