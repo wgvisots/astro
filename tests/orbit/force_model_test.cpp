@@ -210,7 +210,7 @@ TEST(UnmodeledAcceleration, IsLinearInTimeAndItsTrajectoryAloneIsACubic) {
 }
 
 TEST(NumericalPropagator, RejectsAnEmptyListOfForces) {
-    const StateVector s0 = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    const StateVector s0 = elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
     EXPECT_THROW(NumericalPropagator(Time(), s0, {}), Error);
     EXPECT_THROW(NumericalPropagator(Time(), StateVector12{s0.r, s0.v, {}, {}}, {}), Error);
 }

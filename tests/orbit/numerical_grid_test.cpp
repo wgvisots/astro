@@ -44,7 +44,7 @@ constexpr double km = 1000.0;
 const CentralBody kJ2J4 = CentralBody::earthJ2J4();
 
 StateVector leo() {
-    return elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    return elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
 }
 
 /// The reviewer's setting: relative tolerance 1e-9, at which a day of low Earth orbit is good to metres.

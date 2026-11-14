@@ -128,10 +128,10 @@ TEST(SecularPropagator, StatesAreTheTwoBodyStatesOfTheDriftingMeanElements) {
     const CentralBody body;
     const double      eps = std::numeric_limits<double>::epsilon();
     for (const KeplerianElements& el : {
-             KeplerianElements{7100 * km,  0.02,  deg2rad(63.0),  1.0, 2.0, 3.0},
-             KeplerianElements{26600 * km, 0.7,   deg2rad(63.4),  4.0, 4.7, 0.1},
-             KeplerianElements{7000 * km,  0.001, deg2rad(98.0),  0.2, 0.3, 5.0},
-             KeplerianElements{8000 * km,  0.1,   deg2rad(140.0), 5.5, 1.2, 2.0},
+             KeplerianElements{7100 * km,  0.02,  degToRad(63.0),  1.0, 2.0, 3.0},
+             KeplerianElements{26600 * km, 0.7,   degToRad(63.4),  4.0, 4.7, 0.1},
+             KeplerianElements{7000 * km,  0.001, degToRad(98.0),  0.2, 0.3, 5.0},
+             KeplerianElements{8000 * km,  0.1,   degToRad(140.0), 5.5, 1.2, 2.0},
     }) {
         const StateVector       s0 = elementsToState(el);
         const SecularPropagator fromElements(el, body, SecularOrder::J2);
@@ -166,7 +166,7 @@ TEST(SecularPropagator, ElementsAreTheMeanElementsAtEachTime) {
     // rates, so the state it describes is the truth of the test above.
     const CentralBody       body;
     const double            eps = std::numeric_limits<double>::epsilon();
-    const KeplerianElements el{7100 * km, 0.02, deg2rad(63.0), 1.0, 2.0, 3.0};
+    const KeplerianElements el{7100 * km, 0.02, degToRad(63.0), 1.0, 2.0, 3.0};
     const SecularPropagator fromElements(el, body, SecularOrder::J2);
     const SecularPropagator fromState(elementsToState(el), body, SecularOrder::J2);
     EXPECT_EQ(fromElements.meanElements().a, el.a);
@@ -196,7 +196,7 @@ TEST(SecularPropagator, GridMatchesDirectEvaluation) {
     // across mean-anomaly wraps, for near-circular to very eccentric orbits, both directions, and
     // a step large enough to disable the incremental path.
     for (double e : {0.0, 1e-4, 0.001, 0.05, 0.3, 0.7, 0.95}) {
-        const KeplerianElements el{(e > 0.5 ? 26000 : 7200) * km, e, deg2rad(51.6), 0.4, 1.3, 0.2};
+        const KeplerianElements el{(e > 0.5 ? 26000 : 7200) * km, e, degToRad(51.6), 0.4, 1.3, 0.2};
         const SecularPropagator prop(el);
         for (const auto& [start, step, count] : {
                  std::tuple{0.0,    10.0,   20000},
@@ -223,7 +223,7 @@ TEST(SecularPropagator, GridMatchesDirectEvaluation) {
 TEST(SecularPropagator, GridWithAZeroStepRepeatsTheStartState) {
     // dt = start + k * 0 for every k: each output is the state at `start` (the incremental angle
     // updates must not drift when the step is zero).
-    const SecularPropagator prop(KeplerianElements{7200 * km, 0.05, deg2rad(51.6), 0.4, 1.3, 0.2});
+    const SecularPropagator prop(KeplerianElements{7200 * km, 0.05, degToRad(51.6), 0.4, 1.3, 0.2});
     const StateVector       at = prop.propagate(1234.5);
     for (const StateVector& s : prop.propagateGrid(1234.5, 0.0, 50)) {
         EXPECT_LT(norm(s.r - at.r), 1e-13 * norm(at.r));
@@ -250,7 +250,7 @@ TEST(SecularPropagator, GridSolvesKeplerNearPerigee) {
 }
 
 TEST(SecularPropagator, Grid12AddsModelDerivatives) {
-    const StateVector       s0 = elementsToState({7000 * km, 0.001, deg2rad(97.0), 0.1, 0.2, 0.3});
+    const StateVector       s0 = elementsToState({7000 * km, 0.001, degToRad(97.0), 0.1, 0.2, 0.3});
     const SecularPropagator prop(s0);
     const auto              g = prop.propagateGrid12(0.0, 30.0, 500);
     for (std::size_t k = 0; k < g.size(); k += 50) {
@@ -265,11 +265,11 @@ TEST(SecularPropagator, Grid12AddsModelDerivatives) {
 TEST(SecularPropagatorCorrected, SamePositionsAndVelocityIsTheirDerivative) {
     // Near-circular, eccentric, near-equatorial and retrograde orbits, both secular orders.
     const KeplerianElements orbits[] = {
-        {7000 * km,  0.0,   deg2rad(51.6),  0.3, 0.0, 0.7},
-        {7178 * km,  0.01,  deg2rad(98.6),  1.3, 2.5, 0.2},
-        {16878 * km, 0.56,  deg2rad(63.4),  0.1, 4.7, 0.0},
-        {7000 * km,  0.002, deg2rad(0.5),   0.0, 0.0, 1.0},
-        {7000 * km,  0.001, deg2rad(140.0), 0.5, 1.0, 2.0},
+        {7000 * km,  0.0,   degToRad(51.6),  0.3, 0.0, 0.7},
+        {7178 * km,  0.01,  degToRad(98.6),  1.3, 2.5, 0.2},
+        {16878 * km, 0.56,  degToRad(63.4),  0.1, 4.7, 0.0},
+        {7000 * km,  0.002, degToRad(0.5),   0.0, 0.0, 1.0},
+        {7000 * km,  0.001, degToRad(140.0), 0.5, 1.0, 2.0},
     };
     for (const KeplerianElements& el : orbits) {
         for (SecularOrder order : {SecularOrder::J2, SecularOrder::J2SquaredJ4}) {
@@ -297,7 +297,7 @@ TEST(SecularPropagatorCorrected, SamePositionsAndVelocityIsTheirDerivative) {
 }
 
 TEST(SecularPropagatorCorrected, EpochGridTwelveComponentsAndBaseClass) {
-    const StateVector s0 = elementsToState({7000 * km, 0.001, deg2rad(97.0), 0.1, 0.2, 0.3});
+    const StateVector s0 = elementsToState({7000 * km, 0.001, degToRad(97.0), 0.1, 0.2, 0.3});
 
     // From a state: the input position is reproduced, the velocity is not (SecularPropagator
     // reproduces both).
@@ -343,7 +343,7 @@ TEST(SecularPropagatorCorrected, EpochGridTwelveComponentsAndBaseClass) {
 
 TEST(NumericalGrid, MatchesStoppingAtEachOutput) {
     // With a tight tolerance the integrator error is far below the interpolation error being tested.
-    const StateVector s0 = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    const StateVector s0 = elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
     AdaptiveOptions   tight;
     tight.relTol = 1e-14;
     tight.absTol = 1e-11;
@@ -376,7 +376,7 @@ TEST(NumericalGrid, MatchesStoppingAtEachOutput) {
 TEST(NumericalGrid, DefaultToleranceInterpolationAddsLittleError) {
     // At the default tolerance the grid's error is the integrator's own error at its natural step,
     // not the interpolation's: compare against a tight-tolerance reference.
-    const StateVector s0    = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.0, 0.0, 0.0});
+    const StateVector s0    = elementsToState({7000 * km, 0.001, degToRad(51.6), 0.0, 0.0, 0.0});
     const auto        field = std::make_shared<GravityField>(kJ2J4);
     AdaptiveOptions   tight;
     tight.relTol  = 1e-15;
@@ -406,7 +406,7 @@ TEST(NumericalGrid, TwelveStateAndEdgeCases) {
         p.propagateGridWithCovariance(0.0, 10.0, Mat6{}, std::span<StateCovariance>{}, 1e-9, &st);
         EXPECT_EQ(st.accepted, 0);
     }
-    const StateVector         s0   = elementsToState({7000 * km, 0.01, deg2rad(28.5), 0.0, 1.0, 2.0});
+    const StateVector         s0   = elementsToState({7000 * km, 0.01, degToRad(28.5), 0.0, 1.0, 2.0});
     const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0, Frame::TOD);
     const auto                g    = prop.propagateGrid12(0.0, 60.0, 100);
     const auto                g6   = prop.propagateGrid(0.0, 60.0, 100);
@@ -424,7 +424,7 @@ TEST(NumericalGrid, J2J4FrameOverloadAlignsThePole) {
     // the zonal field is aligned with the true pole; ignoring the alignment in GCRS costs hundreds of
     // metres over 4 h.
     const Time        t0 = Time::fromIso8601("2026-11-02T00:00:00Z");
-    const StateVector sg = elementsToState({6778 * km, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    const StateVector sg = elementsToState({6778 * km, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
     const Mat3        B  = gcrsToCelestialMatrix(Frame::TOD, t0);
     const StateVector st{B * sg.r, B * sg.v};
     const auto        g    = NumericalPropagator::j2j4(t0, sg, Frame::GCRS).propagateGrid(0.0, 600.0, 25);
@@ -447,7 +447,7 @@ TEST(NumericalGrid, ZonalFactoryIsJ2J4ForTheEarthWithoutJ3) {
     // j2j4 is zonal with CentralBody::earthJ2J4(): the same propagator, bit for bit, in both
     // forms. The default CentralBody adds J3, which moves a LEO orbit by metres in an hour.
     const Time          t0 = Time::fromIso8601("2026-11-02T00:00:00Z");
-    const StateVector   s0 = elementsToState({6778 * km, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    const StateVector   s0 = elementsToState({6778 * km, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
     const StateVector12 s12{s0.r, s0.v, {}, {}};
     const CentralBody   body = CentralBody::earthJ2J4();
     EXPECT_EQ(NumericalPropagator::zonal(t0, s0, body, Frame::GCRS).propagate(3600.0),

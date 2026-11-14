@@ -56,7 +56,7 @@ double microseconds(F&& run, double minSeconds = 0.5) {
 
 int main() {
     const Time        t0 = Time::fromIso8601("2026-03-01T00:00:00Z");
-    const StateVector s0 = elementsToState({6778e3, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    const StateVector s0 = elementsToState({6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
     Mat6              P0{};
     for (std::size_t i = 0; i < 3; ++i) {
         P0[i][i]         = 100.0;

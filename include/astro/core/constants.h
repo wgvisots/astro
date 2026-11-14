@@ -26,14 +26,19 @@
 namespace astro::constants {
 
 // ------------------------------------------------------------ math
-inline constexpr double pi          = std::numbers::pi;       ///< pi
-inline constexpr double twoPi       = 2.0 * std::numbers::pi; ///< 2 pi (one turn, rad)
-inline constexpr double halfPi      = 0.5 * std::numbers::pi; ///< pi / 2 (90 degrees, rad)
-inline constexpr double degToRad    = pi / 180.0;             ///< Degrees to radians (multiply).
-inline constexpr double radToDeg    = 180.0 / pi;             ///< Radians to degrees (multiply).
-inline constexpr double arcsecToRad = pi / 648000.0;          ///< Arcseconds to radians (multiply).
-inline constexpr double masToRad    = arcsecToRad / 1000.0;   ///< Milliarcseconds to radians (multiply).
-inline constexpr double uasToRad    = arcsecToRad / 1.0e6;    ///< Microarcseconds to radians (multiply).
+inline constexpr double pi     = std::numbers::pi;       ///< pi
+inline constexpr double twoPi  = 2.0 * std::numbers::pi; ///< 2 pi (one turn, rad)
+inline constexpr double halfPi = 0.5 * std::numbers::pi; ///< pi / 2 (90 degrees, rad)
+/// @name Angle factors
+/// The `...ToRad` and `radTo...` constants are factors to multiply an angle by. The functions of the
+/// same names in namespace astro (astro::degToRad(), astro::radToDeg(), ...) apply them to an angle.
+/// @{
+inline constexpr double degToRad    = pi / 180.0;           ///< Degrees to radians (a factor, not a function).
+inline constexpr double radToDeg    = 180.0 / pi;           ///< Radians to degrees (a factor, not a function).
+inline constexpr double arcsecToRad = pi / 648000.0;        ///< Arcseconds to radians (a factor, not a function).
+inline constexpr double masToRad    = arcsecToRad / 1000.0; ///< Milliarcseconds to radians (a factor, not a function).
+inline constexpr double uasToRad    = arcsecToRad / 1.0e6;  ///< Microarcseconds to radians (a factor, not a function).
+/// @}
 /// Turns (revolutions) to radians.
 inline constexpr double turnToRad = twoPi;
 

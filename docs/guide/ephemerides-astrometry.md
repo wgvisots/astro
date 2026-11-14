@@ -40,7 +40,7 @@ any scale; the reader converts to TDB.
 
 <!-- snippet: examples/sun_moon.cpp#rise_set -->
 ```cpp
-const Geodetic site{deg2rad(51.4779), 0.0, 45.0}; // Greenwich
+const Geodetic site{degToRad(51.4779), 0.0, 45.0}; // Greenwich
 for (const SkyEvent& e : sunRiseSet(site, t, t + 86400.0, ConstantEop{}, *eph)) {
     const char* what = e.type == SkyEventType::Rise ? "sunrise "
                      : e.type == SkyEventType::Set  ? "sunset  "
@@ -87,6 +87,6 @@ conventional refraction: at a true elevation of 0 it gives about 11' where the u
 34', and below about 5 deg its two directions are not exact inverses of each other (27" apart
 at 0-2 deg). Use the simple formulas near the horizon.
 
-Coordinates: `raDecFromVector`, `angularSeparation`, `positionAngle`, ecliptic conversions with the
+Coordinates: `vectorToRaDec`, `angularSeparation`, `positionAngle`, ecliptic conversions with the
 IAU 2006 obliquity, and ICRS <-> galactic with the Hipparcos matrix [ESA (1997)](https://ui.adsabs.harvard.edu/abs/1997ESASP1200.....E).
 Sidereal time: `localMeanSiderealTime`, `localApparentSiderealTime`, `hourAngle`.

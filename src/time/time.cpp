@@ -58,9 +58,9 @@ struct UtcDay {
 UtcDay utcDay(double jd1Midnight) {
     UtcDay     u{};
     const auto jdn = static_cast<long long>(std::floor(jd1Midnight + 0.5));
-    dateFromJulianDayNumber(jdn, u.year, u.month, u.day);
+    julianDayNumberToDate(jdn, u.year, u.month, u.day);
     int y2, m2, d2;
-    dateFromJulianDayNumber(jdn + 1, y2, m2, d2);
+    julianDayNumberToDate(jdn + 1, y2, m2, d2);
     const auto table   = leapSecondTable();
     u.dat0             = table->taiMinusUtc(u.year, u.month, u.day, 0.0);
     const double dat12 = table->taiMinusUtc(u.year, u.month, u.day, 0.5);
@@ -256,7 +256,7 @@ std::string_view toString(TimeScale scale) noexcept {
     return detail::enumName(scale, "?");
 }
 
-TimeScale timeScaleFromString(std::string_view name) {
+TimeScale parseTimeScale(std::string_view name) {
     std::string up;
     for (char c : name) {
         up.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
@@ -391,7 +391,7 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
     c.expect('-');
     int month = 1, day = 1;
     if (c.digitsAhead() == 3) {
-        monthDayFromDayOfYear(year, c.integer(3), month, day);
+        dayOfYearToMonthDay(year, c.integer(3), month, day);
     } else {
         month = c.integer(2);
         c.expect('-');
@@ -447,7 +447,7 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
             offsetMinutes = (z == '-' ? -1 : 1) * (oh * 60 + om);
             scale         = TimeScale::UTC;
         } else {
-            scale = timeScaleFromString(text.substr(c.p));
+            scale = parseTimeScale(text.substr(c.p));
             c.p   = text.size();
         }
     }
@@ -473,7 +473,7 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
             dayShift     = 1;
             minuteOfDay -= kMinutesPerDay;
         }
-        dateFromJulianDayNumber(julianDayNumber(year, month, day) + dayShift, year, month, day);
+        julianDayNumberToDate(julianDayNumber(year, month, day) + dayShift, year, month, day);
         hour   = minuteOfDay / 60;
         minute = minuteOfDay % 60;
         if (year < 0 || year > kMaxIsoYear) {
@@ -507,7 +507,7 @@ CalendarDate Time::calendar(int decimals) const {
         ++jdn;
     }
     CalendarDate cal;
-    dateFromJulianDayNumber(jdn, cal.year, cal.month, cal.day);
+    julianDayNumberToDate(jdn, cal.year, cal.month, cal.day);
     const double tPerHour = 3600.0 * scale, tPerMin = 60.0 * scale;
     cal.hour    = std::min(23, static_cast<int>(std::floor(ticks / tPerHour)));
     ticks      -= cal.hour * tPerHour;

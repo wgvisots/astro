@@ -32,12 +32,12 @@ struct RaDec {
 };
 
 /// RA/Dec and length of a vector; RA is 0 on the z axis.
-[[nodiscard]] RaDec raDecFromVector(const Vec3& v) noexcept;
+[[nodiscard]] RaDec vectorToRaDec(const Vec3& v) noexcept;
 /// Vector of length `rd.distance` in the direction (ra, dec).
-[[nodiscard]] Vec3 vectorFromRaDec(const RaDec& rd) noexcept;
+[[nodiscard]] Vec3 raDecToVector(const RaDec& rd) noexcept;
 /// Unit vector in the direction (ra, dec), rad.
-[[nodiscard]] inline Vec3 unitVectorFromRaDec(double ra, double dec) noexcept {
-    return vectorFromRaDec({ra, dec, 1.0});
+[[nodiscard]] inline Vec3 raDecToUnitVector(double ra, double dec) noexcept {
+    return raDecToVector({ra, dec, 1.0});
 }
 
 /// Angular separation between two directions (rad), robust for all angles.

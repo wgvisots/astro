@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
     //! [ephemeris]
 
     //! [rise_set]
-    const Geodetic site{deg2rad(51.4779), 0.0, 45.0}; // Greenwich
+    const Geodetic site{degToRad(51.4779), 0.0, 45.0}; // Greenwich
     for (const SkyEvent& e : sunRiseSet(site, t, t + 86400.0, ConstantEop{}, *eph)) {
         const char* what = e.type == SkyEventType::Rise ? "sunrise "
                          : e.type == SkyEventType::Set  ? "sunset  "

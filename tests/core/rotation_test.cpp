@@ -136,7 +136,7 @@ double worstDifference(const Mat3L& a, const Mat3& b) {
 
 TEST(Rotation, PassiveConvention) {
     // Rotating the frame +90 deg about z: the old x axis appears at -y in the new frame.
-    const double t = deg2rad(90.0);
+    const double t = degToRad(90.0);
     expectVecNear(R3(t) * Vec3{1, 0, 0}, {0, -1, 0}, 1e-15);
     expectVecNear(R1(t) * Vec3{0, 1, 0}, {0, 0, -1}, 1e-15);
     // R2: old z axis appears at -x; old x axis appears at +z.

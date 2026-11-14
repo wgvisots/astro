@@ -89,7 +89,7 @@ FrameTransformer::FrameTransformer(const Time& t, const EopProvider& eop, const 
     const Nutation          n  = nutation(T, options.model);
     const Mat3 npb = fwToMatrix(fw.gammaBar, fw.phiBar, fw.psiBar + n.dpsi + dd.dpsi, fw.epsA + n.deps + dd.deps);
     const Mat3 bp  = fwToMatrix(fw.gammaBar, fw.phiBar, fw.psiBar, fw.epsA);
-    gast_          = wrapTwoPi(era_ - equationOfOrigins(npb, cioLocatorS06(T, cipXYFromMatrix(npb))));
+    gast_          = wrapTwoPi(era_ - equationOfOrigins(npb, cioLocatorS06(T, matrixToCipXY(npb))));
     gmst_          = gmst06(ut1_.jd(), tt_.jd());
     gmst82_        = astro::gmst82(ut1_.jd());
 

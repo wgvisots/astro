@@ -92,7 +92,7 @@ TEST(PoleOfDate, GcrsPoleIsTheCip) {
     // 17.2064161" in longitude, 9.2052331" in obliquity), X += sin(eps0) dpsi, Y += deps:
     const double t    = kT.centuriesSinceJ2000();
     const double as   = constants::arcsecToRad;
-    const double node = deg2rad(125.04455501) - 6962890.5431 * as * t; // eq. 5.43
+    const double node = degToRad(125.04455501) - 6962890.5431 * as * t; // eq. 5.43
     const double eps0 = 84381.406 * as;
     const double X =
         (-0.016617 + 2004.191898 * t - 0.4297829 * t * t) * as - std::sin(eps0) * 17.2064161 * as * std::sin(node);

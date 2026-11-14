@@ -164,7 +164,7 @@ TEST(Rkf78, ATermInTimeAloneNeedsMaxStep) {
 
 TEST(NumericalPropagator, RejectsNullForceModelsAndEphemeris) {
     // Both used to be accepted and dereferenced at the first propagation.
-    const StateVector s0 = elementsToState({7000e3, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    const StateVector s0 = elementsToState({7000e3, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
     EXPECT_THROW(NumericalPropagator(Time(), s0, {std::shared_ptr<const ForceModel>{}}), Error);
     EXPECT_THROW(NumericalPropagator(Time(), s0, {std::make_shared<GravityField>(CentralBody::pointMass()), nullptr}),
                  Error);
@@ -182,7 +182,7 @@ TEST(NumericalPropagator, RejectsTimesThatAreNotFinite) {
         }
     };
     const auto                force = std::make_shared<CountingPointMass>();
-    const NumericalPropagator prop(Time(), elementsToState({7000e3, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9}), {force});
+    const NumericalPropagator prop(Time(), elementsToState({7000e3, 0.001, degToRad(51.6), 0.3, 0.6, 0.9}), {force});
     EXPECT_THROW((void)prop.propagate(kNaN), Error);
     EXPECT_THROW((void)prop.propagate(kInf), Error);
     EXPECT_THROW((void)prop.propagateGrid(kNaN, 10.0, 5), Error);

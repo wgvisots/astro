@@ -99,15 +99,15 @@ struct Case {
 };
 
 std::vector<Case> twoBodyCases() {
-    const StateVector leo    = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    const StateVector leo    = elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
     const double      period = constants::twoPi * std::sqrt(std::pow(7000 * km, 3) / constants::gmEarth);
     return {
-        {"LEO, 0.3 rev",        leo,                                                                1700.0        },
-        {"LEO, 10.7 rev",       leo,                                                                10.7 * period },
-        {"LEO, -3.2 rev",       leo,                                                                -3.2 * period },
-        {"e = 0.9, 1.5 rev",    elementsToState({60000 * km, 0.9, deg2rad(30.0), 1.0, 2.0, 0.1}),   1.5 * 146000.0},
-        {"hyperbola",           elementsToState({-20000 * km, 1.5, deg2rad(30.0), 1.0, 2.0, -0.5}), 20000.0       },
-        {"circular equatorial", elementsToState({42164 * km, 0.0, 0.0, 0.0, 0.0, 0.0}),             2.3 * 86164.0 },
+        {"LEO, 0.3 rev",        leo,                                                                 1700.0        },
+        {"LEO, 10.7 rev",       leo,                                                                 10.7 * period },
+        {"LEO, -3.2 rev",       leo,                                                                 -3.2 * period },
+        {"e = 0.9, 1.5 rev",    elementsToState({60000 * km, 0.9, degToRad(30.0), 1.0, 2.0, 0.1}),   1.5 * 146000.0},
+        {"hyperbola",           elementsToState({-20000 * km, 1.5, degToRad(30.0), 1.0, 2.0, -0.5}), 20000.0       },
+        {"circular equatorial", elementsToState({42164 * km, 0.0, 0.0, 0.0, 0.0, 0.0}),              2.3 * 86164.0 },
     };
 }
 
@@ -203,10 +203,10 @@ TEST(SecularStm, ReducesToTwoBodyWithoutZonals) {
     // With J2 = J4 = 0 the secular map is the two-body map, and both velocities coincide.
     const CentralBody none    = CentralBody::pointMass();
     const Case        cases[] = {
-        {"LEO",                            elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9}), 86400.0    },
-        {"e = 0.74",                       elementsToState({26560 * km, 0.74, deg2rad(63.4), 0.3, 4.7, 0.2}), 86400.0    },
-        {"near-circular, near-equatorial", elementsToState({7000 * km, 1e-6, deg2rad(1e-5), 0.0, 0.0, 0.9}),  86400.0    },
-        {"circular equatorial, a week",    elementsToState({7000 * km, 0.0, 0.0, 0.0, 0.0, 0.9}),             7 * 86400.0},
+        {"LEO",                            elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9}), 86400.0    },
+        {"e = 0.74",                       elementsToState({26560 * km, 0.74, degToRad(63.4), 0.3, 4.7, 0.2}), 86400.0    },
+        {"near-circular, near-equatorial", elementsToState({7000 * km, 1e-6, degToRad(1e-5), 0.0, 0.0, 0.9}),  86400.0    },
+        {"circular equatorial, a week",    elementsToState({7000 * km, 0.0, 0.0, 0.0, 0.0, 0.9}),              7 * 86400.0},
     };
     for (const Case& c : cases) {
         const Mat6 kepler = propagateKeplerStm(c.s0, c.dt).stm;
@@ -219,7 +219,7 @@ TEST(SecularStm, ReducesToTwoBodyWithoutZonals) {
 TEST(SecularStm, IsTheLinearizationOfTheSecularMap) {
     // Phi times a small initial offset (10 m, 1 cm/s) against the difference of two propagations, over
     // a day: equal to the second-order term, (delta a / a) n dt ~ 3e-4 relative.
-    const StateVector s0 = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    const StateVector s0 = elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
     const StateVector ds{
         Vec3{6.0,   -5.0,  6.0   },
         Vec3{0.006, 0.005, -0.006}
@@ -244,7 +244,7 @@ TEST(SecularStm, IsTheLinearizationOfTheSecularMap) {
 TEST(SecularStm, VelocityConventions) {
     // The two classes give identical positions, so identical position rows of Phi. At dt = 0 the
     // original reproduces the input state (Phi = I); the corrected velocity is not the input one.
-    const StateVector                s0 = elementsToState({7178 * km, 0.01, deg2rad(98.6), 1.3, 2.5, 0.2});
+    const StateVector                s0 = elementsToState({7178 * km, 0.01, degToRad(98.6), 1.3, 2.5, 0.2});
     const SecularPropagator          original(s0);
     const SecularPropagatorCorrected corrected(s0);
     for (double dt : {0.0, 5000.0, 86400.0}) {
@@ -266,7 +266,7 @@ TEST(SecularStm, VelocityConventions) {
 }
 
 TEST(SecularStm, GridMatchesSingleTimesAndConstructors) {
-    const KeplerianElements          mean{7000 * km, 0.002, deg2rad(51.6), 0.3, 0.6, 0.9};
+    const KeplerianElements          mean{7000 * km, 0.002, degToRad(51.6), 0.3, 0.6, 0.9};
     const SecularPropagatorCorrected prop(mean);
     const Mat6                       P0 = diagonalCovariance(10.0, 0.01);
 
@@ -309,7 +309,7 @@ TEST(SecularStm, UnmodeledForceAddsTheDerivativeOfTheResidualTerms) {
     // term). Compared block by block, relative to the largest entry of each block of the added term.
     // Measured 6e-10 (the secular parts of the two differences cancel).
     const CentralBody body     = CentralBody::earthJ2J4();
-    const StateVector s0       = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    const StateVector s0       = elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
     const auto        gradient = [&](const Vec3& r) { return pointMassGradient(r) + zonalGradient(r, body); };
     const Mat3        G        = gradient(s0.r);
     Mat3              Jr;

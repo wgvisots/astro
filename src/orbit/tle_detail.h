@@ -41,7 +41,7 @@ namespace astro::detail {
 /// writer (tle.cpp) and Sgp4 (sgp4.cpp) all use it, so that they agree.
 [[nodiscard]] inline double tleDayPerUtcDay(double midnight) {
     int year = 0, month = 0, day = 0;
-    dateFromJulianDayNumber(std::llround(midnight + 0.5), year, month, day);
+    julianDayNumberToDate(std::llround(midnight + 0.5), year, month, day);
     return 2.0 * Time::fromCalendar(TimeScale::UTC, year, month, day, 12).jd().jd2;
 }
 

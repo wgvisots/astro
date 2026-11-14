@@ -227,7 +227,7 @@ double orbitalPeriod(double a, double mu) noexcept {
 double meanMotion(double a, double mu) noexcept {
     return std::sqrt(mu / (a * a * a));
 }
-double semiMajorAxisFromMeanMotion(double n, double mu) noexcept {
+double meanMotionToSemiMajorAxis(double n, double mu) noexcept {
     return std::cbrt(mu / (n * n));
 }
 

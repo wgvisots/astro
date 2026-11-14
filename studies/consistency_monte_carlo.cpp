@@ -42,12 +42,12 @@ struct Orbit {
 };
 
 const Orbit kOrbits[] = {
-    {"LEO 400 km i=51.6",     {6778e3, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7}},
-    {"SSO 800 km e=0.01",     {7178e3, 0.01, deg2rad(98.6), 1.3, 2.5, 0.2}  },
-    {"HEO 1000 x 20000 km",   {16878e3, 0.56, deg2rad(63.4), 0.1, 4.7, 0.0} },
-    {"near-equatorial i=0.5", {7000e3, 0.002, deg2rad(0.5), 0.0, 0.0, 1.0}  },
-    {"polar i=90",            {7000e3, 0.001, deg2rad(90.0), 2.0, 0.3, 0.1} },
-    {"retrograde i=140",      {7000e3, 0.001, deg2rad(140.0), 0.5, 1.0, 2.0}},
+    {"LEO 400 km i=51.6",     {6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7}},
+    {"SSO 800 km e=0.01",     {7178e3, 0.01, degToRad(98.6), 1.3, 2.5, 0.2}  },
+    {"HEO 1000 x 20000 km",   {16878e3, 0.56, degToRad(63.4), 0.1, 4.7, 0.0} },
+    {"near-equatorial i=0.5", {7000e3, 0.002, degToRad(0.5), 0.0, 0.0, 1.0}  },
+    {"polar i=90",            {7000e3, 0.001, degToRad(90.0), 2.0, 0.3, 0.1} },
+    {"retrograde i=140",      {7000e3, 0.001, degToRad(140.0), 0.5, 1.0, 2.0}},
 };
 
 /// Reference ("truth") propagator: J2 + J4 with a tight tolerance.

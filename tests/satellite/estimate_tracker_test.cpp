@@ -44,7 +44,7 @@ constexpr double km = 1000.0;
 const Time kEpoch = Time::fromIso8601("2026-03-01T00:00:00Z");
 
 StateVector leo() {
-    return elementsToState({6778 * km, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    return elementsToState({6778 * km, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
 }
 
 Mat6 diagonal(double positionVar, double velocityVar) {
@@ -341,7 +341,7 @@ TEST(EstimateTracker, ElementTestIsMirrorInvariant) {
     // Retrograde orbits are mirrored (180 deg about x) before the element conversion. Mirroring the
     // whole problem by hand gives a prograde orbit; with point-mass gravity in GCRS (no pole, no
     // turning frame) the mirror is an exact symmetry, so the distance must agree.
-    const StateVector s0  = elementsToState({7000 * km, 0.002, deg2rad(140.0), 0.5, 1.0, 2.0});
+    const StateVector s0  = elementsToState({7000 * km, 0.002, degToRad(140.0), 0.5, 1.0, 2.0});
     StateVector       sp  = s0;
     sp.r                 += Vec3{30.0, -10.0, 5.0};
     sp.v                 += Vec3{0.01, 0.02, -0.01};

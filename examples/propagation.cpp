@@ -36,7 +36,7 @@ using namespace astro;
 int main() {
     std::cout << std::fixed << std::setprecision(1);
     const Time        epoch = Time::fromIso8601("2026-03-01T00:00:00Z");
-    const StateVector s0    = elementsToState({6778e3, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7}); // GCRS, m, m/s
+    const StateVector s0    = elementsToState({6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7}); // GCRS, m, m/s
 
     //! [numerical]
     // Numerical J2 + J4, 4 h at 10 s. Say which frame the state is in: the zonal field is applied
@@ -89,7 +89,7 @@ int main() {
     // Closest approach within a day of a state vector and an element set (either may be either, or
     // any function of time, e.g. [&prop](const Time& t) { return prop.propagate(t); }). Both must be
     // in the same inertial frame; the default model is two-body.
-    const KeplerianElements debris{6780e3, 0.001, deg2rad(97.6), 0.25, 0.0, 1.22};
+    const KeplerianElements debris{6780e3, 0.001, degToRad(97.6), 0.25, 0.0, 1.22};
     const Time              end = epoch + 86400.0;
     const CloseApproach     ca  = closestApproach({epoch, s0}, {epoch, debris}, epoch, end);
     std::cout << "closest approach " << ca.distance / 1e3 << " km at " << ca.time.iso8601(0) << ", "

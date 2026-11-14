@@ -56,7 +56,7 @@ StateVector relativeStateRic(const StateVector& chief, const StateVector& deputy
     return {M * dr, M * (dv - cross(omega, dr))};
 }
 
-StateVector deputyFromRelativeRic(const StateVector& chief, const StateVector& rel) noexcept {
+StateVector relativeRicToDeputy(const StateVector& chief, const StateVector& rel) noexcept {
     const Mat3 Mt    = ricMatrix(chief).transpose();
     const Vec3 omega = cross(chief.r, chief.v) / norm2(chief.r);
     const Vec3 dr    = Mt * rel.r;

@@ -161,7 +161,7 @@ TEST(Stumpff, MatchesExtendedPrecision) {
 TEST(PropagateKepler, ShortStepOnAnEccentricOrbit) {
     // Regression: this threw "did not converge". The Stumpff functions lost ten digits for small
     // arguments, so the iteration never reached its step tolerance.
-    const StateVector s0  = elementsToState({70000e3, 0.9, 1.0, 0.3, 0.4, deg2rad(73.0)});
+    const StateVector s0  = elementsToState({70000e3, 0.9, 1.0, 0.3, 0.4, degToRad(73.0)});
     const StateVector s   = propagateKepler(s0, 5.5);
     const StateL      ref = referenceKepler(s0, 5.5, kMu);
     EXPECT_LT(distance(s.r, ref.r), 1e-13 * norm(s0.r));
@@ -226,7 +226,7 @@ TEST(PropagateKepler, FlyByIsSymmetricAboutPeriapsis) {
 TEST(PropagateKeplerStm, ShortStepOnAnEccentricOrbit) {
     // The same failure through the state-transition-matrix entry point. The matrix of a Hamiltonian
     // flow is symplectic: Phi^T J Phi = J.
-    const StateVector     s0 = elementsToState({70000e3, 0.9, 1.0, 0.3, 0.4, deg2rad(73.0)});
+    const StateVector     s0 = elementsToState({70000e3, 0.9, 1.0, 0.3, 0.4, degToRad(73.0)});
     const StateTransition st = propagateKeplerStm(s0, 5.5);
     const StateVector     s  = propagateKepler(s0, 5.5);
     EXPECT_EQ(st.state.r.x, s.r.x);

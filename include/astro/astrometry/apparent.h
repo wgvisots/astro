@@ -109,10 +109,10 @@ lightDeflection(const Vec3& p, const Vec3& q, const Vec3& e, double emAu, double
                                const Atmosphere*  atm = nullptr);
 
 /// Geometric topocentric az/el/range of a GCRS position (no light time or aberration).
-[[nodiscard]] Aer topocentricFromGcrs(const Vec3&             rGcrs,
-                                      const FrameTransformer& ft,
-                                      const Geodetic&         site,
-                                      const Ellipsoid&        ell = Ellipsoid::wgs84());
+[[nodiscard]] Aer gcrsToTopocentric(const Vec3&             rGcrs,
+                                    const FrameTransformer& ft,
+                                    const Geodetic&         site,
+                                    const Ellipsoid&        ell = Ellipsoid::wgs84());
 
 /// Local mean / apparent sidereal time (rad, [0, 2pi)) at east longitude `lon`
 /// (rad): GMST (IAU 2006) / GAST (IAU 2006/2000A) plus `lon`. `t` may be in any

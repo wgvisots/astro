@@ -311,8 +311,8 @@ TEST(Tle, ParseAcceptsSignsDecimalPointsAndBlankPadding) {
     EXPECT_EQ(tle.meanMotionDot, 0.00002182);
     EXPECT_EQ(tle.ephemerisType, 0);
     EXPECT_EQ(tle.elementSetNumber, 0);
-    EXPECT_EQ(tle.inclination, deg2rad(51.64));
-    EXPECT_EQ(tle.meanAnomaly, deg2rad(5.0));
+    EXPECT_EQ(tle.inclination, degToRad(51.64));
+    EXPECT_EQ(tle.meanAnomaly, degToRad(5.0));
     // A blank-padded day of the year, as some writers produce.
     EXPECT_EQ(Tle::parse(withField(kLine1, 19, "08  4.51782528"), kLine2).epoch.iso8601(3), "2008-01-04T12:25:40.104Z");
 }
@@ -332,9 +332,9 @@ TEST(Tle, Line2WritesAnglesThatRoundTo360AsZero) {
     EXPECT_EQ(columns(line2, 35, 42), "  0.0000");
     EXPECT_EQ(columns(line2, 44, 51), "  0.0000");
     // The largest angle that does not round up, and angles outside [0, 2 pi) that wrap into it.
-    tle.raan        = deg2rad(359.99994);
-    tle.argPerigee  = deg2rad(-90.0);
-    tle.meanAnomaly = deg2rad(725.5);
+    tle.raan        = degToRad(359.99994);
+    tle.argPerigee  = degToRad(-90.0);
+    tle.meanAnomaly = degToRad(725.5);
     EXPECT_EQ(columns(tle.line2(), 18, 25), "359.9999");
     EXPECT_EQ(columns(tle.line2(), 35, 42), "270.0000");
     EXPECT_EQ(columns(tle.line2(), 44, 51), "  5.5000");
@@ -434,7 +434,7 @@ TEST(Tle, Line2RefusesValuesItsFieldsCannotHold) {
     const Case cases[] = {
         {"catalog number",      [](Tle& t) { t.satnum = -7; }                  },
         {"inclination",         [](Tle& t) { t.inclination = kNan; }           },
-        {"inclination",         [](Tle& t) { t.inclination = deg2rad(1000.0); }}, // four digits before the point
+        {"inclination",         [](Tle& t) { t.inclination = degToRad(1000.0); }}, // four digits before the point
         {"RAAN",                [](Tle& t) { t.raan = kNan; }                  },
         {"RAAN",                [](Tle& t) { t.raan = kInf; }                  },
         {"eccentricity",        [](Tle& t) { t.eccentricity = 0.99999996; }    }, // rounds to 1.0000000
@@ -469,11 +469,11 @@ TEST(Tle, ValuesAtTheEdgesOfTheirFieldsAreWrittenAndReadBack) {
     tle.bstar               = 0.99999e9;
     tle.ephemerisType       = 9;
     tle.elementSetNumber    = 9999;
-    tle.inclination         = deg2rad(180.0);
-    tle.raan                = deg2rad(359.9999);
+    tle.inclination         = degToRad(180.0);
+    tle.raan                = degToRad(359.9999);
     tle.eccentricity        = 0.9999999;
-    tle.argPerigee          = deg2rad(0.0001);
-    tle.meanAnomaly         = deg2rad(359.9999);
+    tle.argPerigee          = degToRad(0.0001);
+    tle.meanAnomaly         = degToRad(359.9999);
     tle.meanMotion          = 99.99999999;
     tle.revolutionNumber    = 99999;
     const std::string line1 = tle.line1(), line2 = tle.line2();

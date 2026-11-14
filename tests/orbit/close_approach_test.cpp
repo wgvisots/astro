@@ -79,7 +79,7 @@ struct Conjunction {
     static constexpr double kTca  = 37000.0; // s after kEpoch
     static constexpr double kMiss = 100.0;   // m
 
-    KeplerianElements elements{7000 * km, 0.0, deg2rad(51.6), 0.3, 0.0, 0.0};
+    KeplerianElements elements{7000 * km, 0.0, degToRad(51.6), 0.3, 0.0, 0.0};
     StateVector       atTca; // second object at kTca
     StateVector       firstAtTca;
 
@@ -92,7 +92,7 @@ struct Conjunction {
         const Vec3   up     = normalized(r);
         const Vec3   along  = normalized(firstAtTca.v);
         const Vec3   across = cross(up, along);
-        const double turn   = deg2rad(60.0);
+        const double turn   = degToRad(60.0);
         const Vec3   v2     = speed * (std::cos(turn) * along + std::sin(turn) * across);
         const Vec3   n      = normalized(cross(firstAtTca.v, v2)); // radial, perpendicular to both velocities
         atTca               = {r + kMiss * n, v2};
@@ -209,7 +209,7 @@ TEST(CloseApproach, NumericalPropagatorThroughAFunction) {
 }
 
 TEST(CloseApproach, SecularModelsAndEquinoctialElements) {
-    const KeplerianElements el{7000 * km, 0.01, deg2rad(51.6), 0.3, 0.2, 0.1};
+    const KeplerianElements el{7000 * km, 0.01, degToRad(51.6), 0.3, 0.2, 0.1};
     const SecularPropagator sp(el);
     const Trajectory        secular{kEpoch, el, TrajectoryModel::SecularJ2J4};
     test::expectVecNear(secular.state(kEpoch + 5000.0).r, sp.propagate(5000.0).r, 1e-6);

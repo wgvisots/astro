@@ -236,7 +236,7 @@ TEST(FrameTransformer, AngularVelocityIsAlongTheCipAtTheRateOfTheEarthRotationAn
     // Conventions 2010 eq. 5.15), shortened by the excess length of day: omega (1 - LOD / 86400). In
     // TIRS and PEF the CIP is z; in ITRS it is (xp, -yp, 1) to first order in the polar motion.
     const Time             t  = Time::fromIso8601("2021-07-04T12:34:56Z");
-    const double           xp = arcsec2rad(0.2), yp = arcsec2rad(0.4), lod = 0.0015;
+    const double           xp = arcsecToRad(0.2), yp = arcsecToRad(0.4), lod = 0.0015;
     const ConstantEop      eop(EopValues{.xp = xp, .yp = yp, .dut1 = -0.15, .lod = lod});
     const double           omega = constants::twoPi * 1.00273781191135448 / 86400.0 * (1.0 - lod / 86400.0);
     const FrameTransformer ft(t, eop);
@@ -298,8 +298,8 @@ TEST(PrecessionNutation, PoleOffsetsToNutationRoundTrip) {
     const double   dX = 0.3 * constants::masToRad, dY = -0.2 * constants::masToRad;
     const Nutation n = poleOffsetsToNutation(t, dX, dY);
     // Applying the nutation correction should move the CIP by (dX, dY).
-    const CipXY a = cipXYFromMatrix(npbMatrix06(t));
-    const CipXY b = cipXYFromMatrix(npbMatrix06(t, PrecessionNutationModel::IAU2006_2000A, n.dpsi, n.deps));
+    const CipXY a = matrixToCipXY(npbMatrix06(t));
+    const CipXY b = matrixToCipXY(npbMatrix06(t, PrecessionNutationModel::IAU2006_2000A, n.dpsi, n.deps));
     EXPECT_NEAR(b.x - a.x, dX, 1e-3 * constants::masToRad);
     EXPECT_NEAR(b.y - a.y, dY, 1e-3 * constants::masToRad);
 }
@@ -310,12 +310,12 @@ class ValladoExample : public ::testing::Test {
 protected:
     const Time        utc = Time::fromCalendar(TimeScale::UTC, 2004, 4, 6, 7, 51, 28.386009);
     const ConstantEop eop{
-        EopValues{.xp   = arcsec2rad(-0.140682),
-                  .yp   = arcsec2rad(0.333309),
+        EopValues{.xp   = arcsecToRad(-0.140682),
+                  .yp   = arcsecToRad(0.333309),
                   .dut1 = -0.4399619,
                   .lod  = 0.0015563,
-                  .dX   = arcsec2rad(-0.000205),
-                  .dY   = arcsec2rad(-0.000136)}
+                  .dX   = arcsecToRad(-0.000205),
+                  .dY   = arcsecToRad(-0.000136)}
     };
     const StateVector itrf{
         {-1033.4793830e3, 7901.2952754e3, 6380.3565958e3},
@@ -386,7 +386,7 @@ TEST_F(ValladoExample, OneOffConversionsBetweenTemeItrsAndGcrs) {
 
 TEST(FrameTransformer, ConsistencyAndRoundTrips) {
     const Time             t = Time::fromIso8601("2021-07-04T12:34:56Z");
-    const ConstantEop      eop(EopValues{.xp = arcsec2rad(0.2), .yp = arcsec2rad(0.4), .dut1 = -0.15, .lod = 0.001});
+    const ConstantEop      eop(EopValues{.xp = arcsecToRad(0.2), .yp = arcsecToRad(0.4), .dut1 = -0.15, .lod = 0.001});
     const FrameTransformer ft(t, eop);
     const StateVector      s{
              {7000e3, -1200e3, 300e3},
@@ -421,7 +421,7 @@ TEST(FrameTransformer, ConsistencyAndRoundTrips) {
     const Mat3 d = ft.gcrsTo(Frame::TIRS) * ft.gcrsTo(Frame::PEF).transpose();
     EXPECT_LT(std::abs(d(0, 1)), 0.1 * constants::masToRad);
     // GAST - GMST is the equation of the equinoxes (< 1.2 s of time).
-    EXPECT_LT(std::abs(wrapPi(ft.gast() - ft.gmst())), deg2rad(1.2 * 15.0 / 3600.0));
+    EXPECT_LT(std::abs(wrapPi(ft.gast() - ft.gmst())), degToRad(1.2 * 15.0 / 3600.0));
     // Without Earth-orientation data (ConstantEop{}: UT1 taken as UTC, no polar motion) the transformer
     // is still built.
     EXPECT_NO_THROW(FrameTransformer(t, ConstantEop{}));
@@ -491,10 +491,10 @@ TEST(EopTable, Finals2000AParsingAndLeapSecondInterpolation) {
         const EopTable table = EopTable::parseFinals2000A(content, interp);
         ASSERT_EQ(table.records().size(), 5u);
         const EopValues a = table.at(57752.0);
-        EXPECT_NEAR(rad2arcsec(a.xp), 0.029, 1e-12);
+        EXPECT_NEAR(radToArcsec(a.xp), 0.029, 1e-12);
         EXPECT_NEAR(a.dut1, -0.406, 1e-12);
         EXPECT_NEAR(a.lod, 0.001, 1e-15);
-        EXPECT_NEAR(rad2mas(a.dX), 0.11, 1e-12);
+        EXPECT_NEAR(radToMas(a.dX), 0.11, 1e-12);
         // Mid-day before the leap: smooth, no 0.5 s artifact.
         EXPECT_NEAR(table.at(57753.5).dut1, -0.4075, 1e-4);
         // After the leap.
@@ -508,7 +508,7 @@ TEST(EopTable, C04Formats) {
                             "2020   1   1  58849   0.076614   0.282383  -0.1772561   0.0003791   0.000098  -0.000233\n"
                             "2020   1   2  58850   0.074996   0.282597  -0.1775922   0.0002929   0.000099  -0.000227\n";
     const EopTable a      = EopTable::parseC04(c04_14);
-    EXPECT_NEAR(rad2arcsec(a.at(58849.0).xp), 0.076614, 1e-12);
+    EXPECT_NEAR(radToArcsec(a.at(58849.0).xp), 0.076614, 1e-12);
     EXPECT_NEAR(a.at(58849.0).dut1, -0.1772561, 1e-12);
     EXPECT_NEAR(a.at(58849.0).lod, 0.0003791, 1e-15);
     const char* c04_20 =
@@ -516,9 +516,9 @@ TEST(EopTable, C04Formats) {
         "2020  1  1  0 58849.00   0.076614   0.282383  -0.1772561   0.000098  -0.000233   0.0  0.0   0.0003791\n"
         "2020  1  2  0 58850.00   0.074996   0.282597  -0.1775922   0.000099  -0.000227   0.0  0.0   0.0002929\n";
     const EopTable b = EopTable::parseC04(c04_20);
-    EXPECT_NEAR(rad2arcsec(b.at(58850.0).yp), 0.282597, 1e-12);
+    EXPECT_NEAR(radToArcsec(b.at(58850.0).yp), 0.282597, 1e-12);
     EXPECT_NEAR(b.at(58850.0).lod, 0.0002929, 1e-15);
-    EXPECT_NEAR(rad2arcsec(b.at(58850.0).dX), 0.000099, 1e-12);
+    EXPECT_NEAR(radToArcsec(b.at(58850.0).dX), 0.000099, 1e-12);
 }
 
 TEST(EopTable, EpochThatIsNotFiniteIsRejected) {
@@ -545,7 +545,7 @@ TEST(EopTable, DuplicateEpochIsRejected) {
     const auto rec = [](double mjd, double xpArcsec) {
         EopRecord r;
         r.mjd       = mjd;
-        r.values.xp = arcsec2rad(xpArcsec);
+        r.values.xp = arcsecToRad(xpArcsec);
         return r;
     };
     const auto message = [](const std::vector<EopRecord>& records, EopInterpolation interp) -> std::string {
@@ -590,7 +590,7 @@ TEST(EopTable, DuplicateEpochIsRejected) {
         EXPECT_EQ(table.firstMjd(), 59000.0);
         EXPECT_EQ(table.lastMjd(), 59003.0);
         for (double mjd : {59000.0, 59000.5, 59001.0, 59001.75, 59002.25, 59003.0}) {
-            EXPECT_NEAR(rad2arcsec(table.at(mjd).xp), mjd - 58999.0, 1e-12) << mjd; // rounding only
+            EXPECT_NEAR(radToArcsec(table.at(mjd).xp), mjd - 58999.0, 1e-12) << mjd; // rounding only
         }
     }
 }
@@ -604,13 +604,13 @@ struct PolynomialEop {
 
     static double u(double mjd) { return mjd - 60003.4; }
     static double xp(double mjd) {
-        return arcsec2rad(0.1 + 0.01 * u(mjd) - 0.002 * std::pow(u(mjd), 2) + 3e-4 * std::pow(u(mjd), 3));
+        return arcsecToRad(0.1 + 0.01 * u(mjd) - 0.002 * std::pow(u(mjd), 2) + 3e-4 * std::pow(u(mjd), 3));
     }
-    static double yp(double mjd) { return arcsec2rad(0.3 + 0.02 * u(mjd) + c4 * std::pow(u(mjd), 4)); }
+    static double yp(double mjd) { return arcsecToRad(0.3 + 0.02 * u(mjd) + c4 * std::pow(u(mjd), 4)); }
     static double dut1(double mjd) { return -0.1 + 1e-3 * u(mjd) - 2e-4 * std::pow(u(mjd), 3); }
     static double lod(double mjd) { return 1e-3 + 1e-4 * std::pow(u(mjd), 2) - 1e-5 * std::pow(u(mjd), 3); }
-    static double dX(double mjd) { return mas2rad(0.2 - 0.03 * u(mjd) + 0.004 * std::pow(u(mjd), 3)); }
-    static double dY(double mjd) { return mas2rad(-0.1 + 0.01 * std::pow(u(mjd), 2) - 0.002 * std::pow(u(mjd), 3)); }
+    static double dX(double mjd) { return masToRad(0.2 - 0.03 * u(mjd) + 0.004 * std::pow(u(mjd), 3)); }
+    static double dY(double mjd) { return masToRad(-0.1 + 0.01 * std::pow(u(mjd), 2) - 0.002 * std::pow(u(mjd), 3)); }
 
     static std::vector<EopRecord> records() {
         std::vector<EopRecord> out;
@@ -656,7 +656,7 @@ TEST(EopTable, Lagrange4ErrorOnAQuarticIsTheNodePolynomial) {
         for (int k = 0; k < 4; ++k) {
             nodePolynomial *= mjd - (lower + k);
         }
-        const double expected = PolynomialEop::yp(mjd) - arcsec2rad(PolynomialEop::c4 * nodePolynomial);
+        const double expected = PolynomialEop::yp(mjd) - arcsecToRad(PolynomialEop::c4 * nodePolynomial);
         // The error itself is 1.7e-9 to 4.7e-9 rad (0.35 to 0.96 mas) at these epochs; rounding is
         // 4.2e-22 rad (measured).
         EXPECT_NEAR(table.at(mjd).yp, expected, 4e-21);
@@ -692,7 +692,7 @@ TEST(EopTable, FilesAreReadLikeTheirContents) {
         EXPECT_EQ(fromFile.at(mjd).xp, fromText.at(mjd).xp) << mjd;
         EXPECT_EQ(fromFile.at(mjd).dut1, fromText.at(mjd).dut1) << mjd;
     }
-    EXPECT_NEAR(rad2arcsec(fromFile.at(59001.0).xp), 0.11, 1e-12); // the value in the file
+    EXPECT_NEAR(radToArcsec(fromFile.at(59001.0).xp), 0.11, 1e-12); // the value in the file
     const EopTable c04FromFile = EopTable::loadC04(write("astro_c04_test.txt", c04));
     ASSERT_EQ(c04FromFile.records().size(), 2u);
     EXPECT_NEAR(c04FromFile.at(59001.0).lod, 0.0006, 1e-15);

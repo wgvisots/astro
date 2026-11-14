@@ -307,7 +307,7 @@ LeapSecondTable parseLeapSecondsList(std::string_view content) {
         const double    days = ntp / 86400.0;
         const long long mjd  = static_cast<long long>(std::llround(ntpEpochMjd + days));
         int             y = 0, m = 0, d = 0;
-        dateFromJulianDayNumber(mjd + 2400001, y, m, d);
+        julianDayNumberToDate(mjd + 2400001, y, m, d);
         // A step takes effect at 0h on the first of a month; the table cannot hold any other instant.
         if (days != std::floor(days) || d != 1) {
             failLine(kLeapSecondsList, lineNumber, line, "the NTP time is not 0h on the first of a month");
@@ -425,7 +425,7 @@ double LeapSecondTable::taiMinusUtc(double mjdUtc) const {
     }
     const double whole = std::floor(mjdUtc);
     int          y = 0, m = 0, d = 0;
-    dateFromJulianDayNumber(static_cast<long long>(whole) + 2400001, y, m, d);
+    julianDayNumberToDate(static_cast<long long>(whole) + 2400001, y, m, d);
     return taiMinusUtc(y, m, d, mjdUtc - whole);
 }
 

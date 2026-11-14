@@ -50,7 +50,7 @@ int main() {
 
     //! [units]
     // SI units and radians everywhere; convert at the edges.
-    const double lat = deg2rad(38.8895);
+    const double lat = degToRad(38.8895);
     std::cout << formatDms(lat) << '\n';
     //! [units]
     return 0;

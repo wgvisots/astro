@@ -52,7 +52,7 @@ zero) is good to about 400 m at the equator: UT1 - UTC can reach 0.9 s.
 ```cpp
 std::cout << std::fixed << std::setprecision(3);
 const Time        t = Time::fromIso8601("2024-03-20T12:00:00Z");
-const StateVector ecef{geodeticToEcef({deg2rad(38.8895), deg2rad(-77.0353), 100.0}), {}};
+const StateVector ecef{geodeticToEcef({degToRad(38.8895), degToRad(-77.0353), 100.0}), {}};
 const StateVector eci  = itrsToGcrs(ecef, t, *eop); // includes the omega x r velocity
 const StateVector back = gcrsToItrs(eci, t, *eop);
 std::cout << "GCRS r " << eci.r << " m, v " << eci.v << " m/s\n";
@@ -90,7 +90,7 @@ applying J2 about GCRS z instead would cost about 56 m after 1 h and 270 m after
 // precession). Zonal gravity must be applied about the true pole.
 const Mat3 toPole = poleOfDateMatrix(Frame::GCRS, t);
 std::cout << std::setprecision(7) << "true pole in GCRS: " << Vec3{toPole(2, 0), toPole(2, 1), toPole(2, 2)}
-          << ", tilt " << std::setprecision(4) << rad2deg(std::acos(toPole(2, 2))) << " deg\n";
+          << ", tilt " << std::setprecision(4) << radToDeg(std::acos(toPole(2, 2))) << " deg\n";
 ```
 
 The propagators take the frame of their state (`NumericalPropagator::j2j4(epoch, state, Frame::GCRS)`,

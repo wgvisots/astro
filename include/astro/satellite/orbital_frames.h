@@ -40,7 +40,7 @@ namespace astro {
 /// rotating RIC frame (velocity includes the frame rotation, omega = h / r^2).
 [[nodiscard]] StateVector relativeStateRic(const StateVector& chief, const StateVector& deputy) noexcept;
 /// Inverse of relativeStateRic: inertial deputy state from a relative RIC state.
-[[nodiscard]] StateVector deputyFromRelativeRic(const StateVector& chief, const StateVector& relRic) noexcept;
+[[nodiscard]] StateVector relativeRicToDeputy(const StateVector& chief, const StateVector& relRic) noexcept;
 
 // rotateCovariance(P, R), which rotates a 6x6 covariance into an orbital frame, is in core/mat6.h.
 

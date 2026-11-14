@@ -27,28 +27,31 @@
 /// Angle units and wrapping, and sexagesimal (HMS/DMS) parsing and formatting.
 namespace astro {
 
-/// Degrees to radians.
-[[nodiscard]] constexpr double deg2rad(double deg) noexcept {
+// The unit conversions below are functions of an angle. The factors of the same names in
+// astro::constants (constants::degToRad, ...) are the numbers they multiply or divide by.
+
+/// Degrees to radians (a function): `deg` (degrees) times the factor constants::degToRad.
+[[nodiscard]] constexpr double degToRad(double deg) noexcept {
     return deg * constants::degToRad;
 }
-/// Radians to degrees.
-[[nodiscard]] constexpr double rad2deg(double rad) noexcept {
+/// Radians to degrees (a function): `rad` (radians) times the factor constants::radToDeg.
+[[nodiscard]] constexpr double radToDeg(double rad) noexcept {
     return rad * constants::radToDeg;
 }
-/// Arcseconds to radians.
-[[nodiscard]] constexpr double arcsec2rad(double as) noexcept {
+/// Arcseconds to radians (a function): `as` (arcseconds) times the factor constants::arcsecToRad.
+[[nodiscard]] constexpr double arcsecToRad(double as) noexcept {
     return as * constants::arcsecToRad;
 }
-/// Radians to arcseconds.
-[[nodiscard]] constexpr double rad2arcsec(double rad) noexcept {
+/// Radians to arcseconds (a function): `rad` (radians) divided by the factor constants::arcsecToRad.
+[[nodiscard]] constexpr double radToArcsec(double rad) noexcept {
     return rad / constants::arcsecToRad;
 }
-/// Milliarcseconds to radians.
-[[nodiscard]] constexpr double mas2rad(double mas) noexcept {
+/// Milliarcseconds to radians (a function): `mas` (milliarcseconds) times the factor constants::masToRad.
+[[nodiscard]] constexpr double masToRad(double mas) noexcept {
     return mas * constants::masToRad;
 }
-/// Radians to milliarcseconds.
-[[nodiscard]] constexpr double rad2mas(double rad) noexcept {
+/// Radians to milliarcseconds (a function): `rad` (radians) divided by the factor constants::masToRad.
+[[nodiscard]] constexpr double radToMas(double rad) noexcept {
     return rad / constants::masToRad;
 }
 

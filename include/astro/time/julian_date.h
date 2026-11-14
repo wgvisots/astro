@@ -120,13 +120,13 @@ struct JulianDate {
 [[nodiscard]] int dayOfYear(int year, int month, int day);
 /// Month and day from year and 1-based day of year. Throws astro::Error if
 /// `doy` is outside 1-365 (1-366 in a leap year).
-void monthDayFromDayOfYear(int year, int doy, int& month, int& day);
+void dayOfYearToMonthDay(int year, int doy, int& month, int& day);
 /// Day of week, 0 = Sunday ... 6 = Saturday.
 [[nodiscard]] int dayOfWeek(int year, int month, int day);
 
 /// Julian Day Number (integer, noon-based) for a Gregorian date.
 [[nodiscard]] long long julianDayNumber(int year, int month, int day) noexcept;
 /// Gregorian date from a Julian Day Number.
-void dateFromJulianDayNumber(long long jdn, int& year, int& month, int& day) noexcept;
+void julianDayNumberToDate(long long jdn, int& year, int& month, int& day) noexcept;
 
 } // namespace astro

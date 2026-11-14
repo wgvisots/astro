@@ -44,7 +44,7 @@ constexpr double km = 1000.0;
 const CentralBody kJ2J4 = CentralBody::earthJ2J4();
 
 StateVector leo() {
-    return elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    return elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
 }
 
 double maxRelDiff(const Mat3& a, const Mat3& b) {
@@ -195,12 +195,12 @@ namespace {
 /// states of the differences fall on both sides of the wrap.
 std::vector<KeplerianElements> jacobianOrbits() {
     return {
-        {7000 * km,  0.001, deg2rad(51.6),  0.3, 0.6, 0.9},
-        {7000 * km,  0.0,   deg2rad(0.3),   0.0, 0.0, 1.0},
-        {26000 * km, 0.6,   deg2rad(63.4),  1.0, 4.7, 0.5},
-        {7100 * km,  0.002, deg2rad(90.0),  2.0, 0.3, 0.1},
-        {7000 * km,  0.001, deg2rad(140.0), 0.5, 1.0, 2.0},
-        elementsFromMeanAnomaly(8000 * km, 0.05, deg2rad(30.0), 3.0, 3.0, constants::twoPi - 6.0 - 1e-9),
+        {7000 * km,  0.001, degToRad(51.6),  0.3, 0.6, 0.9},
+        {7000 * km,  0.0,   degToRad(0.3),   0.0, 0.0, 1.0},
+        {26000 * km, 0.6,   degToRad(63.4),  1.0, 4.7, 0.5},
+        {7100 * km,  0.002, degToRad(90.0),  2.0, 0.3, 0.1},
+        {7000 * km,  0.001, degToRad(140.0), 0.5, 1.0, 2.0},
+        elementsFromMeanAnomaly(8000 * km, 0.05, degToRad(30.0), 3.0, 3.0, constants::twoPi - 6.0 - 1e-9),
     };
 }
 

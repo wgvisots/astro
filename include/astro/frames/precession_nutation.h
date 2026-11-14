@@ -99,7 +99,7 @@ struct CipXY {
 /// CIP X, Y from the IAU 2006/2000A series (IERS Tables 5.2a/b).
 [[nodiscard]] CipXY cipXY06(double t) noexcept;
 /// CIP X, Y extracted from a bias-precession-nutation matrix (used for 2000B).
-[[nodiscard]] CipXY cipXYFromMatrix(const Mat3& npb) noexcept;
+[[nodiscard]] CipXY matrixToCipXY(const Mat3& npb) noexcept;
 /// CIP X, Y for the selected model: cipXY06() for 2000A, or from the
 /// npbMatrix06() matrix for 2000B.
 [[nodiscard]] CipXY cipXY(double t, PrecessionNutationModel model) noexcept;

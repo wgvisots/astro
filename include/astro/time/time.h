@@ -56,7 +56,7 @@ std::ostream& operator<<(std::ostream& os, TimeScale value);
 /// Short name of a time scale ("UTC", "TT", ...), or "?" for an invalid value.
 [[nodiscard]] std::string_view toString(TimeScale scale) noexcept;
 /// Parse "UTC", "TAI", "TT", ... (case-insensitive). Throws astro::Error for an unknown name.
-[[nodiscard]] TimeScale timeScaleFromString(std::string_view name);
+[[nodiscard]] TimeScale parseTimeScale(std::string_view name);
 
 /// Global navigation satellite systems with their own time scale and week count.
 enum class GnssSystem {

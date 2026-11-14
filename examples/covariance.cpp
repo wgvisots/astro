@@ -35,7 +35,7 @@ using namespace astro;
 
 int main() {
     const Time        epoch = Time::fromIso8601("2026-03-01T00:00:00Z");
-    const StateVector s0    = elementsToState({6778e3, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    const StateVector s0    = elementsToState({6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
 
     //! [covariance]
     // 10 m and 1 cm/s (1-sigma) per axis at the epoch, in the state's frame (GCRS).

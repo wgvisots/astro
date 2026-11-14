@@ -47,12 +47,12 @@ Brent's method:
 <!-- snippet: examples/sgp4_passes.cpp#passes -->
 ```cpp
 // Passes above 10 deg over a station during the day after the epoch.
-const Geodetic station{deg2rad(38.8895), deg2rad(-77.0353), 100.0};
+const Geodetic station{degToRad(38.8895), degToRad(-77.0353), 100.0};
 const auto     passes =
-    findPasses(sgp4ItrsFunction(sgp4, eop), station, sgp4.epoch(), sgp4.epoch() + 86400.0, deg2rad(10.0));
+    findPasses(sgp4ItrsFunction(sgp4, eop), station, sgp4.epoch(), sgp4.epoch() + 86400.0, degToRad(10.0));
 for (const Pass& p : passes) {
     std::cout << "  AOS " << p.aos.iso8601(0) << "  max el " << std::fixed << std::setprecision(1)
-              << rad2deg(p.maxElevation) << " deg  LOS " << p.los.iso8601(0) << '\n';
+              << radToDeg(p.maxElevation) << " deg  LOS " << p.los.iso8601(0) << '\n';
 }
 ```
 
@@ -95,7 +95,7 @@ blocks the line between two points. All are in `satellite/ground.h`.
 
 `ricMatrix` (radial, in-track, cross-track; also called RSW), `lvlhMatrix`, `vncMatrix` and
 `ntwMatrix` rotate inertial vectors into frames attached to a state; `rotateCovariance` rotates a
-6x6 covariance. `relativeStateRic` and `deputyFromRelativeRic` give the relative state of a deputy
+6x6 covariance. `relativeStateRic` and `relativeRicToDeputy` give the relative state of a deputy
 in the chief's rotating RIC frame, the coordinates in which the Clohessy-Wiltshire equations
 [Clohessy & Wiltshire (1960)](https://doi.org/10.2514/8.8704) are usually written today (check the axis order when
 comparing with a particular text). The frame definitions are those of the CCSDS navigation

@@ -3,13 +3,13 @@
 ## Units and angles
 
 SI units throughout: metres, seconds, m/s, m/s^2, m^3/s^2 for GM. Angles are radians; convert at the
-edges with `deg2rad`, `rad2deg`, `arcsec2rad`, and parse or format with `parseHms`, `parseDms`,
+edges with `degToRad`, `radToDeg`, `arcsecToRad`, and parse or format with `parseHms`, `parseDms`,
 `formatHms`, `formatDms`.
 
 <!-- snippet: examples/conventions.cpp#units -->
 ```cpp
 // SI units and radians everywhere; convert at the edges.
-const double lat = deg2rad(38.8895);
+const double lat = degToRad(38.8895);
 std::cout << formatDms(lat) << '\n';
 ```
 

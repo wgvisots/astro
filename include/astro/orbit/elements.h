@@ -109,7 +109,7 @@ struct EquinoctialElements {
 /// Mean motion (rad/s).
 [[nodiscard]] double meanMotion(double a, double mu = constants::gmEarth) noexcept;
 /// Semi-major axis from mean motion (rad/s).
-[[nodiscard]] double semiMajorAxisFromMeanMotion(double n, double mu = constants::gmEarth) noexcept;
+[[nodiscard]] double meanMotionToSemiMajorAxis(double n, double mu = constants::gmEarth) noexcept;
 /// Specific orbital energy (J/kg).
 [[nodiscard]] double specificEnergy(const StateVector& s, double mu = constants::gmEarth) noexcept;
 /// Flight-path angle (rad): angle of the velocity above the local horizontal.
