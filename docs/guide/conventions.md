@@ -34,6 +34,10 @@ Names follow one pattern, so that a reader who has learned one part of the libra
 - **No generic free names in `astro::`.** A free function says what it computes (`earthShadow`,
   `twilightEvents`, `coverageFootprint`, `trackerPropagator`); an operation that belongs to one type
   is a member (`HelmertParams::inverse()`).
+- **A constructor from one number or state is `explicit`** (`JulianDate(jd1, jd2 = 0)`,
+  `SecularPropagator(s0, ...)`), so a bare value never converts silently. (A `Trajectory` is made
+  implicitly from a function of time, so that one can be passed where a trajectory is expected.)
+- **Every struct member has a default value**, so a default-constructed struct holds no garbage.
 
 ## Rotations
 

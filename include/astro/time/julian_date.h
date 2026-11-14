@@ -51,8 +51,9 @@ struct JulianDate {
 
     /// J2000.0 (JD 2451545.0).
     constexpr JulianDate() noexcept = default;
-    /// From the two parts as given (not normalized), in days.
-    constexpr JulianDate(double jd1_, double jd2_ = 0.0) noexcept
+    /// From the two parts as given (not normalized), in days. Explicit, so that a bare double is not
+    /// taken for a JulianDate.
+    explicit constexpr JulianDate(double jd1_, double jd2_ = 0.0) noexcept
         : jd1(jd1_)
         , jd2(jd2_) {}
 

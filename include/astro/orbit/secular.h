@@ -128,10 +128,10 @@ public:
                                SecularOrder       order = SecularOrder::J2SquaredJ4);
     /// From a 12-component state; `mode` is as for propagateSecular(const StateVector12&, ...).
     /// Throws astro::Error as the constructor from a StateVector does.
-    SecularPropagator(const StateVector12& s0,
-                      const CentralBody&   body  = CentralBody::earth(),
-                      SecularOrder         order = SecularOrder::J2SquaredJ4,
-                      HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
+    explicit SecularPropagator(const StateVector12& s0,
+                               const CentralBody&   body  = CentralBody::earth(),
+                               SecularOrder         order = SecularOrder::J2SquaredJ4,
+                               HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
 
     /// Mean elements dt seconds after the epoch.
     [[nodiscard]] KeplerianElements elements(double dt) const;
@@ -297,10 +297,10 @@ public:
                                         SecularOrder       order = SecularOrder::J2SquaredJ4);
     /// From a 12-component state; `mode` is as for SecularPropagator. Throws astro::Error as
     /// SecularPropagator does: unless s0 is on an elliptic orbit.
-    SecularPropagatorCorrected(const StateVector12& s0,
-                               const CentralBody&   body  = CentralBody::earth(),
-                               SecularOrder         order = SecularOrder::J2SquaredJ4,
-                               HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
+    explicit SecularPropagatorCorrected(const StateVector12& s0,
+                                        const CentralBody&   body  = CentralBody::earth(),
+                                        SecularOrder         order = SecularOrder::J2SquaredJ4,
+                                        HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
 };
 
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;

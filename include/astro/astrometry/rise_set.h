@@ -44,9 +44,9 @@ std::ostream& operator<<(std::ostream& os, SkyEventType value);
 
 /// A rise, set or transit event.
 struct SkyEvent {
-    SkyEventType type;      ///< kind of event
-    Time         time;      ///< time of the event, in the time scale of the search start
-    double       elevation; ///< elevation function value at the event (rad)
+    SkyEventType type{SkyEventType::Rise}; ///< kind of event
+    Time         time;                     ///< time of the event, in the time scale of the search start
+    double       elevation{0.0};           ///< elevation function value at the event (rad)
 };
 
 /// Find upward/downward crossings of `threshold` by `elevation(t)` and its local
