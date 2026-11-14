@@ -496,7 +496,7 @@ CalendarDate Time::calendar(int decimals) const {
         throw Error("Time::calendar: the time is not finite");
     }
     if (scale_ != TimeScale::UTC) {
-        return jd_.toCalendar(decimals);
+        return jd_.calendar(decimals);
     }
     const double dayLen = utcDayLength(jd_.jd1);
     const double scale  = std::pow(10.0, decimals);
@@ -551,7 +551,7 @@ double Time::unixSeconds() const {
     return (u.jd_.jd1 - constants::jdUnixEpoch) * secondsPerDay + sod;
 }
 
-std::chrono::system_clock::time_point Time::toSysTime() const {
+std::chrono::system_clock::time_point Time::sysTime() const {
     using namespace std::chrono;
     const Time   u        = to(TimeScale::UTC);
     const double sod      = u.jd_.jd2 * utcDayLength(u.jd_.jd1);

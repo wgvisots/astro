@@ -24,6 +24,9 @@ Names follow one pattern, so that a reader who has learned one part of the libra
   `constants::earthRotationRateEra`, `constants::criticalInclination`, `constants::sunriseElevation`.
   The angle factors (`constants::degToRad`, a number) share their names with the functions that
   apply them (`astro::degToRad(x)`). Standard symbols keep their usual form (`c`, `J2`, `LG`, `TDB0`).
+- **Accessors are nouns; `to` means a conversion** to another type or scale: `Time::calendar()`,
+  `Time::sysTime()`, `Time::unixSeconds()`, `JulianDate::calendar()`, but `Time::to(TimeScale)`,
+  `Quat::toMatrix()` and `toString(TimeScale)`.
 
 ## Rotations
 

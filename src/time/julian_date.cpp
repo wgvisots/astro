@@ -35,7 +35,7 @@ constexpr long long floorDiv(long long a, long long b) noexcept {
     return q;
 }
 
-// Largest size of either part of a Julian date that toCalendar accepts, in days (270 million years). The
+// Largest size of either part of a Julian date that calendar() accepts, in days (270 million years). The
 // Gregorian year stops fitting an int near 7.8e11 days; the limit is the power of ten below that.
 constexpr double kMaxCalendarJd = 1.0e11;
 } // namespace
@@ -133,14 +133,14 @@ JulianDate JulianDate::addSeconds(double seconds) const noexcept {
     return JulianDate{jd1 + wholeDays, jd2 + rem / constants::secondsPerDay}.normalized();
 }
 
-CalendarDate JulianDate::toCalendar(int decimals) const {
+CalendarDate JulianDate::calendar(int decimals) const {
     // The day number becomes an integer below, which is undefined for a NaN, an infinity or a value that does
     // not fit; so those are refused first.
     if (!std::isfinite(jd1) || !std::isfinite(jd2)) {
-        throw Error("JulianDate::toCalendar: the Julian date is not finite");
+        throw Error("JulianDate::calendar: the Julian date is not finite");
     }
     if (std::abs(jd1) > kMaxCalendarJd || std::abs(jd2) > kMaxCalendarJd) {
-        throw Error("JulianDate::toCalendar: the Julian date is out of range (more than 1e11 days from JD 0)");
+        throw Error("JulianDate::calendar: the Julian date is out of range (more than 1e11 days from JD 0)");
     }
     const JulianDate n           = normalized();
     const double     scale       = std::pow(10.0, decimals);

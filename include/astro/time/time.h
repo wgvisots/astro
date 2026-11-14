@@ -187,7 +187,7 @@ public:
     /// std::chrono::system_clock time point from the Unix time (converts to
     /// UTC), rounded to the nearest nanosecond. Throws astro::Error as
     /// unixSeconds() does.
-    [[nodiscard]] std::chrono::system_clock::time_point toSysTime() const;
+    [[nodiscard]] std::chrono::system_clock::time_point sysTime() const;
     /// Seconds since the GPS epoch (converts to GPS time). Throws astro::Error
     /// as to(TimeScale::GPS) does: for a UTC time before 1960, and for a UT1
     /// time (convert that with to() and an EopProvider first).

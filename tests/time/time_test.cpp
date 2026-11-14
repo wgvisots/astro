@@ -113,7 +113,7 @@ TEST(JulianDate, CalendarRoundTrip) {
     EXPECT_DOUBLE_EQ(JulianDate::fromCalendar(2000, 1, 1, 12).jd(), 2451545.0);
     EXPECT_DOUBLE_EQ(JulianDate::fromCalendar(1858, 11, 17).mjd(), 0.0);
     EXPECT_DOUBLE_EQ(JulianDate::fromCalendar(-4713, 11, 24, 12).jd(), 0.0); // proleptic Gregorian JD 0
-    const CalendarDate c = JulianDate::fromCalendar(2024, 2, 29, 23, 59, 59.123456).toCalendar(6);
+    const CalendarDate c = JulianDate::fromCalendar(2024, 2, 29, 23, 59, 59.123456).calendar(6);
     EXPECT_EQ(c.year, 2024);
     EXPECT_EQ(c.month, 2);
     EXPECT_EQ(c.day, 29);
@@ -121,7 +121,7 @@ TEST(JulianDate, CalendarRoundTrip) {
     EXPECT_EQ(c.minute, 59);
     EXPECT_NEAR(c.second, 59.123456, 1e-9);
     // Rounding carries into the next day.
-    const CalendarDate n = JulianDate::fromCalendar(2023, 12, 31, 23, 59, 59.9999999).toCalendar(3);
+    const CalendarDate n = JulianDate::fromCalendar(2023, 12, 31, 23, 59, 59.9999999).calendar(3);
     EXPECT_EQ(n.year, 2024);
     EXPECT_EQ(n.month, 1);
     EXPECT_EQ(n.day, 1);
@@ -382,7 +382,7 @@ TEST(Time, Unix) {
     // Full precision path.
     const Time p = Time::fromUnix(1700000000LL, 0.123456789);
     EXPECT_EQ(p.iso8601(9), "2023-11-14T22:13:20.123456789Z");
-    const auto tp = p.toSysTime();
+    const auto tp = p.sysTime();
     EXPECT_EQ(Time::fromSysTime(tp).iso8601(6), "2023-11-14T22:13:20.123457Z");
 }
 
@@ -648,19 +648,19 @@ TEST(Time, CalendarOfANonFiniteTimeThrows) {
 
 TEST(JulianDate, ToCalendarRejectsNonFiniteAndHugeDates) {
     for (const double bad : {kNaN, kInf, -kInf}) {
-        expectErrorSaying([&] { (void)JulianDate{bad, 0.0}.toCalendar(); }, "not finite", "jd1");
-        expectErrorSaying([&] { (void)JulianDate{2451545.0, bad}.toCalendar(); }, "not finite", "jd2");
+        expectErrorSaying([&] { (void)JulianDate{bad, 0.0}.calendar(); }, "not finite", "jd1");
+        expectErrorSaying([&] { (void)JulianDate{2451545.0, bad}.calendar(); }, "not finite", "jd2");
     }
     // Finite, but beyond the years an int can hold.
-    expectErrorSaying([] { (void)JulianDate{1.0e30, 0.0}.toCalendar(); }, "out of range", "1e30");
-    expectErrorSaying([] { (void)JulianDate{-1.0e30, 0.0}.toCalendar(); }, "out of range", "-1e30");
+    expectErrorSaying([] { (void)JulianDate{1.0e30, 0.0}.calendar(); }, "out of range", "1e30");
+    expectErrorSaying([] { (void)JulianDate{-1.0e30, 0.0}.calendar(); }, "out of range", "-1e30");
     // Far dates inside the range are unaffected.
-    const CalendarDate far = JulianDate::fromCalendar(99999, 12, 31, 12).toCalendar(3);
+    const CalendarDate far = JulianDate::fromCalendar(99999, 12, 31, 12).calendar(3);
     EXPECT_EQ(far.year, 99999);
     EXPECT_EQ(far.month, 12);
     EXPECT_EQ(far.day, 31);
     EXPECT_EQ(far.hour, 12);
-    const CalendarDate old = JulianDate::fromCalendar(-99999, 1, 1).toCalendar(3);
+    const CalendarDate old = JulianDate::fromCalendar(-99999, 1, 1).calendar(3);
     EXPECT_EQ(old.year, -99999);
     EXPECT_EQ(old.month, 1);
     EXPECT_EQ(old.day, 1);
@@ -709,15 +709,15 @@ TEST(Time, Iso8601WithoutTheScale) {
 }
 
 // Time::now() is the system clock read as UTC: it lies between two readings of the clock taken either side of
-// it. (toSysTime rounds to the nanosecond; 1 microsecond allows for the rounding of the day fraction.)
+// it. (sysTime() rounds to the nanosecond; 1 microsecond allows for the rounding of the day fraction.)
 TEST(Time, NowIsTheSystemClockAsUtc) {
     using std::chrono::system_clock;
     const system_clock::time_point before = system_clock::now();
     const Time                     t      = Time::now();
     const system_clock::time_point after  = system_clock::now();
     EXPECT_EQ(t.scale(), TimeScale::UTC);
-    EXPECT_GE(t.toSysTime(), before - std::chrono::microseconds(1));
-    EXPECT_LE(t.toSysTime(), after + std::chrono::microseconds(1));
+    EXPECT_GE(t.sysTime(), before - std::chrono::microseconds(1));
+    EXPECT_LE(t.sysTime(), after + std::chrono::microseconds(1));
     EXPECT_GE(t.calendar().year, 2026); // this test was written in November 2026
 }
 
@@ -816,11 +816,11 @@ TEST(Time, Ut1WithoutEopThrowsWhereItMustConvert) {
 TEST(Time, SysTimeBefore1970) {
     using namespace std::chrono;
     const Time t = Time::fromIso8601("1969-12-31T23:59:59.5Z");
-    EXPECT_EQ(duration_cast<nanoseconds>(t.toSysTime().time_since_epoch()).count(), -500000000LL);
+    EXPECT_EQ(duration_cast<nanoseconds>(t.sysTime().time_since_epoch()).count(), -500000000LL);
     EXPECT_NEAR(t.unixSeconds(), -0.5, 1e-9);
-    EXPECT_EQ(Time::fromSysTime(t.toSysTime()).iso8601(3), "1969-12-31T23:59:59.500Z");
+    EXPECT_EQ(Time::fromSysTime(t.sysTime()).iso8601(3), "1969-12-31T23:59:59.500Z");
     EXPECT_EQ(
-        duration_cast<seconds>(Time::fromCalendar(TimeScale::UTC, 1960, 1, 1).toSysTime().time_since_epoch()).count(),
+        duration_cast<seconds>(Time::fromCalendar(TimeScale::UTC, 1960, 1, 1).sysTime().time_since_epoch()).count(),
         -315619200LL);
 }
 
