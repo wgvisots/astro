@@ -18,10 +18,14 @@
 
 #include "astro/time/time.h"
 
+#include <chrono>
 #include <cmath>
+#include <functional>
+#include <initializer_list>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "astro/core/error.h"
@@ -195,6 +199,10 @@ TEST(TimeScales, MatchesErfa) {
     ASSERT_GT(csv.rows.size(), 300u);
     const ConstantEop eop(EopValues{.dut1 = 0.1234567});
     auto num = [&](const std::vector<std::string>& r, const char* name) { return std::stod(r[csv.col(name)]); };
+    // Tolerances. Scales: 1e-10 s, against a worst difference of 1.9e-11 s (TDB, TCG and TCB; TAI and TT agree
+    // to the bit), which is a few units in the last place of a day fraction (4.8e-12 s). TDB - TT: the series is
+    // ERFA's, summed in the same order, and agrees to the bit; 1e-15 s (of 1.7e-3 s) allows another compiler's
+    // rounding. These were 1e-9 s and 1e-12 s.
     for (const auto& r : csv.rows) {
         const Time        utc   = Time::fromCalendar(TimeScale::UTC,
                                             std::stoi(r[0]),
@@ -204,21 +212,21 @@ TEST(TimeScales, MatchesErfa) {
                                             std::stoi(r[4]),
                                             num(r, "second"));
         const std::string label = utc.iso8601(6);
-        EXPECT_NEAR(diffSec(utc.jd(), num(r, "utc1"), num(r, "utc2")), 0.0, 1e-9) << label;
-        EXPECT_NEAR(diffSec(utc.to(TimeScale::TAI).jd(), num(r, "tai1"), num(r, "tai2")), 0.0, 1e-9) << label;
-        EXPECT_NEAR(diffSec(utc.to(TimeScale::TT).jd(), num(r, "tt1"), num(r, "tt2")), 0.0, 1e-9) << label;
-        EXPECT_NEAR(diffSec(utc.to(TimeScale::TDB).jd(), num(r, "tdb1"), num(r, "tdb2")), 0.0, 1e-9) << label;
-        EXPECT_NEAR(diffSec(utc.to(TimeScale::TCG).jd(), num(r, "tcg1"), num(r, "tcg2")), 0.0, 1e-9) << label;
-        EXPECT_NEAR(diffSec(utc.to(TimeScale::TCB).jd(), num(r, "tcb1"), num(r, "tcb2")), 0.0, 1e-9) << label;
+        EXPECT_NEAR(diffSec(utc.jd(), num(r, "utc1"), num(r, "utc2")), 0.0, 1e-10) << label;
+        EXPECT_NEAR(diffSec(utc.to(TimeScale::TAI).jd(), num(r, "tai1"), num(r, "tai2")), 0.0, 1e-10) << label;
+        EXPECT_NEAR(diffSec(utc.to(TimeScale::TT).jd(), num(r, "tt1"), num(r, "tt2")), 0.0, 1e-10) << label;
+        EXPECT_NEAR(diffSec(utc.to(TimeScale::TDB).jd(), num(r, "tdb1"), num(r, "tdb2")), 0.0, 1e-10) << label;
+        EXPECT_NEAR(diffSec(utc.to(TimeScale::TCG).jd(), num(r, "tcg1"), num(r, "tcg2")), 0.0, 1e-10) << label;
+        EXPECT_NEAR(diffSec(utc.to(TimeScale::TCB).jd(), num(r, "tcb1"), num(r, "tcb2")), 0.0, 1e-10) << label;
         const int  year         = std::stoi(r[0]);
         const bool inLeapSecond = num(r, "second") >= 60.0;
         // ERFA's eraUtcut1 evaluates TAI - UTC at 0h of the day, which before 1972, while UTC drifted, is off by
         // up to 1.3 ms within a day; so its UT1 column is used from 1972 only. The tests below cover the years
         // before.
         if (year >= 1972) {
-            EXPECT_NEAR(diffSec(utc.to(TimeScale::UT1, eop).jd(), num(r, "ut11"), num(r, "ut12")), 0.0, 1e-9) << label;
+            EXPECT_NEAR(diffSec(utc.to(TimeScale::UT1, eop).jd(), num(r, "ut11"), num(r, "ut12")), 0.0, 1e-10) << label;
         }
-        EXPECT_NEAR(tdbMinusTt(utc.to(TimeScale::TT).jd()), num(r, "tdb_minus_tt"), 1e-12) << label;
+        EXPECT_NEAR(tdbMinusTt(utc.to(TimeScale::TT).jd()), num(r, "tdb_minus_tt"), 1e-15) << label;
 
         // Round trips back to UTC from every scale. (UT1 is skipped inside a leap second: with a constant
         // dut1, which real EOP never has across a leap second, UT1 is discontinuous there.)
@@ -228,13 +236,14 @@ TEST(TimeScales, MatchesErfa) {
                             TimeScale::TCG,
                             TimeScale::TCB,
                             TimeScale::GPS,
+                            TimeScale::GST,
                             TimeScale::BDT,
                             TimeScale::UT1}) {
             if (s == TimeScale::UT1 && inLeapSecond) {
                 continue;
             }
             const Time back = utc.to(s, eop).to(TimeScale::UTC, eop);
-            EXPECT_NEAR(back - utc, 0.0, 1e-9) << label << " via " << toString(s);
+            EXPECT_NEAR(back - utc, 0.0, 1e-10) << label << " via " << toString(s);
             EXPECT_EQ(back.iso8601(6), label) << " via " << toString(s);
         }
     }
@@ -291,7 +300,8 @@ TEST(TimeScales, DISABLED_Ut1OnTheShortenedUtcDaysIsUtcPlusDut1) {
 
 TEST(TimeScales, TopocentricTdb) {
     // ERFA eraDtdb with the observer terms, 50 random epochs and observers (tools/gen_reference.py). An empty or
-    // cut-short file must fail rather than pass with nothing compared.
+    // cut-short file must fail rather than pass with nothing compared. Tolerance 1e-15 s: the arithmetic is ERFA's
+    // and agrees to the bit here (this was 1e-13 s).
     const auto csv = readCsv(dataPath("dtdb_topo.csv"));
     ASSERT_EQ(csv.rows.size(), 50u);
     for (const auto& r : csv.rows) {
@@ -301,7 +311,7 @@ TEST(TimeScales, TopocentricTdb) {
                                std::stod(r[3]),
                                std::stod(r[4])),
                     std::stod(r[5]),
-                    1e-13);
+                    1e-15);
     }
 }
 
@@ -656,4 +666,201 @@ TEST(JulianDate, ToCalendarRejectsNonFiniteAndHugeDates) {
     EXPECT_EQ(old.year, -99999);
     EXPECT_EQ(old.month, 1);
     EXPECT_EQ(old.day, 1);
+}
+
+// Time::fromMjd is the Modified Julian Date in the scale given: MJD 51544.5 is JD 2451545.0 (J2000.0), and
+// MJD 57754 is 2017-01-01 (the day of the last leap second, IERS Bulletin C).
+TEST(Time, FromMjd) {
+    const Time j2000 = Time::fromMjd(51544.5, TimeScale::TT);
+    EXPECT_EQ(j2000.scale(), TimeScale::TT);
+    EXPECT_EQ(j2000.jd().jd(), constants::jdJ2000);
+    EXPECT_EQ(j2000.mjd(), 51544.5);
+    EXPECT_EQ(Time::fromMjd(57754.0, TimeScale::UTC).iso8601(3), "2017-01-01T00:00:00.000Z");
+    EXPECT_EQ(Time::fromMjd(57754.25, TimeScale::TAI).iso8601(3), "2017-01-01T06:00:00.000 TAI");
+}
+
+// calendar() gives the fields in the time's own scale, with the seconds rounded to `decimals` places and
+// carried into the next day; in UTC the leap second is second 60.
+TEST(Time, CalendarFieldsInTheTimesOwnScale) {
+    const auto expectFields = [](const CalendarDate& c, int y, int mo, int d, int h, int mi, double s) {
+        EXPECT_EQ(c.year, y);
+        EXPECT_EQ(c.month, mo);
+        EXPECT_EQ(c.day, d);
+        EXPECT_EQ(c.hour, h);
+        EXPECT_EQ(c.minute, mi);
+        EXPECT_DOUBLE_EQ(c.second, s);
+    };
+    const Time leap = Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 23, 59, 60.26);
+    expectFields(leap.calendar(), 2016, 12, 31, 23, 59, 60.26);
+    expectFields(leap.calendar(1), 2016, 12, 31, 23, 59, 60.3);
+    // The same instant in TAI. TAI - UTC was 36 s until the end of the leap second, which therefore began at
+    // 00:00:36 TAI on 2017-01-01.
+    expectFields(leap.to(TimeScale::TAI).calendar(6), 2017, 1, 1, 0, 0, 36.26);
+    // Rounding to whole seconds carries into the next day, in UTC after the leap second.
+    expectFields(Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 23, 59, 60.6).calendar(0), 2017, 1, 1, 0, 0, 0.0);
+    expectFields(Time::fromCalendar(TimeScale::TT, 2023, 12, 31, 23, 59, 59.6).calendar(0), 2024, 1, 1, 0, 0, 0.0);
+}
+
+TEST(Time, Iso8601WithoutTheScale) {
+    const Time tt = Time::fromCalendar(TimeScale::TT, 2000, 1, 1, 12);
+    EXPECT_EQ(tt.iso8601(3, false), "2000-01-01T12:00:00.000");
+    EXPECT_EQ(tt.iso8601(0, false), "2000-01-01T12:00:00");
+    EXPECT_EQ(tt.iso8601(3, true), "2000-01-01T12:00:00.000 TT");
+    const Time utc = Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 23, 59, 60.5);
+    EXPECT_EQ(utc.iso8601(1, false), "2016-12-31T23:59:60.5");
+}
+
+// Time::now() is the system clock read as UTC: it lies between two readings of the clock taken either side of
+// it. (toSysTime rounds to the nanosecond; 1 microsecond allows for the rounding of the day fraction.)
+TEST(Time, NowIsTheSystemClockAsUtc) {
+    using std::chrono::system_clock;
+    const system_clock::time_point before = system_clock::now();
+    const Time                     t      = Time::now();
+    const system_clock::time_point after  = system_clock::now();
+    EXPECT_EQ(t.scale(), TimeScale::UTC);
+    EXPECT_GE(t.toSysTime(), before - std::chrono::microseconds(1));
+    EXPECT_LE(t.toSysTime(), after + std::chrono::microseconds(1));
+    EXPECT_GE(t.calendar().year, 2026); // this test was written in November 2026
+}
+
+// Every scale's short name, in any mix of case; "GPST" is GPS time. Anything else is an error that quotes the
+// name.
+TEST(Time, TimeScaleFromString) {
+    // clang-format off
+    const std::pair<const char*, TimeScale> names[] = {
+        {"UTC", TimeScale::UTC}, {"tai", TimeScale::TAI}, {"Tt",  TimeScale::TT},  {"tDb",  TimeScale::TDB},
+        {"TCG", TimeScale::TCG}, {"tcb", TimeScale::TCB}, {"UT1", TimeScale::UT1}, {"gps",  TimeScale::GPS},
+        {"GST", TimeScale::GST}, {"bdt", TimeScale::BDT}, {"GPST", TimeScale::GPS}, {"gpst", TimeScale::GPS},
+    };
+    // clang-format on
+    for (const auto& [name, scale] : names) {
+        EXPECT_EQ(timeScaleFromString(name), scale) << name;
+    }
+    for (const char* bad : {"", "XYZ", "UTC ", " TT", "UT", "GLONASS", "TT\n"}) {
+        expectErrorSaying([&] { (void)timeScaleFromString(bad); }, "'" + std::string(bad) + "'", bad);
+    }
+}
+
+// += and -= add SI seconds as + and - do: in UTC through TAI, so that the leap second is counted.
+TEST(Time, AddAndSubtractInPlace) {
+    Time t  = Time::fromCalendar(TimeScale::UTC, 2016, 12, 31, 23, 59, 59.0);
+    t      += 1.0;
+    EXPECT_EQ(t.iso8601(3), "2016-12-31T23:59:60.000Z");
+    t += 1.0;
+    EXPECT_EQ(t.iso8601(3), "2017-01-01T00:00:00.000Z");
+    t -= 2.0;
+    EXPECT_EQ(t.iso8601(3), "2016-12-31T23:59:59.000Z");
+    EXPECT_EQ((t - 86400.0).iso8601(3), "2016-12-30T23:59:59.000Z");
+    // In TT a day is 86400 s, whatever UTC does.
+    Time tt  = Time::fromCalendar(TimeScale::TT, 2016, 12, 31, 12);
+    tt      += 86400.0;
+    EXPECT_EQ(tt.iso8601(3), "2017-01-01T12:00:00.000 TT");
+    tt -= 0.5;
+    EXPECT_EQ(tt.iso8601(3), "2017-01-01T11:59:59.500 TT");
+}
+
+// Differences and ordering across scales, against the defined offsets: TT = TAI + 32.184 s (IAU 1991
+// Resolution A4), GPS = TAI - 19 s (IS-GPS-200), BDT = TAI - 33 s (BeiDou ICD), and UTC = TAI - 37 s in 2020
+// (IERS Bulletin C). 1e-9 s is about a hundred times the resolution of a two-part Julian date.
+TEST(Time, DifferencesAndOrderingAcrossScales) {
+    const Time tai = Time::fromCalendar(TimeScale::TAI, 2020, 6, 1, 12);
+    const Time tt  = Time::fromCalendar(TimeScale::TT, 2020, 6, 1, 12, 0, 32.184);
+    const Time gps = Time::fromCalendar(TimeScale::GPS, 2020, 6, 1, 11, 59, 41.0);
+    const Time bdt = Time::fromCalendar(TimeScale::BDT, 2020, 6, 1, 11, 59, 27.0);
+    const Time utc = Time::fromCalendar(TimeScale::UTC, 2020, 6, 1, 11, 59, 23.0);
+    for (const Time* t : {&tt, &gps, &bdt, &utc}) {
+        EXPECT_NEAR(*t - tai, 0.0, 1e-9) << t->iso8601(6);
+        EXPECT_NEAR(tai - *t, 0.0, 1e-9) << t->iso8601(6);
+        // A microsecond later in the other scale is later, whichever side it is on.
+        EXPECT_TRUE(tai < *t + 1e-6) << t->iso8601(6);
+        EXPECT_TRUE(*t + 1e-6 > tai) << t->iso8601(6);
+        EXPECT_TRUE(*t - 1e-6 < tai) << t->iso8601(6);
+    }
+    EXPECT_NEAR(tt - utc, 0.0, 1e-9);
+    EXPECT_NEAR(Time::fromCalendar(TimeScale::TT, 2020, 6, 1, 12) - tai, -32.184, 1e-9);
+}
+
+// UTC is undefined before 1960-01-01, where the leap-second table starts (time.h). 1960-01-01 is 3653 days
+// (ten years, three of them leap years) before 1970-01-01, so Unix time -315619200.
+TEST(Time, UtcBefore1960IsAnError) {
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 1959, 12, 31, 23, 59, 59.0), Error);
+    EXPECT_THROW((void)Time::fromIso8601("1959-12-31T23:59:59Z"), Error);
+    EXPECT_THROW((void)Time::fromUnix(-315619200.5), Error);
+    EXPECT_EQ(Time::fromUnix(-315619200.0).iso8601(0), "1960-01-01T00:00:00Z");
+    const Time first = Time::fromCalendar(TimeScale::UTC, 1960, 1, 1);
+    EXPECT_THROW((void)(first - 1.0), Error);
+    const Time tt1959 = Time::fromCalendar(TimeScale::TT, 1959, 12, 31);
+    EXPECT_THROW((void)tt1959.to(TimeScale::UTC), Error);
+    EXPECT_THROW((void)tt1959.unixSeconds(), Error);
+    // Other scales have no such limit.
+    EXPECT_NEAR(tt1959.to(TimeScale::TAI) - tt1959, 0.0, 1e-9);
+}
+
+// time.h: the differences, comparisons and Unix or GPS seconds of a UT1 time need Earth orientation data, so
+// they throw unless both sides are UT1.
+TEST(Time, Ut1WithoutEopThrowsWhereItMustConvert) {
+    const Time ut1 = Time::fromCalendar(TimeScale::UT1, 2020, 1, 1);
+    const Time tt  = Time::fromCalendar(TimeScale::TT, 2020, 1, 1);
+    for (const auto& call : std::initializer_list<std::function<void()>>{
+             [&] { (void)(ut1 - tt); },
+             [&] { (void)(tt - ut1); },
+             [&] { (void)(ut1 < tt); },
+             [&] { (void)ut1.unixSeconds(); },
+             [&] { (void)ut1.gpsSeconds(); },
+             [&] { (void)ut1.gnssWeekTow(GnssSystem::GPS); },
+         }) {
+        expectErrorSaying(call, "Earth orientation", "UT1");
+    }
+    EXPECT_NEAR((ut1 + 1.0) - ut1, 1.0, 1e-9); // both UT1: no conversion
+}
+
+// Before 1970 the Unix time is negative, and the time point is before the system clock's epoch.
+TEST(Time, SysTimeBefore1970) {
+    using namespace std::chrono;
+    const Time t = Time::fromIso8601("1969-12-31T23:59:59.5Z");
+    EXPECT_EQ(duration_cast<nanoseconds>(t.toSysTime().time_since_epoch()).count(), -500000000LL);
+    EXPECT_NEAR(t.unixSeconds(), -0.5, 1e-9);
+    EXPECT_EQ(Time::fromSysTime(t.toSysTime()).iso8601(3), "1969-12-31T23:59:59.500Z");
+    EXPECT_EQ(
+        duration_cast<seconds>(Time::fromCalendar(TimeScale::UTC, 1960, 1, 1).toSysTime().time_since_epoch()).count(),
+        -315619200LL);
+}
+
+// time.h: resolveWeekRollover throws for `bits` outside 1-30. Within it, the truncated week is resolved to the
+// full week nearest the reference. GPS week 2048 began on 2019-04-07 (JD 2444244.5 + 2048 x 7 = 2458580.5), the
+// second rollover of the 10-bit week of the legacy navigation message, so the reference 2019-04-10 is in week
+// 2048 and Galileo week 1024.
+TEST(Time, ResolveWeekRollover) {
+    const Time ref = Time::fromCalendar(TimeScale::UTC, 2019, 4, 10);
+    EXPECT_EQ(resolveWeekRollover(2, 10, GnssSystem::GPS, ref), 2050);    // 2, 1026 or 2050: 2050 is nearest
+    EXPECT_EQ(resolveWeekRollover(1023, 10, GnssSystem::GPS, ref), 2047); // the week before the rollover
+    EXPECT_EQ(resolveWeekRollover(2050, 13, GnssSystem::GPS, ref), 2050); // 13 bits (CNAV): no rollover yet
+    EXPECT_EQ(resolveWeekRollover(3, 2, GnssSystem::GPS, ref), 2047);     // 2 bits: 2047 or 2051; 2047 is nearer
+    EXPECT_EQ(resolveWeekRollover(2, 10, GnssSystem::Galileo, ref), 1026);
+    for (int bits : {0, -1, 31, 32}) {
+        expectErrorSaying([&] { (void)resolveWeekRollover(2, bits, GnssSystem::GPS, ref); },
+                          "bits",
+                          ("bits " + std::to_string(bits)).c_str());
+    }
+}
+
+// Each field out of range is refused; in scales other than UTC a minute has 60 seconds.
+TEST(Time, FromCalendarRejectsInvalidFields) {
+    // clang-format off
+    struct Case { int month, day, hour, minute; double second; };
+    const Case cases[] = {
+        {13,  1,  0,  0,  0.0 }, {0,  1,  0,  0,  0.0 }, {2, 30,  0,  0,  0.0 }, {4, 31,  0,  0,  0.0 },
+        { 1,  0,  0,  0,  0.0 }, {1,  1, 24,  0,  0.0 }, {1,  1, -1,  0,  0.0 }, {1,  1,  0, 60,  0.0 },
+        { 1,  1,  0, -1,  0.0 }, {1,  1,  0,  0, -0.5 }, {1,  1,  0,  0, 60.0 }, {1,  1, 12, 30, 61.0 },
+    };
+    // clang-format on
+    for (const TimeScale scale : {TimeScale::UTC, TimeScale::TT, TimeScale::GPS}) {
+        for (const Case& c : cases) {
+            EXPECT_THROW((void)Time::fromCalendar(scale, 2024, c.month, c.day, c.hour, c.minute, c.second), Error)
+                << toString(scale) << " " << c.month << "-" << c.day << " " << c.hour << ":" << c.minute << ":"
+                << c.second;
+        }
+    }
+    // The largest valid fields.
+    EXPECT_NO_THROW((void)Time::fromCalendar(TimeScale::TT, 2024, 2, 29, 23, 59, std::nextafter(60.0, 0.0)));
 }
