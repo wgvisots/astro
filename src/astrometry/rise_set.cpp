@@ -141,7 +141,7 @@ moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopP
     constexpr double refr = 34.0 / 60.0 * constants::degToRad;
     auto             f    = [&](const Time& t) {
         const FrameTransformer ft(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
-        const Aer              a = gcrsToTopocentric(eph.position(Body::Moon, Body::Earth, t), ft, site);
+        const LookAngles       a = gcrsToTopocentric(eph.position(Body::Moon, Body::Earth, t), ft, site);
         const double           semidiameter = std::asin(constants::moonRadius / a.range);
         return a.el + semidiameter + refr; // upper limb, refracted
     };

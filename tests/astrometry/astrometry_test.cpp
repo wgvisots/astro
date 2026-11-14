@@ -188,12 +188,14 @@ TEST(Apparent, ObservedPlaceMatchesErfaAtco13) {
         const ConstantEop eop(EopValues{.xp = v("xp"), .yp = v("yp"), .dut1 = v("dut1")});
         const Geodetic    site{v("phi"), v("elong"), v("hm")};
         const bool        refr  = v("refraction") != 0.0;
-        const Aer         a     = starObserved(star, t, site, eop, eph, refr ? &atm : nullptr);
+        const LookAngles  a     = starObserved(star, t, site, eop, eph, refr ? &atm : nullptr);
         const double      elRef = constants::halfPi - v("zob");
         // The same model as ERFA's, refracted or not and at every elevation in the file: measured
         // 0.032 mas at most (0.027 mas below 10 deg, refracted). Tolerance 0.1 mas.
         const double tol = masToRad(0.1);
         EXPECT_NEAR(a.el, elRef, tol) << t.iso8601() << " el=" << radToDeg(elRef);
+        EXPECT_EQ(a.range, 0.0);              // unknown for a star
+        EXPECT_TRUE(std::isnan(a.rangeRate)); // not computed
         if (elRef < degToRad(89.0)) {
             EXPECT_NEAR(wrapPi(a.az - v("aob")) * std::cos(elRef), 0.0, tol) << t.iso8601();
         }
@@ -206,19 +208,23 @@ TEST(Apparent, SunAndMoonObserved) {
     const ConstantEop           eop;
     const Geodetic              site{degToRad(40.0), degToRad(-105.0), 1600.0};
     for (double day = 5.0; day < 55.0; day += 7.3) {
-        const Time t  = Time::fromIso8601("2024-01-01T00:00:00Z") + day * 86400.0;
-        const Aer  s1 = bodyObserved(Body::Sun, t, site, eop, spk);
-        const Aer  s2 = bodyObserved(Body::Sun, t, site, eop, lp);
+        const Time       t  = Time::fromIso8601("2024-01-01T00:00:00Z") + day * 86400.0;
+        const LookAngles s1 = bodyObserved(Body::Sun, t, site, eop, spk);
+        const LookAngles s2 = bodyObserved(Body::Sun, t, site, eop, lp);
         EXPECT_NEAR(s1.el, s2.el, degToRad(0.01));
         EXPECT_NEAR(s1.range / constants::au, 0.986, 0.02);
-        const Aer m1 = bodyObserved(Body::Moon, t, site, eop, spk);
-        const Aer m2 = bodyObserved(Body::Moon, t, site, eop, lp);
+        const LookAngles m1 = bodyObserved(Body::Moon, t, site, eop, spk);
+        const LookAngles m2 = bodyObserved(Body::Moon, t, site, eop, lp);
         EXPECT_NEAR(m1.el, m2.el, degToRad(0.12));
         // Geometric vs apparent: aberration ~20" for the Sun.
         const FrameTransformer ft(t, eop);
-        const Aer              g = gcrsToTopocentric(spk.position(Body::Sun, Body::Earth, t), ft, site);
-        const double           d = angleBetween(aerToEnu({g.az, g.el, 1.0}), aerToEnu({s1.az, s1.el, 1.0}));
+        const LookAngles       g = gcrsToTopocentric(spk.position(Body::Sun, Body::Earth, t), ft, site);
+        const double d = angleBetween(lookAnglesToEnu({g.az, g.el, 1.0}), lookAnglesToEnu({s1.az, s1.el, 1.0}));
         EXPECT_NEAR(radToArcsec(d), 20.5, 1.0);
+        // No velocity is computed: the range rate is NaN, not 0.
+        EXPECT_TRUE(std::isnan(s1.rangeRate));
+        EXPECT_TRUE(std::isnan(m1.rangeRate));
+        EXPECT_TRUE(std::isnan(g.rangeRate));
     }
 }
 
@@ -714,9 +720,9 @@ TEST(Apparent, RefractedBodyElevationIsTheUnrefractedOneRefracted) {
     const Geodetic     site{degToRad(40.0), degToRad(-105.0), 1600.0};
     const Atmosphere   atm{830.0, 5.0, 0.3, 0.574};
     for (double hours : {16.0, 19.0, 22.5}) { // the Sun at several elevations above the horizon
-        const Time t   = Time::fromIso8601("2024-02-10T00:00:00Z") + hours * 3600.0;
-        const Aer  raw = bodyObserved(Body::Sun, t, site, eop, eph);
-        const Aer  ref = bodyObserved(Body::Sun, t, site, eop, eph, &atm);
+        const Time       t   = Time::fromIso8601("2024-02-10T00:00:00Z") + hours * 3600.0;
+        const LookAngles raw = bodyObserved(Body::Sun, t, site, eop, eph);
+        const LookAngles ref = bodyObserved(Body::Sun, t, site, eop, eph, &atm);
         SCOPED_TRACE(testing::Message() << "elevation " << radToDeg(raw.el) << " deg");
         ASSERT_GT(raw.el, degToRad(3.0));
         EXPECT_NEAR(ref.el, refractTrueToObserved(raw.el, refractionConstants(atm)), 1e-12);

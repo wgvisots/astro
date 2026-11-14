@@ -28,12 +28,6 @@
 
 namespace astro {
 
-LookAngles lookAngles(const StateVector& sat, const Geodetic& site, const Ellipsoid& ell) noexcept {
-    const Vec3 rho = sat.r - geodeticToEcef(site, ell);
-    const Aer  a   = enuToAer(ecefToEnuMatrix(site.lat, site.lon) * rho);
-    return {a.az, a.el, a.range, dot(rho, sat.v) / a.range};
-}
-
 double dopplerShift(double f, double rangeRate) noexcept {
     return -f * rangeRate / constants::c;
 }
@@ -68,7 +62,7 @@ std::vector<Pass> findPasses(const Trajectory& sat,
     if (span == 0.0) {
         return passes; // an empty window holds no pass
     }
-    auto         elevation = [&](const Time& t) { return lookAngles(sat.state(t), site, ell).el; };
+    auto         elevation = [&](const Time& t) { return ecefToLookAngles(sat.state(t), site, ell).el; };
     const auto   events    = findElevationEvents(elevation, start, end, minElevation, step);
     const double elStart   = elevation(start);
     bool         open      = elStart > minElevation;
@@ -78,7 +72,7 @@ std::vector<Pass> findPasses(const Trajectory& sat,
         // the start, unless a transit inside the window is higher (the pass was still rising).
         cur.aos                = start;
         cur.startsBeforeWindow = true;
-        cur.aosAzimuth         = lookAngles(sat.state(start), site, ell).az;
+        cur.aosAzimuth         = ecefToLookAngles(sat.state(start), site, ell).az;
         cur.maxElevation       = elStart;
         cur.tca                = start;
     }
@@ -87,7 +81,7 @@ std::vector<Pass> findPasses(const Trajectory& sat,
         case SkyEventType::Rise:
             cur              = Pass{};
             cur.aos          = e.time;
-            cur.aosAzimuth   = lookAngles(sat.state(e.time), site, ell).az;
+            cur.aosAzimuth   = ecefToLookAngles(sat.state(e.time), site, ell).az;
             cur.maxElevation = -1e9;
             open             = true;
             break;
@@ -100,7 +94,7 @@ std::vector<Pass> findPasses(const Trajectory& sat,
         case SkyEventType::Set:
             if (open) {
                 cur.los        = e.time;
-                cur.losAzimuth = lookAngles(sat.state(e.time), site, ell).az;
+                cur.losAzimuth = ecefToLookAngles(sat.state(e.time), site, ell).az;
                 if (cur.maxElevation < minElevation) { // no interior maximum sampled: use the endpoints
                     cur.maxElevation = minElevation;
                     cur.tca          = cur.aos + 0.5 * (cur.los - cur.aos);
@@ -116,7 +110,7 @@ std::vector<Pass> findPasses(const Trajectory& sat,
         // within the window unless a transit (or the start) was higher.
         cur.los             = end;
         cur.endsAfterWindow = true;
-        cur.losAzimuth      = lookAngles(sat.state(end), site, ell).az;
+        cur.losAzimuth      = ecefToLookAngles(sat.state(end), site, ell).az;
         const double elEnd  = elevation(end);
         if (elEnd > cur.maxElevation) {
             cur.maxElevation = elEnd;

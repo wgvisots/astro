@@ -287,7 +287,7 @@ TEST(Geodetic, Latitudes) {
     expectVecNear(sphericalToCartesian(s), {1, 1, std::sqrt(2.0)}, 1e-15);
 }
 
-TEST(LocalFrames, EnuNedAer) {
+TEST(LocalFrames, EnuNedAndLookAngles) {
     // "Up" and "north" from geometry written here, not from the matrices under test: up is the outward
     // normal of the ellipsoid (x^2 + y^2) / a^2 + z^2 / b^2 = 1 at the origin's foot, the gradient
     // (x / a^2, y / a^2, z / b^2); north is the direction of the polar axis within the horizontal plane;
@@ -317,31 +317,57 @@ TEST(LocalFrames, EnuNedAer) {
         expectVecNear(ecefToNed(base + d, o, ell), {enu.y, enu.x, -enu.z}, 1e-8, "NED");
         expectVecNear(enuToEcef(enu, o, ell), base + d, 1e-8, "ENU to ECEF");
         expectVecNear(nedToEcef({enu.y, enu.x, -enu.z}, o, ell), base + d, 1e-8, "NED to ECEF");
-        const Aer a = ecefToAer(base + d, o, ell);
+        const LookAngles a = ecefToLookAngles(base + d, o, ell);
         EXPECT_NEAR(a.az, wrapTwoPi(std::atan2(enu.x, enu.y)), 1e-12); // 1e-8 m seen from 4 km
         EXPECT_NEAR(a.el, std::asin(enu.z / norm(d)), 1e-12);
         EXPECT_NEAR(a.range, norm(d), 1e-8);
-        expectVecNear(aerToEcef(a, o, ell), base + d, 1e-8, "AER to ECEF");
+        expectVecNear(lookAnglesToEcef(a, o, ell), base + d, 1e-8, "look angles to ECEF");
 
         // Due north, east, south and west on the horizon, and straight up.
         const double r = 5000.0;
-        EXPECT_NEAR(wrapPi(ecefToAer(base + r * north, o, ell).az), 0.0, 1e-12);
-        EXPECT_NEAR(ecefToAer(base + r * east, o, ell).az, constants::halfPi, 1e-12);
-        EXPECT_NEAR(ecefToAer(base - r * north, o, ell).az, constants::pi, 1e-12);
-        EXPECT_NEAR(ecefToAer(base - r * east, o, ell).az, 1.5 * constants::pi, 1e-12);
-        EXPECT_NEAR(ecefToAer(base + r * north, o, ell).el, 0.0, 1e-12);
-        EXPECT_NEAR(ecefToAer(base + r * up, o, ell).el, constants::halfPi, 1e-12);
+        EXPECT_NEAR(wrapPi(ecefToLookAngles(base + r * north, o, ell).az), 0.0, 1e-12);
+        EXPECT_NEAR(ecefToLookAngles(base + r * east, o, ell).az, constants::halfPi, 1e-12);
+        EXPECT_NEAR(ecefToLookAngles(base - r * north, o, ell).az, constants::pi, 1e-12);
+        EXPECT_NEAR(ecefToLookAngles(base - r * east, o, ell).az, 1.5 * constants::pi, 1e-12);
+        EXPECT_NEAR(ecefToLookAngles(base + r * north, o, ell).el, 0.0, 1e-12);
+        EXPECT_NEAR(ecefToLookAngles(base + r * up, o, ell).el, constants::halfPi, 1e-12);
     }
-    // enuToAer and aerToEnu with the angles written out.
-    EXPECT_NEAR(enuToAer({10, 0, 0}).az, constants::halfPi, 1e-15);
-    EXPECT_NEAR(enuToAer({-10, 0, 0}).az, 1.5 * constants::pi, 1e-15);
-    const Aer x{degToRad(123.0), degToRad(17.0), 1.2e6};
-    expectVecNear(aerToEnu(x),
+    // enuToLookAngles and lookAnglesToEnu with the angles written out.
+    EXPECT_NEAR(enuToLookAngles({10, 0, 0}).az, constants::halfPi, 1e-15);
+    EXPECT_NEAR(enuToLookAngles({-10, 0, 0}).az, 1.5 * constants::pi, 1e-15);
+    const LookAngles x{degToRad(123.0), degToRad(17.0), 1.2e6};
+    expectVecNear(lookAnglesToEnu(x),
                   {x.range * std::cos(x.el) * std::sin(x.az),
                    x.range * std::cos(x.el) * std::cos(x.az),
                    x.range * std::sin(x.el)},
                   1e-9,
-                  "AER to ENU");
+                  "look angles to ENU");
+}
+
+TEST(LocalFrames, PositionOnlyLookAnglesHaveNaNRangeRate) {
+    // Documented: without a velocity the range rate is NaN, not a silent 0 ("not moving").
+    const Geodetic o{degToRad(40.0), degToRad(-105.0), 1600.0};
+    const Vec3     target = geodeticToEcef(o) + Vec3{1000.0, 2000.0, 3000.0};
+    EXPECT_TRUE(std::isnan(LookAngles{}.rangeRate));
+    EXPECT_TRUE(std::isnan(enuToLookAngles({10, 20, 30}).rangeRate));
+    EXPECT_TRUE(std::isnan(ecefToLookAngles(target, o).rangeRate));
+    // The state overload fills it, and agrees with the position overload on the rest.
+    const LookAngles p = ecefToLookAngles(target, o);
+    const LookAngles s = ecefToLookAngles(
+        StateVector{
+            target,
+            {1.0, 2.0, 3.0}
+    },
+        o);
+    EXPECT_TRUE(std::isfinite(s.rangeRate));
+    EXPECT_NEAR(s.az, p.az, 1e-15);
+    EXPECT_NEAR(s.el, p.el, 1e-15);
+    EXPECT_NEAR(s.range, p.range, 1e-9);
+    // The range rate plays no part in the way back to a position.
+    LookAngles moving = p;
+    moving.rangeRate  = 7000.0;
+    EXPECT_EQ(lookAnglesToEnu(moving), lookAnglesToEnu(p));
+    EXPECT_EQ(lookAnglesToEcef(moving, o), lookAnglesToEcef(p, o));
 }
 
 TEST(LocalFrames, AtAPoleNorthPointsAlongTheOriginsMeridian) {

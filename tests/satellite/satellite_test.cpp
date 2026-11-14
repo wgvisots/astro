@@ -58,12 +58,12 @@ TEST(Look, OverheadAndRangeRate) {
     const Vec3     east = ecefToEnuMatrix(site.lat, site.lon).row(0);
     // Directly overhead, moving east: elevation 90, range rate 0.
     const StateVector sat{geodeticToEcef(site) + 500 * km * up, 7 * km * east};
-    const LookAngles  la = lookAngles(sat, site);
+    const LookAngles  la = ecefToLookAngles(sat, site);
     EXPECT_NEAR(la.el, constants::halfPi, 1e-9);
     EXPECT_NEAR(la.range, 500 * km, 1e-6);
     EXPECT_NEAR(la.rangeRate, 0.0, 1e-9);
     // Receding straight up at 1 km/s.
-    EXPECT_NEAR(lookAngles({sat.r, 1 * km * up}, site).rangeRate, 1 * km, 1e-9);
+    EXPECT_NEAR(ecefToLookAngles({sat.r, 1 * km * up}, site).rangeRate, 1 * km, 1e-9);
     // Doppler: approaching raises the received frequency.
     EXPECT_NEAR(dopplerShift(437e6, -7000.0), 437e6 * 7000.0 / constants::c, 1e-9);
     // They differ by the second-order term f b^2 / 2 (~0.12 Hz here).
@@ -89,28 +89,28 @@ TEST(Passes, IssOverSiteMatchesBruteForce) {
         EXPECT_LT(p.los - p.aos, 15 * 60.0); // ISS passes last < 15 minutes
         if (p.startsBeforeWindow) {
             EXPECT_EQ(p.aos, start);
-            EXPECT_GT(lookAngles(sat.state(start), site).el, mask);
+            EXPECT_GT(ecefToLookAngles(sat.state(start), site).el, mask);
         } else {
-            EXPECT_NEAR(lookAngles(sat.state(p.aos), site).el, mask, 1e-5);
+            EXPECT_NEAR(ecefToLookAngles(sat.state(p.aos), site).el, mask, 1e-5);
         }
         if (p.endsAfterWindow) {
             EXPECT_EQ(p.los, end);
-            EXPECT_GT(lookAngles(sat.state(end), site).el, mask);
+            EXPECT_GT(ecefToLookAngles(sat.state(end), site).el, mask);
         } else {
-            EXPECT_NEAR(lookAngles(sat.state(p.los), site).el, mask, 1e-5);
+            EXPECT_NEAR(ecefToLookAngles(sat.state(p.los), site).el, mask, 1e-5);
         }
         // Brute-force maximum elevation within the pass (and the window): 1 s scan, then 10 ms around the
         // best sample (high passes peak sharply).
         double best = -1.0, bestS = 0.0;
         for (double s = 0.0; s <= p.los - p.aos; s += 1.0) {
-            const double el = lookAngles(sat.state(p.aos + s), site).el;
+            const double el = ecefToLookAngles(sat.state(p.aos + s), site).el;
             if (el > best) {
                 best  = el;
                 bestS = s;
             }
         }
         for (double s = std::max(0.0, bestS - 1.0); s <= std::min(p.los - p.aos, bestS + 1.0); s += 0.01) {
-            best = std::max(best, lookAngles(sat.state(p.aos + s), site).el);
+            best = std::max(best, ecefToLookAngles(sat.state(p.aos + s), site).el);
         }
         EXPECT_NEAR(p.maxElevation, best, degToRad(0.001));
         EXPECT_GE(p.maxElevation, best - 1e-9);
@@ -254,7 +254,7 @@ TEST(Look, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
     const EquatorialPass p;
     for (double th : {-0.6, -0.2, -1e-3, 0.0, 0.15, 0.4, 1.2}) {
         SCOPED_TRACE(testing::Message() << "angle " << th);
-        const LookAngles la = lookAngles(p.at(th), p.site, p.sphere());
+        const LookAngles la = ecefToLookAngles(p.at(th), p.site, p.sphere());
         // Coordinates of 7e6 m carry 1e-9 m of rounding: 1e-15 rad seen from 1000 km or more (measured
         // 8.9e-16 rad, 1.9e-9 m, 3.6e-12 m/s).
         EXPECT_NEAR(wrapPi(la.az - p.azimuth(th)), 0.0, 5e-15);
@@ -263,7 +263,7 @@ TEST(Look, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
         EXPECT_NEAR(la.rangeRate, p.rangeRate(th), 2e-11);
     }
     // On the meridian the satellite is due south (the site is north of the orbit) and the range rate is 0.
-    EXPECT_NEAR(lookAngles(p.at(0.0), p.site, p.sphere()).az, constants::pi, 1e-15);
+    EXPECT_NEAR(ecefToLookAngles(p.at(0.0), p.site, p.sphere()).az, constants::pi, 1e-15);
 }
 
 TEST(Passes, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
@@ -296,7 +296,7 @@ TEST(Passes, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
 TEST(Look, SatelliteAtTheSiteHasNoDirectionAndNaNRangeRate) {
     // Documented: at zero range the range rate does not exist and is NaN.
     const Geodetic   site{degToRad(30.0), degToRad(-90.0), 0.0};
-    const LookAngles la = lookAngles(
+    const LookAngles la = ecefToLookAngles(
         {
             geodeticToEcef(site),
             {1.0, 2.0, 3.0}

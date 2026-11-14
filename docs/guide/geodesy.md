@@ -23,20 +23,24 @@ matches ERFA's `gc2gd` to 2e-12 rad and 10 um near the surface ([Accuracy](../ac
 Geocentric and reduced (parametric) latitudes convert with `geodeticToGeocentricLatitude`,
 `geodeticToReducedLatitude` and their inverses.
 
-## Local frames: ENU, NED, azimuth / elevation / range
+## Local frames: ENU, NED, look angles
 
-`ecefToEnu` / `enuToEcef` (and the NED versions) express a point relative to a site; `enuToAer`
-gives azimuth (clockwise from north), elevation and range:
+`ecefToEnu` / `enuToEcef` (and the NED versions) express a point relative to a site.
+`ecefToLookAngles` (and `enuToLookAngles` for an ENU vector) gives a `LookAngles`: azimuth (clockwise
+from north), elevation and range, with the range rate NaN because no velocity was given.
+`lookAnglesToEnu` and `lookAnglesToEcef` go back:
 
-<!-- snippet: examples/geodesy.cpp#aer -->
+<!-- snippet: examples/geodesy.cpp#look_angles -->
 ```cpp
 // Where is a point 10 km east, 5 km north and 3 km up, as seen from the site?
-const Vec3 target = enuToEcef({10e3, 5e3, 3e3}, site);
-const Aer  aer    = enuToAer(ecefToEnu(target, site));
-std::cout << "az " << radToDeg(aer.az) << " deg, el " << radToDeg(aer.el) << " deg, range " << aer.range << " m\n";
+const Vec3       target = enuToEcef({10e3, 5e3, 3e3}, site);
+const LookAngles look   = ecefToLookAngles(target, site);
+std::cout << "az " << radToDeg(look.az) << " deg, el " << radToDeg(look.el) << " deg, range " << look.range
+          << " m\n";
 ```
 
-For a satellite's look angles and range rate from a ground site, see
+Given a state (position and velocity) instead of a position, `ecefToLookAngles` also fills the range
+rate. For a satellite's look angles and range rate from a ground site, see
 [Satellite geometry](satellite-geometry.md).
 
 ## Distances on the ellipsoid
