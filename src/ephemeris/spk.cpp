@@ -378,7 +378,14 @@ StateVector SpkEphemeris::stateById(int target, int center, double et) const {
     }
     const StateVector a = impl_->sumTo(target, common, et);
     const StateVector b = impl_->sumTo(center, common, et);
-    return {(a.r - b.r) * 1000.0, (a.v - b.v) * 1000.0};
+    const StateVector out{(a.r - b.r) * 1000.0, (a.v - b.v) * 1000.0};
+    // Each segment's state was finite; their sum along the chain, or the change of unit, can still
+    // overflow in a damaged kernel. What is returned is always finite.
+    if (!std::isfinite(out.r.x + out.r.y + out.r.z + out.v.x + out.v.y + out.v.z)) {
+        throw Error("SPK: corrupt data in " + impl_->path + ": the state of body " + std::to_string(target)
+                    + " relative to body " + std::to_string(center) + " is not finite");
+    }
+    return out;
 }
 
 StateVector SpkEphemeris::state(Body target, Body center, const Time& t) const {
