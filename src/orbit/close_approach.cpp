@@ -167,32 +167,32 @@ private:
 
 } // namespace
 
-Trajectory::Trajectory(const Time& epoch, const StateVector& state, TrajectoryModel model, const ZonalParameters& zp)
+Trajectory::Trajectory(const Time& epoch, const StateVector& state, TrajectoryModel model, const CentralBody& body)
     : epoch_(epoch) {
     if (model == TrajectoryModel::TwoBody) {
-        fromEpoch_ = twoBody(state, zp.mu);
+        fromEpoch_ = twoBody(state, body.mu);
     } else {
-        fromEpoch_ = secular(std::make_shared<const SecularPropagatorCorrected>(state, zp, secularOrder(model)));
+        fromEpoch_ = secular(std::make_shared<const SecularPropagatorCorrected>(state, body, secularOrder(model)));
     }
 }
 
 Trajectory::Trajectory(const Time&              epoch,
                        const KeplerianElements& elements,
                        TrajectoryModel          model,
-                       const ZonalParameters&   zp)
+                       const CentralBody&       body)
     : epoch_(epoch) {
     if (model == TrajectoryModel::TwoBody) {
-        fromEpoch_ = twoBody(elementsToState(elements, zp.mu), zp.mu);
+        fromEpoch_ = twoBody(elementsToState(elements, body.mu), body.mu);
     } else {
-        fromEpoch_ = secular(std::make_shared<const SecularPropagatorCorrected>(elements, zp, secularOrder(model)));
+        fromEpoch_ = secular(std::make_shared<const SecularPropagatorCorrected>(elements, body, secularOrder(model)));
     }
 }
 
 Trajectory::Trajectory(const Time&                epoch,
                        const EquinoctialElements& elements,
                        TrajectoryModel            model,
-                       const ZonalParameters&     zp)
-    : Trajectory(epoch, equinoctialToKeplerian(elements), model, zp) {}
+                       const CentralBody&         body)
+    : Trajectory(epoch, equinoctialToKeplerian(elements), model, body) {}
 
 Trajectory::Trajectory(StateFunction stateAt)
     : stateAt_(std::move(stateAt)) {
@@ -573,12 +573,12 @@ void checkHardBodyRadius(double hardBodyRadius) {
 
 } // namespace
 
-UncertainTrajectory::UncertainTrajectory(const Time&            epoch,
-                                         const StateVector&     state,
-                                         const Mat6&            covariance,
-                                         TrajectoryModel        model,
-                                         const ZonalParameters& zp)
-    : trajectory_(epoch, state, model, zp) {
+UncertainTrajectory::UncertainTrajectory(const Time&        epoch,
+                                         const StateVector& state,
+                                         const Mat6&        covariance,
+                                         TrajectoryModel    model,
+                                         const CentralBody& body)
+    : trajectory_(epoch, state, model, body) {
     for (const auto& row : covariance) {
         for (double x : row) {
             if (!std::isfinite(x)) {
@@ -587,11 +587,11 @@ UncertainTrajectory::UncertainTrajectory(const Time&            epoch,
         }
     }
     if (model == TrajectoryModel::TwoBody) {
-        covarianceAt_ = [epoch, state, covariance, mu = zp.mu](const Time& t) {
+        covarianceAt_ = [epoch, state, covariance, mu = body.mu](const Time& t) {
             return propagateKeplerWithCovariance(state, covariance, t - epoch, mu);
         };
     } else {
-        auto p        = std::make_shared<const SecularPropagatorCorrected>(state, zp, secularOrder(model));
+        auto p        = std::make_shared<const SecularPropagatorCorrected>(state, body, secularOrder(model));
         covarianceAt_ = [epoch, covariance, p = std::move(p)](const Time& t) {
             return p->propagateWithCovariance(t - epoch, covariance);
         };

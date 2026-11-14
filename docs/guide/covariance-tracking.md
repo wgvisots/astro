@@ -179,6 +179,8 @@ error grows mostly in one coordinate, the mean longitude, and stays close to Gau
 - `TrackerOptions::frame` is the frame of the deliveries (GCRS by default; J2000, MOD, TOD, TEME or
   CIRS). Of-date frames are taken at each delivery's own epoch, and predictions are expressed in the
   frame of their own time, matching how later deliveries will arrive (to 1.4 mm over 4 h).
+- `TrackerOptions::body` is the gravity model: `CentralBody::earthJ2J4()` (point mass, J2 and J4) by
+  default; any `CentralBody` may be given (see [Propagation](propagation.md)).
 - `TrackerOptions::integrator` defaults to relTol 1e-9 (0.2 m over 4 h in LEO).
 - `TrackerOptions::accelerationNoisePsd` defaults to 0. With drag acting in low LEO, good deliveries
   will start to fail over long gaps; raise it until the in-track residuals of routine deliveries sit

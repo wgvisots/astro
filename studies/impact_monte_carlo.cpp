@@ -61,11 +61,10 @@ double referenceError(const StateVector& s0, const Impact& imp, const EopProvide
     AdaptiveOptions     tight;
     tight.relTol = 1e-13;
     tight.absTol = 1e-9;
-    const NumericalPropagator prop(
-        kEpoch,
-        s0,
-        {std::make_shared<GravityField>(o.J, o.mu, o.re, poleOfDateMatrix(Frame::GCRS, kEpoch))},
-        tight);
+    const NumericalPropagator prop(kEpoch,
+                                   s0,
+                                   {std::make_shared<GravityField>(o.body, poleOfDateMatrix(Frame::GCRS, kEpoch))},
+                                   tight);
     const auto height = [&](double dt) { return ecefToGeodetic(gcrsToItrs(prop.propagate(dt).r, kEpoch + dt, eop)).h; };
     const double dt   = brentRoot(height, imp.flightTime - 2.0, imp.flightTime + 2.0, 1e-9);
     return norm(gcrsToItrs(prop.propagate(dt).r, kEpoch + dt, eop) - imp.itrs.r);

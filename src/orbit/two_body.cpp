@@ -414,7 +414,7 @@ Propagation12 propagateKepler(const StateVector12& s0, double dt, double mu, Hig
     const bool unmodeled =
         mode == HigherOrderMode::UnmodeledForce && (out.accelerationResidual != Vec3{} || out.jerkResidual != Vec3{});
     if (unmodeled) {
-        const NumericalPropagator prop(Time(), s0, {std::make_shared<GravityField>(std::vector<double>{}, mu)}, mode);
+        const NumericalPropagator prop(Time(), s0, {std::make_shared<GravityField>(CentralBody::pointMass(mu))}, mode);
         out.state = prop.propagate12(dt);
     } else {
         const StateVector s = propagateKepler(s0.rv(), dt, mu);

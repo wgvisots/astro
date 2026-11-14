@@ -114,18 +114,18 @@ int main(int argc, char** argv) {
            }));
     report("numerical: j2j4 propagate(dts), stops at each", secondsPerRun([&] {
                for (const auto& s : states) {
-                   sink += NumericalPropagator::j2j4(Time(), s).propagate(dts).back().r.x;
+                   sink += NumericalPropagator::j2j4(Time(), s, Frame::TOD).propagate(dts).back().r.x;
                }
            }));
     report("numerical: j2j4 propagateGrid", secondsPerRun([&] {
                for (const auto& s : states) {
-                   NumericalPropagator::j2j4(Time(), s).propagateGrid(0.0, Y, out);
+                   NumericalPropagator::j2j4(Time(), s, Frame::TOD).propagateGrid(0.0, Y, out);
                    sink += out.back().r.x;
                }
            }));
     report("numerical: j2j4 propagateGrid12", secondsPerRun([&] {
                for (const auto& s : states) {
-                   NumericalPropagator::j2j4(Time(), s).propagateGrid12(0.0, Y, out12);
+                   NumericalPropagator::j2j4(Time(), s, Frame::TOD).propagateGrid12(0.0, Y, out12);
                    sink += out12.back().r.x;
                }
            }));

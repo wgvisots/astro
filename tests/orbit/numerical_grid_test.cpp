@@ -41,7 +41,7 @@ namespace {
 constexpr double km = 1000.0;
 
 /// Zonal coefficients J0..J4 with J3 left out: the point mass with J2 and J4.
-const std::vector<double> kJ2J4{0.0, 0.0, constants::J2, 0.0, constants::J4};
+const CentralBody kJ2J4 = CentralBody::earthJ2J4();
 
 StateVector leo() {
     return elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});

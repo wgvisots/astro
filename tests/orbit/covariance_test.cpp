@@ -41,7 +41,7 @@ namespace {
 
 constexpr double km = 1000.0;
 
-const std::vector<double> kJ2J4{0.0, 0.0, constants::J2, 0.0, constants::J4};
+const CentralBody kJ2J4 = CentralBody::earthJ2J4();
 
 StateVector leo() {
     return elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
@@ -135,7 +135,12 @@ TEST(Gravity, PointMassAndJ2GradientsMatchTheirClosedForms) {
         }
         const double eps = std::numeric_limits<double>::epsilon();
         EXPECT_LT(maxRelDiff(pointMassGradient(r), Gp), 16.0 * eps) << r.x << " " << r.y << " " << r.z;
-        EXPECT_LT(maxRelDiff(zonalGradient(r, {0.0, 0.0, constants::J2}), Gz), 16.0 * eps)
+        EXPECT_LT(maxRelDiff(zonalGradient(r,
+                                           CentralBody{
+                                               .J = {0.0, 0.0, constants::J2}
+        }),
+                             Gz),
+                  16.0 * eps)
             << r.x << " " << r.y << " " << r.z;
     }
 }
@@ -144,8 +149,10 @@ TEST(Gravity, ZonalGradientIsTheDerivativeOfTheAccelerationAndSymmetric) {
     // J2 to J6 against a fourth-order central difference of zonalAcceleration (itself checked against
     // the gradient of the potential in orbit_test.cpp) with steps of 1 km: truncation (h / r)^4 ~
     // 1e-15 and rounding eps |a| / (h |G|) ~ 1e-12 of the largest entry. Measured 1.6e-12.
-    const std::vector<double> J{0.0, 0.0, constants::J2, constants::J3, constants::J4, -2.3e-7, 5.4e-7};
-    const auto                zonal = [&](const Vec3& x) { return zonalAcceleration(x, J); };
+    const CentralBody body{
+        .J = {0.0, 0.0, constants::J2, constants::J3, constants::J4, -2.3e-7, 5.4e-7}
+    };
+    const auto zonal = [&](const Vec3& x) { return zonalAcceleration(x, body); };
     for (const Vec3 r : {
              Vec3{7000 * km, 0,          0        },
              Vec3{3000 * km, -2000 * km, 6000 * km},
@@ -154,12 +161,12 @@ TEST(Gravity, ZonalGradientIsTheDerivativeOfTheAccelerationAndSymmetric) {
         const double h  = 1000.0;
         const Mat3   G1 = numericalGradient(zonal, r, h), G2 = numericalGradient(zonal, r, 2.0 * h);
         const Mat3   fd = (G1 * 4.0 - G2) * (1.0 / 3.0); // Richardson: removes the h^2 term
-        const Mat3   Gz = zonalGradient(r, J);
+        const Mat3   Gz = zonalGradient(r, body);
         EXPECT_LT(maxRelDiff(Gz, fd), 1e-11) << r.x << " " << r.y << " " << r.z;
         EXPECT_LT(maxRelDiff(Gz, Gz.transpose()), 1e-15);
         // The jerk is the gradient applied to the velocity.
         const Vec3 v{1.2 * km, 6.8 * km, 2.1 * km};
-        astro::test::expectVecNear(Gz * v, zonalJerk(r, v, J), 1e-14 * norm(zonalJerk(r, v, J)));
+        astro::test::expectVecNear(Gz * v, zonalJerk(r, v, body), 1e-14 * norm(zonalJerk(r, v, body)));
     }
 }
 
@@ -406,7 +413,7 @@ TEST(Covariance, PropagatedCovarianceMatchesPerturbedTrajectories) {
     // tight tolerance. Differences are compared in units of the standard deviations,
     // |dP_ij| / sqrt(P_ii P_jj). Measured: 1.8e-8 over 4 h.
     const StateVector         s0   = leo();
-    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0);
+    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0, Frame::TOD);
     Mat6                      P0{};
     for (std::size_t i = 0; i < 3; ++i) {
         P0[i][i]         = 100.0; // (10 m)^2
@@ -476,7 +483,7 @@ TEST(Covariance, PropagatedCovarianceMatchesPerturbedTrajectories) {
 TEST(Covariance, ProcessNoiseMatchesWhiteAccelerationModel) {
     // Over a short interval gravity barely couples in, and white acceleration noise of PSD q gives
     // Q = [[q t^3/3, q t^2/2], [q t^2/2, q t]] per axis.
-    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), leo());
+    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), leo(), Frame::TOD);
     const double              q    = 1e-9; // m^2/s^3
     const double              t    = 20.0;
     const auto                pc   = prop.propagateGridWithCovariance(0.0, t / 4, 5, Mat6{}, q);
@@ -504,7 +511,7 @@ TEST(Covariance, ProcessNoiseOverAnOrbitMatchesQuadratureOfTheTwoBodyStm) {
     // between the integrator's steps.
     const StateVector         s0 = leo();
     const double              q  = 1e-9; // m^2/s^3
-    const NumericalPropagator prop(Time(), s0, {std::make_shared<GravityField>(std::vector<double>{})});
+    const NumericalPropagator prop(Time(), s0, {std::make_shared<GravityField>(CentralBody::pointMass())});
     const auto                quadrature = [&](double t) {
         const int    n = 2 * static_cast<int>(std::abs(t) / 10.0); // even, intervals of 5 s
         const double h = t / n;
@@ -557,7 +564,7 @@ TEST(Covariance, ProcessNoiseOverAnOrbitMatchesQuadratureOfTheTwoBodyStm) {
 TEST(Covariance, ProcessNoiseGrowsInBothDirections) {
     // Before the epoch Q is the noise accumulated over [t, 0]: the same variances as after it, with
     // the position-velocity correlation reversed. It must never shrink the covariance.
-    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), leo());
+    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), leo(), Frame::TOD);
     const double              q    = 1e-9;
     const double              t    = 20.0;
     const Mat6                Q    = prop.propagateGridWithCovariance(-t, 1.0, 1, Mat6{}, q)[0].covariance;

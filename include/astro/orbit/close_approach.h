@@ -66,29 +66,29 @@ public:
     /// A state (m, m/s) at any time.
     using StateFunction = std::function<StateVector(const Time& t)>;
 
-    /// Propagate `state` (m, m/s) from `epoch` with `model`. zp.mu is the gravitational parameter
-    /// of every model; the secular models also use zp.re, J2 and J4, and take the osculating
-    /// elements of `state` as mean elements (see propagateSecular). Throws astro::Error for a
-    /// secular model and a non-elliptic orbit.
+    /// Propagate `state` (m, m/s) from `epoch` with `model`. body.mu is the gravitational parameter
+    /// of every model; the secular models also use body.re, J2 and J4 (J3 and higher do not enter),
+    /// and take the osculating elements of `state` as mean elements (see propagateSecular). Throws
+    /// astro::Error for a secular model and a non-elliptic orbit.
     ///
     /// The secular models use SecularPropagatorCorrected, whose velocity is the time derivative of
     /// the position: the search needs the true rate of change of the distance.
-    Trajectory(const Time&            epoch,
-               const StateVector&     state,
-               TrajectoryModel        model = TrajectoryModel::TwoBody,
-               const ZonalParameters& zp    = {});
+    Trajectory(const Time&        epoch,
+               const StateVector& state,
+               TrajectoryModel    model = TrajectoryModel::TwoBody,
+               const CentralBody& body  = {});
     /// Propagate Keplerian elements from `epoch`: osculating for TwoBody, mean for the secular
     /// models. Throws astro::Error as elementsToState or SecularPropagator do.
     Trajectory(const Time&              epoch,
                const KeplerianElements& elements,
                TrajectoryModel          model = TrajectoryModel::TwoBody,
-               const ZonalParameters&   zp    = {});
+               const CentralBody&       body  = {});
     /// Propagate equinoctial elements from `epoch` (converted with equinoctialToKeplerian, which
     /// throws astro::Error unless they describe an ellipse).
     Trajectory(const Time&                epoch,
                const EquinoctialElements& elements,
                TrajectoryModel            model = TrajectoryModel::TwoBody,
-               const ZonalParameters&     zp    = {});
+               const CentralBody&         body  = {});
     /// Any trajectory. Throws astro::Error if `stateAt` is empty.
     Trajectory(StateFunction stateAt);
     /// Any callable taking a Time and returning a StateVector, so that a lambda can be passed
@@ -271,11 +271,11 @@ public:
     /// (analytic state transition matrix), the secular models with
     /// SecularPropagatorCorrected::propagateWithCovariance (differenced). Neither adds process noise.
     /// Throws astro::Error for a non-finite covariance, or as Trajectory does.
-    UncertainTrajectory(const Time&            epoch,
-                        const StateVector&     state,
-                        const Mat6&            covariance,
-                        TrajectoryModel        model = TrajectoryModel::TwoBody,
-                        const ZonalParameters& zp    = {});
+    UncertainTrajectory(const Time&        epoch,
+                        const StateVector& state,
+                        const Mat6&        covariance,
+                        TrajectoryModel    model = TrajectoryModel::TwoBody,
+                        const CentralBody& body  = {});
     /// Any trajectory, with a function giving its state and covariance at any time. The search
     /// samples `trajectory`; `stateCovarianceAt` is called once per approach, for its covariance.
     /// Throws astro::Error if `stateCovarianceAt` is empty.

@@ -45,14 +45,14 @@ constexpr double km = 1000.0;
 /// parameters are gamma2' = (J2 / 2) (Re / p)^2 and gamma4' = -(3/8) J4 (Re / p)^4 (p the
 /// semi-latus rectum), eta = sqrt(1 - e^2) and theta = cos i; the coefficients are those of the
 /// paper's secular terms, as also used by Orekit's BrouwerLyddanePropagator.
-SecularRates brouwerRates(double a, double e, double i, const ZonalParameters& zp, bool secondOrder) {
+SecularRates brouwerRates(double a, double e, double i, const CentralBody& body, bool secondOrder) {
     using L      = long double;
-    const L n    = std::sqrt(static_cast<L>(zp.mu) / (static_cast<L>(a) * a * a));
+    const L n    = std::sqrt(static_cast<L>(body.mu) / (static_cast<L>(a) * a * a));
     const L eta2 = 1.0L - static_cast<L>(e) * e;
     const L eta  = std::sqrt(eta2);
-    const L q    = static_cast<L>(zp.re) / (static_cast<L>(a) * eta2); // Re / p
-    const L g2   = 0.5L * zp.J2 * q * q;
-    const L g4   = -0.375L * zp.J4 * q * q * q * q;
+    const L q    = static_cast<L>(body.re) / (static_cast<L>(a) * eta2); // Re / p
+    const L g2   = 0.5L * body.zonal(2) * q * q;
+    const L g4   = -0.375L * body.zonal(4) * q * q * q * q;
     const L th   = std::cos(static_cast<L>(i));
     const L th2  = th * th;
     L       lDot = 1.0L + 1.5L * g2 * eta * (3.0L * th2 - 1.0L);
@@ -240,7 +240,12 @@ TEST(TwoBody, AgreesWithKeplersEquationOnEllipsesHyperbolasAndTheParabola) {
 
 TEST(Gravity, ZonalMatchesClosedFormAndPotentialGradient) {
     const Vec3 r{5000 * km, -3000 * km, 4000 * km};
-    expectVecNear(zonalAcceleration(r, {0, 0, constants::J2}), j2Acceleration(r), 1e-15);
+    expectVecNear(zonalAcceleration(r,
+                                    CentralBody{
+                                        .J = {0, 0, constants::J2}
+    }),
+                  j2Acceleration(r),
+                  1e-15);
     // Gradient of U = -(mu/r) sum Jn (R/r)^n Pn(z/r) by central differences.
     const std::vector<double> J{0, 0, constants::J2, constants::J3, constants::J4, constants::J5, constants::J6};
     auto                      U = [&](const Vec3& p) {
@@ -259,7 +264,7 @@ TEST(Gravity, ZonalMatchesClosedFormAndPotentialGradient) {
     const Vec3   grad{(U(r + Vec3{h, 0, 0}) - U(r - Vec3{h, 0, 0})) / (2 * h),
                     (U(r + Vec3{0, h, 0}) - U(r - Vec3{0, h, 0})) / (2 * h),
                     (U(r + Vec3{0, 0, h}) - U(r - Vec3{0, 0, h})) / (2 * h)};
-    expectVecNear(zonalAcceleration(r, J), grad, 1e-10); // finite-difference roundoff ~1e-11
+    expectVecNear(zonalAcceleration(r, CentralBody{.J = J}), grad, 1e-10); // finite-difference roundoff ~1e-11
     // Third body: zero at the origin, tidal elsewhere.
     expectVecNear(thirdBodyAcceleration({}, {384400 * km, 0, 0}, constants::gmMoon), {}, 1e-20);
 }
@@ -276,11 +281,10 @@ TEST(Secular, RatesMatchAnAveragedNumericalIntegration) {
     const double            span = 20.0 * 86400.0;
     const std::size_t       n    = 20 * 1440;
     for (const double J4 : {0.0, constants::J4}) {
-        const ZonalParameters     zp{constants::gmEarth, constants::earthRadiusEgm2008, constants::J2, J4};
-        const NumericalPropagator prop(
-            Time(),
-            elementsToState(el),
-            {std::make_shared<GravityField>(std::vector<double>{0, 0, constants::J2, 0, J4})});
+        const CentralBody body{
+            .J = {0, 0, constants::J2, 0, J4}
+        };
+        const NumericalPropagator      prop(Time(), elementsToState(el), {std::make_shared<GravityField>(body)});
         const double                   step   = span / static_cast<double>(n);
         const auto                     states = prop.propagateGrid(0.0, step, n + 1);
         std::vector<KeplerianElements> osc;
@@ -313,47 +317,51 @@ TEST(Secular, RatesMatchAnAveragedNumericalIntegration) {
         const double perigee  = slope([](const KeplerianElements& e) { return e.argp; });
         const double latitude = slope([](const KeplerianElements& e) { return e.argp + e.meanAnomaly(); });
 
-        const SecularRates r = secularRates(am / count, em / count, im / count, zp, SecularOrder::J2SquaredJ4);
+        const SecularRates r = secularRates(am / count, em / count, im / count, body, SecularOrder::J2SquaredJ4);
         // Measured 6e-7 (node), 1.9e-4 (perigee), 1.1e-7 (argument of latitude) for J2 alone.
         EXPECT_NEAR(node / r.raanDot, 1.0, 3e-6) << "J4 = " << J4;
         EXPECT_NEAR(perigee / r.argpDot, 1.0, 1e-3) << "J4 = " << J4;
         EXPECT_NEAR(latitude / (r.argpDot + r.meanAnomalyDot), 1.0, 1e-6) << "J4 = " << J4;
         // First order alone misses the node by 1e-3 of its rate: the check resolves the second order.
-        const SecularRates r1 = secularRates(am / count, em / count, im / count, zp, SecularOrder::J2);
+        const SecularRates r1 = secularRates(am / count, em / count, im / count, body, SecularOrder::J2);
         EXPECT_GT(std::abs(node / r1.raanDot - 1.0), 1e-4) << "J4 = " << J4;
     }
 }
 
 TEST(Secular, BrouwerReducesToSgp4FormForCircularOrbits) {
     // SGP4's secular rates (Kozai/Brouwer) for e -> 0, written out from sgp4init.
-    const double          a = 7000 * km, i = deg2rad(63.0);
-    const ZonalParameters zp;
-    const double          n = std::sqrt(zp.mu / (a * a * a));
-    const double          p = a / zp.re, pinvsq = 1.0 / (p * p), th = std::cos(i), th2 = th * th, th4 = th2 * th2;
-    const double          temp1 = 1.5 * zp.J2 * pinvsq * n, temp2 = 0.5 * temp1 * zp.J2 * pinvsq,
-                 temp3   = -0.46875 * zp.J4 * pinvsq * pinvsq * n;
+    const double      a = 7000 * km, i = deg2rad(63.0);
+    const CentralBody body;
+    const double      n = std::sqrt(body.mu / (a * a * a));
+    const double      p = a / body.re, pinvsq = 1.0 / (p * p), th = std::cos(i), th2 = th * th, th4 = th2 * th2;
+    const double      temp1 = 1.5 * body.zonal(2) * pinvsq * n, temp2 = 0.5 * temp1 * body.zonal(2) * pinvsq,
+                 temp3   = -0.46875 * body.zonal(4) * pinvsq * pinvsq * n;
     const double mdot    = n + 0.5 * temp1 * (3.0 * th2 - 1.0) + 0.0625 * temp2 * (13.0 - 78.0 * th2 + 137.0 * th4);
     const double argpdot = -0.5 * temp1 * (1.0 - 5.0 * th2) + 0.0625 * temp2 * (7.0 - 114.0 * th2 + 395.0 * th4)
                          + temp3 * (3.0 - 36.0 * th2 + 49.0 * th4);
     const double nodedot = -temp1 * th + (0.5 * temp2 * (4.0 - 19.0 * th2) + 2.0 * temp3 * (3.0 - 7.0 * th2)) * th;
-    const SecularRates r = secularRates(a, 0.0, i, zp);
+    const SecularRates r = secularRates(a, 0.0, i, body);
     EXPECT_NEAR(r.meanAnomalyDot, mdot, 1e-15 * n);
     EXPECT_NEAR(r.argpDot, argpdot, 1e-15 * n);
     EXPECT_NEAR(r.raanDot, nodedot, 1e-15 * n);
     // J2^2 / J4 corrections are ~1e-3 of the J2 terms.
-    const SecularRates r1 = secularRates(a, 0.0, i, zp, SecularOrder::J2);
+    const SecularRates r1 = secularRates(a, 0.0, i, body, SecularOrder::J2);
     EXPECT_GT(std::abs(r.raanDot - r1.raanDot), 1e-4 * std::abs(r1.raanDot));
     EXPECT_LT(std::abs(r.raanDot - r1.raanDot), 1e-2 * std::abs(r1.raanDot));
 }
 
 TEST(Secular, MissionDesignHelpers) {
-    const ZonalParameters zp{constants::gmEarth, constants::wgs84A, 1.08263e-3, 0.0};
+    const CentralBody body{
+        constants::gmEarth,
+        constants::wgs84A,
+        {0.0, 0.0, 1.08263e-3}
+    };
     // Sun-synchronous at 700 km: ~98.19 deg.
-    EXPECT_NEAR(rad2deg(sunSynchronousInclination(constants::wgs84A + 700 * km, 0.0, zp)), 98.19, 0.02);
-    EXPECT_THROW((void)sunSynchronousInclination(constants::wgs84A + 7000 * km, 0.0, zp), Error);
+    EXPECT_NEAR(rad2deg(sunSynchronousInclination(constants::wgs84A + 700 * km, 0.0, body)), 98.19, 0.02);
+    EXPECT_THROW((void)sunSynchronousInclination(constants::wgs84A + 7000 * km, 0.0, body), Error);
     // Landsat-8: 233 revolutions in 16 days, i = 98.2 deg; published semi-major axis 7077.7 km
     // (the "705 km" nominal altitude is measured above the ellipsoid at mid latitudes).
-    const double a = repeatGroundTrackSemiMajorAxis(233, 16, 0.0, deg2rad(98.2), zp);
+    const double a = repeatGroundTrackSemiMajorAxis(233, 16, 0.0, deg2rad(98.2), body);
     EXPECT_NEAR(a / km, 7077.7, 1.0);
 }
 
@@ -369,8 +377,8 @@ TEST(Secular, RatesMatchBrouwersFormulasForEccentricOrbits) {
     // (i = 180 deg, where the node moves eastward at the rate of i = 0 reversed).
     // Tolerance: 16 rounding errors of the largest term in each rate (n for the mean anomaly, the
     // first-order term for the node and perigee). Measured: 2 eps.
-    const ZonalParameters zp;
-    const double          eps = std::numeric_limits<double>::epsilon();
+    const CentralBody body;
+    const double      eps = std::numeric_limits<double>::epsilon();
     for (double a : {7000 * km, 26600 * km}) {
         for (double e : {0.0, 0.01, 0.3, 0.7, 0.95}) {
             if (a * (1.0 - e) < 6400 * km) {
@@ -378,9 +386,9 @@ TEST(Secular, RatesMatchBrouwersFormulasForEccentricOrbits) {
             }
             for (double i : {0.0, 0.3, kCriticalInclination, 1.5, 2.5, constants::pi}) {
                 for (SecularOrder order : {SecularOrder::J2, SecularOrder::J2SquaredJ4}) {
-                    const SecularRates ref   = brouwerRates(a, e, i, zp, order == SecularOrder::J2SquaredJ4);
-                    const SecularRates first = brouwerRates(a, e, i, zp, false);
-                    const SecularRates r     = secularRates(a, e, i, zp, order);
+                    const SecularRates ref   = brouwerRates(a, e, i, body, order == SecularOrder::J2SquaredJ4);
+                    const SecularRates first = brouwerRates(a, e, i, body, false);
+                    const SecularRates r     = secularRates(a, e, i, body, order);
                     const double       scale = std::abs(first.raanDot) + std::abs(first.argpDot);
                     EXPECT_NEAR(r.meanAnomalyDot, ref.meanAnomalyDot, 16.0 * eps * ref.meanAnomalyDot)
                         << order << " a=" << a << " e=" << e << " i=" << i;
@@ -394,8 +402,8 @@ TEST(Secular, RatesMatchBrouwersFormulasForEccentricOrbits) {
     }
     // The second-order terms matter at e != 0: at e = 0.7 they move the node by about 1e-3 of its
     // rate, far above the tolerance.
-    const SecularRates j2 = secularRates(26600 * km, 0.7, 1.1, zp, SecularOrder::J2);
-    const SecularRates j4 = secularRates(26600 * km, 0.7, 1.1, zp, SecularOrder::J2SquaredJ4);
+    const SecularRates j2 = secularRates(26600 * km, 0.7, 1.1, body, SecularOrder::J2);
+    const SecularRates j4 = secularRates(26600 * km, 0.7, 1.1, body, SecularOrder::J2SquaredJ4);
     EXPECT_GT(std::abs(j4.raanDot - j2.raanDot), 1e-4 * std::abs(j2.raanDot));
 }
 
@@ -404,9 +412,9 @@ TEST(Secular, RetrogradeEquatorialNodeMovesEastwardAsFastAsThePrograde) {
     // and mean anomaly rates are the same. Not a special case in the formula, but in the elements:
     // a state there has RAAN 0 and its longitude of periapsis in argp, measured clockwise. The
     // propagator must still give a continuous answer (compare i = pi - 1e-7 below).
-    const ZonalParameters zp;
-    const SecularRates    pro   = secularRates(7000 * km, 0.01, 0.0, zp);
-    const SecularRates    retro = secularRates(7000 * km, 0.01, constants::pi, zp);
+    const CentralBody  body;
+    const SecularRates pro   = secularRates(7000 * km, 0.01, 0.0, body);
+    const SecularRates retro = secularRates(7000 * km, 0.01, constants::pi, body);
     EXPECT_GT(retro.raanDot, 0.0);
     EXPECT_NEAR(retro.raanDot, -pro.raanDot, 1e-15 * std::abs(pro.raanDot));
     EXPECT_NEAR(retro.argpDot, pro.argpDot, 1e-15 * std::abs(pro.argpDot));
@@ -424,7 +432,7 @@ TEST(Secular, RetrogradeEquatorialNodeMovesEastwardAsFastAsThePrograde) {
 TEST(Numerical, J2J4PropagatorConservesEnergyAndFollowsSecularRates) {
     const KeplerianElements   el{7200 * km, 0.08, deg2rad(40.0), 0.1, 1.0, 0.0};
     const StateVector         s0   = elementsToState(el);
-    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0);
+    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0, Frame::TOD);
     const std::vector<double> J{0, 0, constants::J2, 0, constants::J4};
     auto                      energy = [&](const StateVector& s) {
         const double rm = norm(s.r), sn = s.r.z / rm, q = constants::earthRadiusEgm2008 / rm;

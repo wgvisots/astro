@@ -22,7 +22,6 @@
 #include <optional>
 #include <vector>
 
-#include "astro/core/constants.h"
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 #include "astro/frames/eop.h"
@@ -30,6 +29,7 @@
 #include "astro/frames/transform.h"
 #include "astro/geodesy/ellipsoid.h"
 #include "astro/geodesy/geodetic.h"
+#include "astro/orbit/central_body.h"
 #include "astro/orbit/integrators.h"
 #include "astro/orbit/numerical.h"
 #include "astro/time/time.h"
@@ -93,11 +93,9 @@ struct ImpactOptions {
     /// local terrain or geoid height for the real ground.
     double    surfaceHeight{0.0};
     Ellipsoid ellipsoid{Ellipsoid::wgs84()}; ///< reference ellipsoid of the surface
-    /// Zonal coefficients by degree (J[2] = J2, ...); point mass included. The field is aligned
-    /// with the true pole at the epoch.
-    std::vector<double> J{0.0, 0.0, constants::J2, constants::J3, constants::J4};
-    double              mu{constants::gmEarth};            ///< gravitational parameter (m^3/s^2)
-    double              re{constants::earthRadiusEgm2008}; ///< reference radius of J (m)
+    /// Central body of the gravity model: point mass and every zonal term of body.J (by default
+    /// J2, J3 and J4), aligned with the true pole at the epoch.
+    CentralBody body{CentralBody::earth()};
     /// Further forces (e.g. drag), evaluated with t in seconds after the epoch and GCRS r, v.
     std::vector<std::shared_ptr<const ForceModel>> additionalForces;
     /// Integrator settings. The default (relTol 1e-9) keeps the impact point of a 40-minute

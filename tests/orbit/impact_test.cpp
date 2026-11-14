@@ -74,7 +74,7 @@ Reference referenceImpact(const StateVector&                                    
     tight.relTol = 1e-13;
     tight.absTol = 1e-9;
     std::vector<std::shared_ptr<const ForceModel>> forces{
-        std::make_shared<GravityField>(o.J, o.mu, o.re, poleOfDateMatrix(Frame::GCRS, kEpoch))};
+        std::make_shared<GravityField>(o.body, poleOfDateMatrix(Frame::GCRS, kEpoch))};
     forces.insert(forces.end(), extra.begin(), extra.end());
     const NumericalPropagator prop(kEpoch, s0, forces, tight);
     const auto height = [&](double dt) { return ecefToGeodetic(gcrsToItrs(prop.propagate(dt).r, kEpoch + dt, eop)).h; };
@@ -91,7 +91,7 @@ public:
         : R_(toPole) {}
     [[nodiscard]] Vec3 acceleration(double, const Vec3& r, const Vec3&) const override {
         const ImpactOptions o;
-        return R_.transpose() * zonalAcceleration(R_ * r, o.J, o.mu, o.re);
+        return R_.transpose() * zonalAcceleration(R_ * r, o.body);
     }
 
 private:
@@ -252,7 +252,7 @@ TEST(Impact, AdditionalForcesAreAppliedInGcrsAtTheirTime) {
     // The zonal field moved from the built-in model into additionalForces: the same physics, so
     // the same impact (measured: 2e-13 s and 3e-9 m).
     ImpactOptions split;
-    split.J                = {};
+    split.body.J           = {};
     split.additionalForces = {std::make_shared<ZonalOnly>(poleOfDateMatrix(Frame::GCRS, kEpoch))};
     const auto same        = predictImpact(kEpoch, s0, Frame::GCRS, eop, split);
     ASSERT_TRUE(same.has_value());
@@ -286,12 +286,11 @@ TEST(Impact, SphericalSurfaceIsMetWhereTheRadiusEqualsItsRadius) {
     AdaptiveOptions     tight;
     tight.relTol = 1e-13;
     tight.absTol = 1e-9;
-    const NumericalPropagator prop(
-        kEpoch,
-        s0,
-        {std::make_shared<GravityField>(o.J, o.mu, o.re, poleOfDateMatrix(Frame::GCRS, kEpoch))},
-        tight);
-    const double dt = brentRoot([&](double t) { return norm(prop.propagate(t).r) - R; },
+    const NumericalPropagator prop(kEpoch,
+                                   s0,
+                                   {std::make_shared<GravityField>(o.body, poleOfDateMatrix(Frame::GCRS, kEpoch))},
+                                   tight);
+    const double              dt = brentRoot([&](double t) { return norm(prop.propagate(t).r) - R; },
                                 imp->flightTime - 2.0,
                                 imp->flightTime + 2.0,
                                 1e-9);

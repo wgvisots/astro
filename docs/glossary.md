@@ -80,7 +80,7 @@ they are in alphabetical order.
 | GEO | Geostationary Earth Orbit | circular equatorial orbit with a one-sidereal-day period |
 | GM, mu | Gravitational constant times Mass | gravitational parameter of a body (m^3/s^2) |
 | HEO | Highly Elliptical Orbit | e.g. Molniya |
-| J2, J3, J4 | | zonal harmonics of the Earth's gravity field: J2 for the equatorial bulge, J3 for the pear shape, J4 next |
+| J2, J3, J4 | | zonal harmonics of the Earth's gravity field: J2 for the equatorial bulge, J3 for the pear shape, J4 next (`CentralBody::J`) |
 | Jerk | | the time derivative of acceleration (m/s^3): the fourth part of a 12-component state (`StateVector12`) |
 | Lambert's problem | | find the two-body orbit that joins two positions in a given time (`lambertIzzo`) |
 | LEO | Low Earth Orbit | altitudes up to about 2000 km |

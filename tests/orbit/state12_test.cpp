@@ -37,8 +37,8 @@ using astro::test::expectVecNear;
 
 namespace {
 
-constexpr double          km = 1000.0;
-const std::vector<double> kJ2J4{0.0, 0.0, constants::J2, 0.0, constants::J4};
+constexpr double  km    = 1000.0;
+const CentralBody kJ2J4 = CentralBody::earthJ2J4();
 
 // An eccentric, inclined LEO orbit.
 StateVector leo() {
@@ -159,7 +159,7 @@ TEST(State12, KeplerUnmodeledForceDoesWorkOnOrbit) {
     }();
     const NumericalPropagator prop(Time(),
                                    in,
-                                   {std::make_shared<GravityField>(std::vector<double>{})},
+                                   {std::make_shared<GravityField>(CentralBody::pointMass())},
                                    HigherOrderMode::UnmodeledForce);
     const auto                states = prop.propagate12(ts);
     double                    work   = 0.0;
@@ -184,12 +184,14 @@ TEST(State12, SecularStateVersionMatchesElementVersion) {
     expectVecNear(s.v, expected.v, 1e-9);
 
     // SecularOrder::J2 uses J2 only, in both the drift and the output acceleration.
-    const ZonalParameters zp;
-    const Propagation12   p =
-        propagateSecular(fieldState(GravityField({0.0, 0.0, zp.J2}), elementsToState(el)), dt, zp, SecularOrder::J2);
-    expectVecNear(p.state.r, elementsToState(propagateSecular(el, dt, zp, SecularOrder::J2)).r, 1e-6);
+    const CentralBody body{
+        .J = {0.0, 0.0, constants::J2}
+    };
+    const Propagation12 p =
+        propagateSecular(fieldState(GravityField(body), elementsToState(el)), dt, body, SecularOrder::J2);
+    expectVecNear(p.state.r, elementsToState(propagateSecular(el, dt, body, SecularOrder::J2)).r, 1e-6);
     expectVecNear(p.accelerationResidual, {}, 1e-18);
-    expectVecNear(p.state.a, GravityField({0.0, 0.0, zp.J2}).acceleration(0.0, p.state.r, p.state.v), 1e-18);
+    expectVecNear(p.state.a, GravityField(body).acceleration(0.0, p.state.r, p.state.v), 1e-18);
 }
 
 TEST(State12, SecularModelOnlyAndUnmodeledForce) {
@@ -232,7 +234,7 @@ TEST(State12, NumericalPropagatorModes) {
 
     // ModelOnly from a consistent 12-state matches the 6-state propagator.
     const NumericalPropagator six(Time(), s0, {field});
-    const NumericalPropagator twelve = NumericalPropagator::j2j4(Time(), consistent);
+    const NumericalPropagator twelve = NumericalPropagator::j2j4(Time(), consistent, Frame::TOD);
     expectVecNear(twelve.accelerationResidual(), {}, 1e-18);
     expectVecNear(twelve.jerkResidual(), {}, 1e-18);
     const StateVector12 a = twelve.propagate12(dt);
@@ -245,8 +247,9 @@ TEST(State12, NumericalPropagatorModes) {
     const NumericalPropagator ignore(Time(), in, {field});
     expectVecNear(ignore.accelerationResidual(), {2e-3, -1e-3, 3e-3}, 1e-15);
     EXPECT_EQ(ignore.propagate12(dt), a);
-    const NumericalPropagator thrust = NumericalPropagator::j2j4(Time(), in, HigherOrderMode::UnmodeledForce);
-    const StateVector12       b0     = thrust.propagate12(0.0);
+    const NumericalPropagator thrust =
+        NumericalPropagator::j2j4(Time(), in, Frame::TOD, HigherOrderMode::UnmodeledForce);
+    const StateVector12 b0 = thrust.propagate12(0.0);
     EXPECT_EQ(b0.rv(), in.rv());
     expectVecNear(b0.a, in.a, 1e-15);
     expectVecNear(b0.j, in.j, 1e-15);

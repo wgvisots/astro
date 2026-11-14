@@ -87,7 +87,7 @@ std::optional<Impact> impact(const Time&          epoch,
     const Mat3        toGcrs0  = toFrame0.transpose();
     const StateVector s0{toGcrs0 * state.r, toGcrs0 * state.v};
     std::vector<std::shared_ptr<const ForceModel>> forces{
-        std::make_shared<GravityField>(o.J, o.mu, o.re, poleOfDateMatrix(Frame::GCRS, epoch))};
+        std::make_shared<GravityField>(o.body, poleOfDateMatrix(Frame::GCRS, epoch))};
     forces.insert(forces.end(), o.additionalForces.begin(), o.additionalForces.end());
     const NumericalPropagator prop(epoch, s0, forces, o.integrator);
 

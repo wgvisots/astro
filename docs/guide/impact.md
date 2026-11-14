@@ -113,7 +113,7 @@ linear result is less reliable for grazing trajectories.
 | Step | What happens |
 |---|---|
 | Frame | the state is rotated into GCRS (`gcrsToCelestialMatrix`) |
-| Force model | point mass + J2 + J3 + J4, with the zonal field aligned to the true pole at the epoch (`ImpactOptions::J`); extra forces through `ImpactOptions::additionalForces` |
+| Force model | point mass + J2 + J3 + J4, with the zonal field aligned to the true pole at the epoch (`ImpactOptions::body`, `CentralBody::earth()` by default); extra forces through `ImpactOptions::additionalForces` |
 | Integration | RKF7(8), relTol 1e-9 (`ImpactOptions::integrator`) |
 | Height | each sample is rotated into ITRS with an `ItrsRotationSeries` and converted to geodetic height ([Vermeille (2002)](https://doi.org/10.1007/s00190-002-0273-6)) |
 | Impact | `NumericalPropagator::propagateToEvent` samples the height four times per integrator step on the degree-7 Hermite interpolant, and refines the first downward crossing with Brent's method to 1e-7 s ([Shampine & Thompson (2000)](https://doi.org/10.1016/S0898-1221%2800%2900045-6)) |
