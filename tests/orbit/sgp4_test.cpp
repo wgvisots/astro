@@ -81,7 +81,7 @@ struct VerCase {
     double      start{0}, stop{0}, step{0};
 };
 struct VerRow {
-    double t;
+    double t;    // minutes since the epoch, as the reference code counts them
     Vec3   r, v; // km, km/s
 };
 } // namespace
@@ -160,7 +160,7 @@ TEST(Sgp4, VerificationAgainstVallado) {
         const Sgp4 sgp4(tle);
         for (const VerRow& row : rows) {
             StateVector s;
-            const int   code = sgp4.propagate(row.t, s);
+            const int   code = sgp4.propagateMinutes(row.t, s);
             EXPECT_EQ(code, 0) << tle.satnum << " t=" << row.t;
             const double dr = norm(s.r / 1000.0 - row.r);
             const double dv = norm(s.v / 1000.0 - row.v);
@@ -177,7 +177,7 @@ TEST(Sgp4, VerificationAgainstVallado) {
             StateVector  s;
             const auto   expectedCode = earlyStopCodes.find(tle.satnum);
             ASSERT_NE(expectedCode, earlyStopCodes.end()) << tle.satnum << " stops early in the reference";
-            EXPECT_EQ(sgp4.propagate(next, s), expectedCode->second) << tle.satnum << " at t=" << next;
+            EXPECT_EQ(sgp4.propagateMinutes(next, s), expectedCode->second) << tle.satnum << " at t=" << next;
             ++earlyStops;
         }
     }
@@ -195,12 +195,23 @@ TEST(Sgp4, TimeInterfaceAndDeepSpaceFlag) {
                              "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537");
     const Sgp4 s(t);
     EXPECT_FALSE(s.isDeepSpace());
-    const StateVector a = s.propagate(90.0);
+    const StateVector a = s.propagate(90.0 * 60.0); // seconds
     const StateVector b = s.propagate(t.epoch + 90.0 * 60.0);
     test::expectVecNear(a.r, b.r, 1e-6);
     EXPECT_NEAR(norm(a.r) / 1000.0, 6720.0, 30.0);
     const Sgp4 copy = s;
-    test::expectVecNear(copy.propagate(10.0).r, s.propagate(10.0).r, 0.0);
+    test::expectVecNear(copy.propagate(600.0).r, s.propagate(600.0).r, 0.0);
+
+    // propagate takes seconds, propagateMinutes the reference code's minutes: the same state.
+    const StateVector m = s.propagateMinutes(90.0);
+    test::expectVecNear(a.r, m.r, 0.0);
+    test::expectVecNear(a.v, m.v, 0.0);
+    StateVector seconds, minutes;
+    EXPECT_EQ(s.propagate(90.0 * 60.0, seconds), 0);
+    EXPECT_EQ(s.propagateMinutes(90.0, minutes), 0);
+    test::expectVecNear(seconds.r, a.r, 0.0);
+    test::expectVecNear(minutes.r, a.r, 0.0);
+    test::expectVecNear(minutes.v, a.v, 0.0);
 }
 
 TEST(Sgp4, TimeThatIsNotFiniteIsAnError) {
@@ -218,23 +229,35 @@ TEST(Sgp4, TimeThatIsNotFiniteIsAnError) {
     EXPECT_TRUE(Sgp4(molniya).isDeepSpace());
     for (const Tle& tle : {iss, molniya}) {
         const Sgp4 sgp4(tle);
-        for (double minutes : {nan, inf, -inf}) {
+        for (double time : {nan, inf, -inf}) {
             StateVector s{
                 {1.0, 2.0, 3.0},
                 {4.0, 5.0, 6.0}
             };
-            EXPECT_EQ(sgp4.propagate(minutes, s), 7) << minutes;
-            EXPECT_TRUE(std::isnan(s.r.x) && std::isnan(s.r.z) && std::isnan(s.v.y)) << minutes;
+            EXPECT_EQ(sgp4.propagate(time, s), 7) << time;
+            EXPECT_TRUE(std::isnan(s.r.x) && std::isnan(s.r.z) && std::isnan(s.v.y)) << time;
+            StateVector m{
+                {1.0, 2.0, 3.0},
+                {4.0, 5.0, 6.0}
+            };
+            EXPECT_EQ(sgp4.propagateMinutes(time, m), 7) << time;
+            EXPECT_TRUE(std::isnan(m.r.x) && std::isnan(m.r.z) && std::isnan(m.v.y)) << time;
             try {
-                (void)sgp4.propagate(minutes);
-                ADD_FAILURE() << "no exception for " << minutes;
+                (void)sgp4.propagate(time);
+                ADD_FAILURE() << "no exception for " << time;
             } catch (const Sgp4Error& e) {
-                EXPECT_EQ(e.code(), 7) << minutes;
+                EXPECT_EQ(e.code(), 7) << time;
+            }
+            try {
+                (void)sgp4.propagateMinutes(time);
+                ADD_FAILURE() << "no exception for " << time << " min";
+            } catch (const Sgp4Error& e) {
+                EXPECT_EQ(e.code(), 7) << time;
             }
         }
         // An ordinary time still works after those.
         StateVector s;
-        EXPECT_EQ(sgp4.propagate(10.0, s), 0);
+        EXPECT_EQ(sgp4.propagate(600.0, s), 0);
         EXPECT_TRUE(std::isfinite(norm(s.r)));
     }
 }
@@ -266,7 +289,7 @@ TEST(Sgp4, RejectsNonFiniteElements) {
                 const Sgp4 sgp4{tle};
                 // What used to happen: the propagator was built and gave NaN with code 0.
                 StateVector state;
-                const int   code = sgp4.propagate(10.0, state);
+                const int   code = sgp4.propagate(600.0, state);
                 ADD_FAILURE() << e.name << " = " << bad << " was accepted; propagate gave code " << code
                               << " and r.x = " << state.r.x;
             } catch (const Error& error) {
@@ -335,7 +358,7 @@ TEST(Sgp4, EpochOnALeapSecondDayMatchesTheReferenceCode) {
     const Sgp4 sgp4(tle);
     ASSERT_TRUE(sgp4.isDeepSpace());
     for (const VerRow& row : reference) {
-        const StateVector s = sgp4.propagate(row.t);
+        const StateVector s = sgp4.propagateMinutes(row.t);
         // The tolerances of the verification set above: 1 mm and 1 micrometre per second. A day count that is
         // half a second off (the epoch at 12:00:00.5 instead of 12:00:00) moves this orbit by 8 mm at the epoch
         // and by 33 m at 30 days.
@@ -352,7 +375,7 @@ TEST(Sgp4, EpochDayCountRunsSmoothlyAcrossALeapSecond) {
     // give almost the same state at the same time since epoch: the reference code's own two states at 30 days are
     // 6 cm apart. With a day count that jumps by the leap second they are 68 m apart.
     const Sgp4   before(italsatWithEpoch("16366.99999999")), after(italsatWithEpoch("17001.00000000"));
-    const double thirtyDays = 30.0 * 1440.0; // minutes
+    const double thirtyDays = 30.0 * 86400.0; // seconds
     EXPECT_LT(norm(before.propagate(thirtyDays).r - after.propagate(thirtyDays).r), 0.5);
     // The instants themselves are a leap second and 0.864 ms (1e-8 day) apart.
     EXPECT_NEAR(after.epoch() - before.epoch(), 1.000864, 1e-6);

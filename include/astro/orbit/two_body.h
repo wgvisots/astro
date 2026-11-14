@@ -57,11 +57,12 @@ void stumpff(double psi, double& c2, double& c3) noexcept;
 [[nodiscard]] StateTransition propagateKeplerStm(const StateVector& s0, double dt, double mu = constants::gmEarth);
 
 /// Two-body state and covariance dt seconds after s0: P = Phi P0 Phi^T, Phi from propagateKeplerStm.
-/// P0 is the covariance of s0 (m^2, m^2/s, m^2/s^2) in the frame of s0. No process noise; for that,
-/// or for any force beyond the point mass, use NumericalPropagator::propagateGridWithCovariance.
+/// P0 is the covariance of s0 (m^2, m^2/s, m^2/s^2) in the frame of s0, and mu the gravitational
+/// parameter of the central body (m^3/s^2). No process noise; for that,
+/// or for any force beyond the point mass, use NumericalPropagator::propagateWithCovariance.
 /// Throws astro::Error as propagateKepler does.
 [[nodiscard]] StateCovariance
-propagateKeplerWithCovariance(const StateVector& s0, const Mat6& P0, double dt, double mu = constants::gmEarth);
+propagateKeplerWithCovariance(const StateVector& s0, double dt, const Mat6& P0, double mu = constants::gmEarth);
 
 /// Two-body propagation of a 12-component state (position, velocity, acceleration, jerk) by dt
 /// seconds. The output acceleration and jerk are those of the point mass (plus the unmodeled

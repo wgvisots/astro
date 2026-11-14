@@ -313,7 +313,7 @@ the probability that the objects actually collide, given their sizes and positio
 // Probability of collision at that approach, for a 5 m and a 1 m object. Position covariances at
 // the time of the approach: 400 m radial, 4 km in-track, 400 m cross-track (1 sigma) in each
 // object's RIC frame, rotated into the inertial frame. (From an epoch covariance,
-// NumericalPropagator::propagateGridWithCovariance gives them at any time.)
+// NumericalPropagator::propagateWithCovariance gives them at any time.)
 // clang-format off
 const Mat3 ric{400.0 * 400.0,             0.0,           0.0,
                          0.0, 4000.0 * 4000.0,           0.0,
@@ -421,7 +421,7 @@ most probable collision, so to rank a window's approaches use `assessConjunction
 const auto prop = NumericalPropagator::j2j4(epoch, s0, Frame::TOD);
 const UncertainTrajectory object{
     Trajectory([&prop](const Time& t) { return prop.propagate(t); }),
-    [&prop, P0, epoch](const Time& t) { return prop.propagateGridWithCovariance(t - epoch, 1.0, 1, P0)[0]; }};
+    [&prop, P0, epoch](const Time& t) { return prop.propagateWithCovariance(t - epoch, P0); }};
 ```
 
   Each `propagate(t)` integrates from the epoch, so keep the window near it (see the cost note above).

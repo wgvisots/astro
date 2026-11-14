@@ -588,7 +588,7 @@ UncertainTrajectory::UncertainTrajectory(const Time&        epoch,
     }
     if (model == TrajectoryModel::TwoBody) {
         covarianceAt_ = [epoch, state, covariance, mu = body.mu](const Time& t) {
-            return propagateKeplerWithCovariance(state, covariance, t - epoch, mu);
+            return propagateKeplerWithCovariance(state, t - epoch, covariance, mu);
         };
     } else {
         auto p        = std::make_shared<const SecularPropagatorCorrected>(state, body, secularOrder(model));

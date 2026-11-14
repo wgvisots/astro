@@ -1004,7 +1004,7 @@ Sgp4& Sgp4::operator=(const Sgp4& o) {
 Sgp4::Sgp4(Sgp4&&) noexcept            = default;
 Sgp4& Sgp4::operator=(Sgp4&&) noexcept = default;
 
-int Sgp4::propagate(double minutes, StateVector& out) const noexcept {
+int Sgp4::propagateMinutes(double minutes, StateVector& out) const noexcept {
     // The theory's own range tests are all false for a NaN, which would come out as a NaN state
     // with code 0, and the deep-space resonance integration steps towards the requested time, so an
     // infinite one would never be reached. Code 7 is this library's, not one of the reference code's.
@@ -1019,17 +1019,25 @@ int Sgp4::propagate(double minutes, StateVector& out) const noexcept {
     return impl_->sgp4(minutes, out);
 }
 
-StateVector Sgp4::propagate(double minutes) const {
+StateVector Sgp4::propagateMinutes(double minutes) const {
     StateVector out;
-    const int   code = propagate(minutes, out);
+    const int   code = propagateMinutes(minutes, out);
     if (code != 0) {
         throw Sgp4Error(code, errorMessage(code));
     }
     return out;
 }
 
+int Sgp4::propagate(double dt, StateVector& out) const noexcept {
+    return propagateMinutes(dt / 60.0, out);
+}
+
+StateVector Sgp4::propagate(double dt) const {
+    return propagateMinutes(dt / 60.0);
+}
+
 StateVector Sgp4::propagate(const Time& t) const {
-    return propagate((t - impl_->epochTime) / 60.0);
+    return propagate(t - impl_->epochTime);
 }
 
 const Tle& Sgp4::tle() const noexcept {

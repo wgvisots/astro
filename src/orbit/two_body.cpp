@@ -402,7 +402,7 @@ StateTransition propagateKeplerStm(const StateVector& s0, double dt, double mu) 
     return out;
 }
 
-StateCovariance propagateKeplerWithCovariance(const StateVector& s0, const Mat6& P0, double dt, double mu) {
+StateCovariance propagateKeplerWithCovariance(const StateVector& s0, double dt, const Mat6& P0, double mu) {
     const StateTransition t = propagateKeplerStm(s0, dt, mu);
     return {t.state, congruence(t.stm, P0)};
 }

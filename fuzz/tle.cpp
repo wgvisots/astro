@@ -44,9 +44,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
                 // SGP4 must give a finite state with code 0 or 6, an error code, or astro::Error.
                 try {
                     const Sgp4 sgp4(tle);
-                    for (double minutes : {0.0, 1.0, -1440.0, 14400.0}) {
+                    for (double dt : {0.0, 60.0, -86400.0, 864000.0}) { // seconds
                         StateVector s;
-                        const int   code = sgp4.propagate(minutes, s);
+                        const int   code = sgp4.propagate(dt, s);
                         if (code == 0) {
                             fuzz::require(std::isfinite(s.r.x + s.r.y + s.r.z + s.v.x + s.v.y + s.v.z));
                         }

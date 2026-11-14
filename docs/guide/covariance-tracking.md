@@ -31,7 +31,8 @@ const std::vector<StateCovariance> out = prop.propagateGridWithCovariance(0.0, 6
 - `Q(t)` is optional process noise: white, isotropic acceleration noise with power spectral density
   q (m^2/s^3), standing in for what the model leaves out. Over a short interval it adds about
   q t^3 / 3 to each position variance.
-- `propagateGridStm` returns Phi itself.
+- `propagateGridStm` returns Phi itself. At a single time, `propagateWithCovariance(dt, P0)` and
+  `propagateStm(dt)` give the same as a grid with one output at `dt`.
 - Cost: about 6x the states alone (8x with process noise); 0.3 ms for 4 h at 10 s at relTol 1e-9.
 
 Uncertainty is easiest to read in radial / in-track / cross-track axes:
@@ -54,9 +55,9 @@ The two-body and secular propagators carry a covariance too, without integrating
 
 | Propagator | Call | How Phi is found | Cost |
 |---|---|---|---|
-| two-body | `propagateKeplerWithCovariance(s0, P0, dt)`; `propagateKeplerStm` for Phi | closed form: the universal-variable Lagrange coefficients differentiated (the matrix that [Shepperd (1985)](https://doi.org/10.1007/BF01227666) and [Battin (1999)](https://doi.org/10.2514/4.861543) derive in other forms); exact to rounding, any conic | 0.31 us |
+| two-body | `propagateKeplerWithCovariance(s0, dt, P0)`; `propagateKeplerStm` for Phi | closed form: the universal-variable Lagrange coefficients differentiated (the matrix that [Shepperd (1985)](https://doi.org/10.1007/BF01227666) and [Battin (1999)](https://doi.org/10.2514/4.861543) derive in other forms); exact to rounding, any conic | 0.31 us |
 | secular J2/J4 | `SecularPropagator::propagateWithCovariance(dt, P0)`, `propagateGridWithCovariance`; `propagateStm` for Phi | fourth-order central differences of the whole state-to-state map; 1e-11 to 2e-5 relative | 6.4 us per time, 1.2 us per grid output |
-| numerical | `propagateGridWithCovariance` (above) | variational equations, integrated | 0.3 ms for 4 h at 10 s |
+| numerical | `NumericalPropagator::propagateWithCovariance(dt, P0)`, `propagateGridWithCovariance` (above); `propagateStm`, `propagateGridStm` for Phi | variational equations, integrated | 0.3 ms for 4 h at 10 s |
 
 <!-- snippet: examples/covariance.cpp#analytic_covariance -->
 ```cpp
@@ -64,7 +65,7 @@ The two-body and secular propagators carry a covariance too, without integrating
 // state transition matrix) and secular J2/J4. The secular model needs z along the pole, so the
 // state and covariance are rotated from GCRS first (a fixed rotation, which commutes with the
 // propagation; RIC sigmas do not depend on the frame).
-const StateCovariance            kepler = propagateKeplerWithCovariance(s0, P0, 4.0 * 3600.0);
+const StateCovariance            kepler = propagateKeplerWithCovariance(s0, 4.0 * 3600.0, P0);
 const Mat3                       toPole = poleOfDateMatrix(Frame::GCRS, epoch);
 const SecularPropagatorCorrected secular(StateVector{toPole * s0.r, toPole * s0.v});
 const StateCovariance            mean = secular.propagateWithCovariance(4.0 * 3600.0, rotateCovariance(P0, toPole));

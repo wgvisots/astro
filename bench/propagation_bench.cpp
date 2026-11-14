@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
         const Sgp4   sgp4(Tle::parse(set.line1, set.line2));
         const double seconds = secondsPerRun([&] {
             for (int k = 0; k < 1440; ++k) {
-                sink += sgp4.propagate(static_cast<double>(k)).r.x;
+                sink += sgp4.propagate(60.0 * static_cast<double>(k)).r.x; // one-minute steps
             }
         });
         std::printf("%-46s %12.0f\n", set.label, seconds / 1440.0 * 1e9);
@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
         const Sgp4   sgp4(Tle::parse(sets[1].line1, sets[1].line2));
         const double seconds = secondsPerRun([&] {
             for (int k = 0; k < 100; ++k) {
-                sink += sgp4.propagate(525600.0 + static_cast<double>(k)).r.x;
+                sink += sgp4.propagate(60.0 * (525600.0 + static_cast<double>(k))).r.x;
             }
         });
         std::printf("%-46s %12.0f\n", "Sgp4::propagate, deep-space, 1 year out", seconds / 100.0 * 1e9);

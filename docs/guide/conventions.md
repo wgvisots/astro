@@ -27,6 +27,22 @@ A `Time` carries its time scale and converts on demand. States carry no frame ta
 asks for the frame where it matters (`NumericalPropagator::j2j4(..., Frame::GCRS)`,
 `TrackerOptions::frame`).
 
+## Propagators
+
+Every propagator (`propagateKepler`, `SecularPropagator`, `NumericalPropagator`, `Sgp4`) follows one
+pattern:
+
+- **Times are seconds from the epoch.** A function named `propagate...` with a `double` time
+  argument always takes seconds. The one exception is named for it: `Sgp4::propagateMinutes`, for
+  the minutes of the SGP4 reference code.
+- **Arguments come in one order:** the initial state (for the free functions), the times, the
+  covariance, other inputs, the output buffer, then the options (arguments with defaults, such as
+  `accelerationNoisePsd` and `AdaptiveStats*`).
+- **The same names for the same results.** At one time, `propagateStm(dt)` gives the state and its
+  state transition matrix and `propagateWithCovariance(dt, P0)` the state and its covariance
+  (`propagateKeplerStm` and `propagateKeplerWithCovariance` for the two-body functions). The
+  `propagateGrid...(start, step, ...)` forms give results at `start + k * step`.
+
 ## Enums
 
 Every public enum is reflected with Boost.Describe and prints as `Enum::Value`:

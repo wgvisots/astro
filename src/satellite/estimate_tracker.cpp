@@ -237,9 +237,7 @@ void requireCelestial(Frame f) {
 }
 
 StateCovariance propagateTo(const NumericalPropagator& prop, const Mat6& P0, double dt, double q) {
-    std::vector<StateCovariance> out(1);
-    prop.propagateGridWithCovariance(dt, 1.0, P0, out, q); // a single output: integrates exactly to dt
-    return out[0];
+    return prop.propagateWithCovariance(dt, P0, q); // integrates exactly to dt
 }
 
 } // namespace
