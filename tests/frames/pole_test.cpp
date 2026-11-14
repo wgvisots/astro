@@ -39,25 +39,79 @@ Vec3 row(const Mat3& m, std::size_t i) {
     return {m(i, 0), m(i, 1), m(i, 2)};
 }
 
+/// The frame bias from GCRS to J2000 (EME2000) built from its published angles, IERS Conventions
+/// (2010) eq. 5.22: B = R1(-eta0) R2(xi0) R3(d alpha0) with xi0 = -16.6170 mas, eta0 = -6.8192 mas
+/// (eq. 5.21) and d alpha0 = -14.6 mas (eq. 5.23). The rotations are written out here.
+Mat3 publishedFrameBias() {
+    const double xi0 = -16.6170 * constants::masToRad, eta0 = -6.8192 * constants::masToRad;
+    const double da0 = -14.6 * constants::masToRad;
+    const auto   r1 = [](double a) { return Mat3{1, 0, 0, 0, std::cos(a), std::sin(a), 0, -std::sin(a), std::cos(a)}; };
+    const auto   r2 = [](double a) { return Mat3{std::cos(a), 0, -std::sin(a), 0, 1, 0, std::sin(a), 0, std::cos(a)}; };
+    const auto   r3 = [](double a) { return Mat3{std::cos(a), std::sin(a), 0, -std::sin(a), std::cos(a), 0, 0, 0, 1}; };
+    return r1(-eta0) * r2(xi0) * r3(da0);
+}
+
+/// Compares a GCRS -> J2000 matrix with publishedFrameBias(). The elements carrying xi0 and eta0
+/// ((0,2), (1,2) and their transposes) agree to 0.2 uas (measured: the IAU 2006 bias, taken from the
+/// Fukushima-Williams angles at J2000, against eq. 5.22); tolerance 1 uas. Those carrying d alpha0
+/// ((0,1), (1,0)) are compared to the printed precision of d alpha0, 0.05 mas. The diagonal is
+/// 1 - 3e-15 and is compared to rounding.
+void expectPublishedFrameBias(const Mat3& m, const char* what) {
+    const Mat3   b   = publishedFrameBias();
+    const double uas = constants::uasToRad, mas = constants::masToRad;
+    // clang-format off
+    const double tol[3][3] = {{1e-15,      0.05 * mas, 1.0 * uas},
+                              {0.05 * mas, 1e-15,      1.0 * uas},
+                              {1.0 * uas,  1.0 * uas,  1e-15    }};
+    // clang-format on
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            EXPECT_NEAR(m(i, j), b(i, j), tol[i][j]) << what << " (" << i << "," << j << ")";
+        }
+    }
+}
+
 } // namespace
+
+TEST(FrameBias, MatchesThePublishedAngles) {
+    // The bias is 23 mas in all; leaving it out (an identity matrix) misses by 14.6 to 16.6 mas in the
+    // off-diagonal elements, far beyond these tolerances.
+    expectPublishedFrameBias(frameBiasMatrix06(), "frameBiasMatrix06");
+    expectPublishedFrameBias(gcrsToCelestialMatrix(Frame::J2000, kT), "gcrsToCelestialMatrix(J2000)");
+    expectPublishedFrameBias(FrameTransformer(kT, ConstantEop{}).gcrsTo(Frame::J2000), "FrameTransformer");
+}
 
 TEST(PoleOfDate, GcrsPoleIsTheCip) {
     const Mat3 M = poleOfDateMatrix(Frame::GCRS, kT);
     // The new z axis, expressed in GCRS, is the CIP from the full IAU 2006/2000A model.
     const FrameTransformer full(kT, ConstantEop{});
     EXPECT_LT(angleBetween(row(M, 2), row(full.gcrsTo(Frame::CIRS), 2)), 1e-8); // 2000B: ~1 mas
-    // About 0.15 deg from GCRS z in late 2026 (precession since J2000).
-    EXPECT_NEAR(rad2deg(std::acos(M(2, 2))), 0.1503, 5e-4);
+    // Its angle from GCRS z, from the polynomial part of the CIP coordinates (IERS Conventions 2010,
+    // eq. 5.16) and the largest nutation term, of the Moon's node Omega (18.6 years; table 5.3a:
+    // 17.2064161" in longitude, 9.2052331" in obliquity), X += sin(eps0) dpsi, Y += deps:
+    const double t    = kT.centuriesSinceJ2000();
+    const double as   = constants::arcsecToRad;
+    const double node = deg2rad(125.04455501) - 6962890.5431 * as * t; // eq. 5.43
+    const double eps0 = 84381.406 * as;
+    const double X =
+        (-0.016617 + 2004.191898 * t - 0.4297829 * t * t) * as - std::sin(eps0) * 17.2064161 * as * std::sin(node);
+    const double Y = (-0.006951 - 0.025896 * t - 22.4072747 * t * t) * as + 9.2052331 * as * std::cos(node);
+    // 541" (0.1503 deg) in late 2026. The terms left out move it by 0.47" here (measured); the next
+    // largest nutation terms reach 0.5" in X and 0.6" in Y. Tolerance 1.5".
+    EXPECT_NEAR(std::acos(M(2, 2)), std::asin(std::hypot(X, Y)), 1.5 * as);
 }
 
 TEST(PoleOfDate, OfDateFramesAreAlreadyAligned) {
     for (Frame f : {Frame::TOD, Frame::TEME, Frame::CIRS}) {
         EXPECT_EQ(poleOfDateMatrix(f, kT), Mat3::identity()) << f;
     }
-    // J2000 differs from GCRS by the frame bias only (~20 mas).
+    // J2000 differs from GCRS by the frame bias only: the pole expressed in J2000 is the published bias
+    // applied to the pole expressed in GCRS. The bias moves the pole by 18 mas; the tolerance is that
+    // of the bias's xi0 and eta0 elements (expectPublishedFrameBias()), 1 uas.
     const Vec3 pj = row(poleOfDateMatrix(Frame::J2000, kT), 2);
     const Vec3 pg = row(poleOfDateMatrix(Frame::GCRS, kT), 2);
-    EXPECT_LT(std::abs(angleBetween(pj, Vec3{0, 0, 1}) - angleBetween(pg, Vec3{0, 0, 1})), 2e-7);
+    test::expectVecNear(pj, publishedFrameBias() * pg, 1.0 * constants::uasToRad, "pole in J2000");
+    EXPECT_GT(norm(pj - pg), 15.0 * constants::masToRad); // the bias is there
     // Earth-fixed frames are rejected.
     for (Frame f : {Frame::TIRS, Frame::PEF, Frame::ITRS}) {
         EXPECT_THROW((void)poleOfDateMatrix(f, kT), Error) << f;
