@@ -39,6 +39,15 @@ struct CalendarDate {
     friend constexpr bool operator==(const CalendarDate&, const CalendarDate&) noexcept = default;
 };
 
+/// A Gregorian calendar date: year, month and day, without a time of day.
+struct YearMonthDay {
+    int year{2000}; ///< Gregorian year
+    int month{1};   ///< month, 1-12
+    int day{1};     ///< day of month, 1-31
+
+    friend constexpr bool operator==(const YearMonthDay&, const YearMonthDay&) noexcept = default;
+};
+
 /// Two-part Julian Date for full double precision over long spans.
 ///
 /// The value is jd1 + jd2 days. After normalize(), jd1 is a midnight
@@ -119,15 +128,15 @@ struct JulianDate {
 [[nodiscard]] int daysInMonth(int year, int month);
 /// Day of year, 1-based (Jan 1 = 1).
 [[nodiscard]] int dayOfYear(int year, int month, int day);
-/// Month and day from year and 1-based day of year. Throws astro::Error if
-/// `doy` is outside 1-365 (1-366 in a leap year).
-void dayOfYearToMonthDay(int year, int doy, int& month, int& day);
+/// Date of the 1-based day of year `doy` (January 1 = 1) of a Gregorian `year`.
+/// Throws astro::Error if `doy` is outside 1-365 (1-366 in a leap year).
+[[nodiscard]] YearMonthDay dayOfYearToDate(int year, int doy);
 /// Day of week, 0 = Sunday ... 6 = Saturday.
 [[nodiscard]] int dayOfWeek(int year, int month, int day);
 
 /// Julian Day Number (integer, noon-based) for a Gregorian date.
 [[nodiscard]] long long julianDayNumber(int year, int month, int day) noexcept;
-/// Gregorian date from a Julian Day Number.
-void julianDayNumberToDate(long long jdn, int& year, int& month, int& day) noexcept;
+/// Gregorian date of a Julian Day Number (integer, noon-based), the inverse of julianDayNumber.
+[[nodiscard]] YearMonthDay julianDayNumberToDate(long long jdn) noexcept;
 
 } // namespace astro

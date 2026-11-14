@@ -51,20 +51,24 @@ double gstime(double jdut1) {
     return temp;
 }
 
-const char* errorMessage(int code) {
-    switch (code) {
-    case 1:  return "SGP4: mean eccentricity out of range (e >= 1 or e < -0.001)";
-    case 2:  return "SGP4: mean motion less than zero";
-    case 3:  return "SGP4: perturbed eccentricity out of range";
-    case 4:  return "SGP4: semi-latus rectum less than zero";
-    case 6:  return "SGP4: satellite has decayed";
-    case 7:  return "SGP4: the time is not finite";
-    default: return "SGP4: propagation error";
+// What a status means, for the message of an Sgp4Error.
+const char* statusText(Sgp4Status status) {
+    switch (status) {
+    case Sgp4Status::Ok:                              return "no error";
+    case Sgp4Status::MeanEccentricityOutOfRange:      return "mean eccentricity out of range (e >= 1 or e < -0.001)";
+    case Sgp4Status::NegativeMeanMotion:              return "mean motion less than zero";
+    case Sgp4Status::PerturbedEccentricityOutOfRange: return "perturbed eccentricity out of range";
+    case Sgp4Status::NegativeSemiLatusRectum:         return "semi-latus rectum less than zero";
+    case Sgp4Status::Decayed:                         return "satellite has decayed";
+    case Sgp4Status::TimeNotFinite:                   return "the time is not finite";
     }
+    return "propagation error";
 }
 
-/// Error code for a time that is not finite: not one of the reference code's (1-6).
-constexpr int kTimeNotFinite = 7;
+// The message of an Sgp4Error: "<function>: <what the status means>".
+std::string errorMessage(const char* function, Sgp4Status status) {
+    return std::string(function) + ": " + statusText(status);
+}
 
 // Throws astro::Error naming the element if it is NaN or infinite. The range tests of the reference code
 // (e >= 1, n <= 0, ...) are all false for NaN, so a non-finite element would pass them and come out as a NaN state
@@ -782,7 +786,8 @@ struct Sgp4::Impl {
     }
 
     // ----------------------------------------------------------- propagation
-    int sgp4(double t, StateVector& out) const {
+    // The status, as the reference code returns its error code; `out` is filled in as there.
+    Sgp4Status sgp4(double t, StateVector& out) const {
         constexpr double temp4     = 1.5e-12;
         const double     vkmpersec = radiusearthkm * xke / 60.0;
 
@@ -819,13 +824,13 @@ struct Sgp4::Impl {
             dspace(t, tc, atimeL, em, argpm, inclm, xliL, mm, xniL, nodem, dndt, nm);
         }
         if (nm <= 0.0) {
-            return 2;
+            return Sgp4Status::NegativeMeanMotion;
         }
         const double am  = std::pow(xke / nm, x2o3) * tempa * tempa;
         nm               = xke / std::pow(am, 1.5);
         em              -= tempe;
         if (em >= 1.0 || em < -0.001) {
-            return 1;
+            return Sgp4Status::MeanEccentricityOutOfRange;
         }
         if (em < 1.0e-6) {
             em = 1.0e-6;
@@ -851,7 +856,7 @@ struct Sgp4::Impl {
                 argpp -= pi;
             }
             if (ep < 0.0 || ep > 1.0) {
-                return 3;
+                return Sgp4Status::PerturbedEccentricityOutOfRange;
             }
             sinip  = std::sin(xincp);
             cosip  = std::cos(xincp);
@@ -889,7 +894,7 @@ struct Sgp4::Impl {
         const double el2   = axnl * axnl + aynl * aynl;
         const double pl    = am * (1.0 - el2);
         if (pl < 0.0) {
-            return 4;
+            return Sgp4Status::NegativeSemiLatusRectum;
         }
         const double rl     = am * (1.0 - ecose);
         const double rdotl  = std::sqrt(am) * esine / rl;
@@ -930,9 +935,9 @@ struct Sgp4::Impl {
         out.r = uv * (mrt * radiusearthkm * 1000.0);
         out.v = (uv * mvt + vv * rvdot) * (vkmpersec * 1000.0);
         if (mrt < 1.0) {
-            return 6;
+            return Sgp4Status::Decayed;
         }
-        return 0;
+        return Sgp4Status::Ok;
     }
 };
 
@@ -950,7 +955,8 @@ Sgp4::Sgp4(const Tle& tle, Sgp4Gravity gravity, Sgp4OpsMode mode)
     // The reference code tests for error 2 after the Kozai correction, which takes a fractional power of the mean
     // motion: a negative one has turned into NaN by then and is not caught.
     if (tle.meanMotion < 0.0) {
-        throw Sgp4Error(2, std::string(errorMessage(2)) + " (at epoch)");
+        throw Sgp4Error(Sgp4Status::NegativeMeanMotion,
+                        errorMessage("Sgp4", Sgp4Status::NegativeMeanMotion) + " (at epoch)");
     }
     Impl& s     = *impl_;
     s.tle       = tle;
@@ -978,10 +984,10 @@ Sgp4::Sgp4(const Tle& tle, Sgp4Gravity gravity, Sgp4OpsMode mode)
     s.epochDays = (jd.jd1 + dayFraction) - 2433281.5;
     s.init();
     // Check the epoch state as Vallado does (errors 1-4 at epoch are fatal).
-    StateVector tmp;
-    const int   code = s.sgp4(0.0, tmp);
-    if (code != 0 && code != 6) {
-        throw Sgp4Error(code, std::string(errorMessage(code)) + " (at epoch)");
+    StateVector      tmp;
+    const Sgp4Status code = s.sgp4(0.0, tmp);
+    if (code != Sgp4Status::Ok && code != Sgp4Status::Decayed) {
+        throw Sgp4Error(code, errorMessage("Sgp4", code) + " (at epoch)");
     }
     // Finite elements can still overflow on the way (a drag term of 1e300, say). No range test catches that,
     // because the tests are false for NaN, so look at the state itself.
@@ -1004,36 +1010,43 @@ Sgp4& Sgp4::operator=(const Sgp4& o) {
 Sgp4::Sgp4(Sgp4&&) noexcept            = default;
 Sgp4& Sgp4::operator=(Sgp4&&) noexcept = default;
 
-int Sgp4::propagateMinutes(double minutes, StateVector& out) const noexcept {
+Sgp4Result Sgp4::tryPropagateMinutes(double minutes) const noexcept {
     // The theory's own range tests are all false for a NaN, which would come out as a NaN state
-    // with code 0, and the deep-space resonance integration steps towards the requested time, so an
-    // infinite one would never be reached. Code 7 is this library's, not one of the reference code's.
+    // with status Ok, and the deep-space resonance integration steps towards the requested time, so an
+    // infinite one would never be reached. TimeNotFinite is this library's status, not one of the
+    // reference code's.
+    Sgp4Result result;
     if (!std::isfinite(minutes)) {
         constexpr double nan = std::numeric_limits<double>::quiet_NaN();
-        out                  = {
+        result.state         = {
             {nan, nan, nan},
             {nan, nan, nan}
         };
-        return kTimeNotFinite;
+        result.status = Sgp4Status::TimeNotFinite;
+        return result;
     }
-    return impl_->sgp4(minutes, out);
+    result.status = impl_->sgp4(minutes, result.state);
+    return result;
+}
+
+Sgp4Result Sgp4::tryPropagate(double dt) const noexcept {
+    return tryPropagateMinutes(dt / 60.0);
 }
 
 StateVector Sgp4::propagateMinutes(double minutes) const {
-    StateVector out;
-    const int   code = propagateMinutes(minutes, out);
-    if (code != 0) {
-        throw Sgp4Error(code, errorMessage(code));
+    const Sgp4Result result = tryPropagateMinutes(minutes);
+    if (result.status != Sgp4Status::Ok) {
+        throw Sgp4Error(result.status, errorMessage("Sgp4::propagateMinutes", result.status));
     }
-    return out;
-}
-
-int Sgp4::propagate(double dt, StateVector& out) const noexcept {
-    return propagateMinutes(dt / 60.0, out);
+    return result.state;
 }
 
 StateVector Sgp4::propagate(double dt) const {
-    return propagateMinutes(dt / 60.0);
+    const Sgp4Result result = tryPropagate(dt);
+    if (result.status != Sgp4Status::Ok) {
+        throw Sgp4Error(result.status, errorMessage("Sgp4::propagate", result.status));
+    }
+    return result.state;
 }
 
 StateVector Sgp4::propagate(const Time& t) const {
@@ -1056,6 +1069,10 @@ std::ostream& operator<<(std::ostream& os, Sgp4Gravity value) {
 
 std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value) {
     return detail::writeEnum(os, "Sgp4OpsMode", value);
+}
+
+std::ostream& operator<<(std::ostream& os, Sgp4Status value) {
+    return detail::writeEnum(os, "Sgp4Status", value);
 }
 
 } // namespace astro

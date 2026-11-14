@@ -53,7 +53,7 @@ BOOST_DESCRIBE_ENUM(TimeScale, UTC, TAI, TT, TDB, TCG, TCB, UT1, GPS, GST, BDT)
 /// Writes "TimeScale::<enumerator>", or "TimeScale::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, TimeScale value);
 
-/// Short name of a time scale ("UTC", "TT", ...), or "?" for an invalid value.
+/// Short name of a time scale ("UTC", "TT", ...), or "INVALID_VALUE" for any other value, as operator<< writes it.
 [[nodiscard]] std::string_view toString(TimeScale scale) noexcept;
 /// Parse "UTC", "TAI", "TT", ... (case-insensitive). Throws astro::Error for an unknown name.
 [[nodiscard]] TimeScale parseTimeScale(std::string_view name);

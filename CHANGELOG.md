@@ -32,6 +32,22 @@ change that breaks existing code raises the minor number.
   `lookAngles(satItrs, site, ell)` is the `StateVector` overload `ecefToLookAngles(satItrs, site,
   ell)`. `starObserved`, `bodyObserved` and `gcrsToTopocentric` return `LookAngles` with
   `rangeRate` NaN. Every computed number is unchanged.
+- **One error style**, written down at the top of `astro/core/error.h`: a failure throws
+  `astro::Error`; a message starts with the function's name (`"Function: what is wrong (got
+  <value>)"`; the messages of the time scales, the leap-second table, `gcrsToCelestialMatrix`,
+  `poleOfDateMatrix`, `LowPrecisionEphemeris`, `parseHms`, `parseDms` and SGP4 that did not are
+  reworded, so code that matched their text must be checked); a `noexcept`
+  function is a formula that does not check its input; no out-parameters. So: `stumpff(psi)` returns
+  a `Stumpff {c2, c3}`; `julianDayNumberToDate(jdn)` returns a `YearMonthDay {year, month, day}`, and
+  `dayOfYearToMonthDay(year, doy, month, day)` is `dayOfYearToDate(year, doy)`, returning one too.
+  SGP4's non-throwing calls are `Sgp4::tryPropagate(dt)` and `tryPropagateMinutes(minutes)`, which
+  return an `Sgp4Result {state, status}`; the status is the new `enum class Sgp4Status`, whose
+  values are the reference code's error numbers (`Decayed` is 6, `TimeNotFinite` 7), and
+  `Sgp4Error::code()` returns it too. `keplerianToEquinoctial` throws `astro::Error` for an orbit
+  that is not an ellipse instead of returning NaN, and is no longer `noexcept`; `mahalanobis2`
+  throws for `n` outside 1 to 6 instead of returning `nullopt`. `toString(Frame)`,
+  `toString(TimeScale)` and `toString(Body)` give `"INVALID_VALUE"` (as `operator<<` does) instead
+  of `"?"` for a value that is not an enumerator. Every computed number is unchanged.
 
 Before / after:
 
@@ -45,6 +61,15 @@ UncertainTrajectory a{epoch, state1, P1};
 Trajectory numerical([&prop](const Time& t) { return prop.propagate(t); });
 Aer        aer  = ecefToAer(target, site);
 LookAngles look = lookAngles(satItrs, site);
+double c2, c3;
+stumpff(psi, c2, c3);
+int y, m, d;
+julianDayNumberToDate(jdn, y, m, d);
+dayOfYearToMonthDay(2024, 60, m, d);
+StateVector s;
+int         code = sgp4.propagate(dt, s);    // 0 on success
+if (code == 6) { /* decayed */ }
+EquinoctialElements q = keplerianToEquinoctial(hyperbola); // every element NaN
 
 // 0.3.0
 findPasses(sgp4Trajectory(sgp4, eop, Frame::ITRS), site, start, end, mask);
@@ -55,6 +80,12 @@ UncertainTrajectory a{epoch, state1, P1, Frame::GCRS};
 Trajectory numerical(Frame::GCRS, [&prop](const Time& t) { return prop.propagate(t); });
 LookAngles aer  = ecefToLookAngles(target, site); // aer.rangeRate is NaN
 LookAngles look = ecefToLookAngles(satItrs, site);
+const auto [c2, c3] = stumpff(psi);
+const YearMonthDay date = julianDayNumberToDate(jdn);
+const YearMonthDay leap = dayOfYearToDate(2024, 60); // {2024, 2, 29}
+const Sgp4Result r = sgp4.tryPropagate(dt);          // r.state, r.status
+if (r.status == Sgp4Status::Decayed) { /* decayed */ }
+keplerianToEquinoctial(hyperbola);                   // throws astro::Error
 ```
 
 ## [0.2.0] - unreleased

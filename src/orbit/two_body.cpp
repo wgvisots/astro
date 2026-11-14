@@ -47,7 +47,8 @@ constexpr double reciprocalFactorial(int n) noexcept {
 
 } // namespace
 
-void stumpff(double psi, double& c2, double& c3) noexcept {
+Stumpff stumpff(double psi) noexcept {
+    Stumpff s;
     if (std::abs(psi) < 1.0) {
         // The series c2 = sum (-psi)^k / (2k+2)!, c3 = sum (-psi)^k / (2k+3)!, to 1/20! and 1/21!. The
         // closed forms below subtract nearly equal numbers here: 1 - cos(sqrt(psi)) is good to one
@@ -67,17 +68,18 @@ void stumpff(double psi, double& c2, double& c3) noexcept {
             s2 = a[k] - psi * s2;
             s3 = b[k] - psi * s3;
         }
-        c2 = s2;
-        c3 = s3;
+        s.c2 = s2;
+        s.c3 = s3;
     } else if (psi > 0.0) {
         const double sp = std::sqrt(psi);
-        c2              = (1.0 - std::cos(sp)) / psi;
-        c3              = (sp - std::sin(sp)) / (sp * psi);
+        s.c2            = (1.0 - std::cos(sp)) / psi;
+        s.c3            = (sp - std::sin(sp)) / (sp * psi);
     } else {
         const double sp = std::sqrt(-psi);
-        c2              = (1.0 - std::cosh(sp)) / psi;
-        c3              = (std::sinh(sp) - sp) / (sp * -psi);
+        s.c2            = (1.0 - std::cosh(sp)) / psi;
+        s.c3            = (std::sinh(sp) - sp) / (sp * -psi);
     }
+    return s;
 }
 
 namespace {
@@ -150,9 +152,8 @@ UniversalSolution solveUniversal(const Vec3& r0, const Vec3& v0, double dt, doub
     double           hi        = forward ? kInfinity : 0.0;
     bool             converged = false;
     for (int it = 0; it < 200 && !converged; ++it) {
-        const double psi = chi * chi * alpha;
-        double       c2 = 0.0, c3 = 0.0;
-        stumpff(psi, c2, c3);
+        const double psi    = chi * chi * alpha;
+        const auto [c2, c3] = stumpff(psi);
         const double t2 = sig0 * chi * chi * c2, t3 = k3 * chi * chi * chi * c3, t1 = r0m * chi;
         const double F = t2 + t3 + t1 - t0;
         if (F == 0.0) { // also the whole number of periods: dt reduced to 0, chi = 0
@@ -210,19 +211,18 @@ UniversalSolution solveUniversal(const Vec3& r0, const Vec3& v0, double dt, doub
 
 /// The propagated state from the universal anomaly (Lagrange coefficients f, g, fdot, gdot).
 StateVector universalState(const Vec3& r0, const Vec3& v0, const UniversalSolution& u, double mu) {
-    const double r0m   = norm(r0);
-    const double smu   = std::sqrt(mu);
-    const double rdotv = dot(r0, v0);
-    const double alpha = -norm2(v0) / mu + 2.0 / r0m;
-    const double chi   = u.chi;
-    const double psi   = chi * chi * alpha;
-    double       c2 = 0.0, c3 = 0.0;
-    stumpff(psi, c2, c3);
-    const double r    = chi * chi * c2 + rdotv / smu * chi * (1.0 - psi * c3) + r0m * (1.0 - psi * c2);
-    const double f    = 1.0 - chi * chi / r0m * c2;
-    const double g    = u.dtReduced - chi * chi * chi / smu * c3;
-    const double gdot = 1.0 - chi * chi / r * c2;
-    const double fdot = smu / (r * r0m) * chi * (psi * c3 - 1.0);
+    const double r0m    = norm(r0);
+    const double smu    = std::sqrt(mu);
+    const double rdotv  = dot(r0, v0);
+    const double alpha  = -norm2(v0) / mu + 2.0 / r0m;
+    const double chi    = u.chi;
+    const double psi    = chi * chi * alpha;
+    const auto [c2, c3] = stumpff(psi);
+    const double r      = chi * chi * c2 + rdotv / smu * chi * (1.0 - psi * c3) + r0m * (1.0 - psi * c2);
+    const double f      = 1.0 - chi * chi / r0m * c2;
+    const double g      = u.dtReduced - chi * chi * chi / smu * c3;
+    const double gdot   = 1.0 - chi * chi / r * c2;
+    const double fdot   = smu / (r * r0m) * chi * (psi * c3 - 1.0);
     return {f * r0 + g * v0, fdot * r0 + gdot * v0};
 }
 
