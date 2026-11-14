@@ -85,7 +85,8 @@ TEST(PoleOfDate, GcrsPoleIsTheCip) {
     const Mat3 M = poleOfDateMatrix(Frame::GCRS, kT);
     // The new z axis, expressed in GCRS, is the CIP from the full IAU 2006/2000A model.
     const FrameTransformer full(kT, ConstantEop{});
-    EXPECT_LT(angleBetween(row(M, 2), row(full.gcrsTo(Frame::CIRS), 2)), 1e-8); // 2000B: ~1 mas
+    // IAU 2000B against 2000A: documented as 1 mas; measured 0.055 mas at this epoch.
+    EXPECT_LT(angleBetween(row(M, 2), row(full.gcrsTo(Frame::CIRS), 2)), 1.0 * constants::masToRad);
     // Its angle from GCRS z, from the polynomial part of the CIP coordinates (IERS Conventions 2010,
     // eq. 5.16) and the largest nutation term, of the Moon's node Omega (18.6 years; table 5.3a:
     // 17.2064161" in longitude, 9.2052331" in obliquity), X += sin(eps0) dpsi, Y += deps:
@@ -130,7 +131,8 @@ TEST(PoleOfDate, CelestialMatricesMatchTheFullModel) {
                 m = std::max(m, std::abs(d(i, j)));
             }
         }
-        EXPECT_LT(m, 1e-8) << f; // IAU 2000B vs 2000A, ~1 mas
+        // IAU 2000B vs 2000A: documented as 1 mas over 1995-2050; measured at most 0.071 mas (TOD).
+        EXPECT_LT(m, 1.0 * constants::masToRad) << f;
     }
 }
 

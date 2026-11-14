@@ -128,9 +128,11 @@ protected:
 
 TEST_F(ValladoExample, ItrfToGcrf) {
     const StateVector gcrf = itrsToGcrs(itrf, utc, eop);
-    // Vallado's values use IAU 2000; IAU 2006 differs at the centimeter level.
-    expectVecNear(gcrf.r, {5102.508959e3, 6123.011403e3, 6378.136925e3}, 0.05, "r GCRF");
-    expectVecNear(gcrf.v, {-4.743220156e3, 0.790536497e3, 5.533755724e3}, 5e-5, "v GCRF");
+    // Vallado's values use IAU 2000; IAU 2006 differs at the centimetre level: measured 1.0 cm and
+    // 4.5e-6 m/s per component. Tolerances 2 cm and 1e-5 m/s, below the 1.05e-5 m/s that the excess
+    // length of day (LOD) contributes to the velocity, so that leaving LOD out is seen.
+    expectVecNear(gcrf.r, {5102.508959e3, 6123.011403e3, 6378.136925e3}, 0.02, "r GCRF");
+    expectVecNear(gcrf.v, {-4.743220156e3, 0.790536497e3, 5.533755724e3}, 1e-5, "v GCRF");
     const StateVector back = gcrsToItrs(gcrf, utc, eop);
     expectVecNear(back.r, itrf.r, 1e-6, "round trip r");
     expectVecNear(back.v, itrf.v, 1e-9, "round trip v");
@@ -139,13 +141,17 @@ TEST_F(ValladoExample, ItrfToGcrf) {
 TEST_F(ValladoExample, TemeAndPef) {
     const FrameTransformer ft(utc, eop);
     const StateVector      teme = ft.transform(itrf, Frame::ITRS, Frame::TEME);
-    expectVecNear(teme.r, {5094.18016210e3, 6127.64465950e3, 6380.34453270e3}, 0.05, "r TEME");
-    expectVecNear(teme.v, {-4.746131487e3, 0.785818041e3, 5.531931288e3}, 5e-5, "v TEME");
+    // Measured 6.7 mm and 4.7e-6 m/s per component (TEME's GMST 1982 against Vallado's); tolerances
+    // 2 cm and 1e-5 m/s. LOD contributes 1.1e-5 m/s here.
+    expectVecNear(teme.r, {5094.18016210e3, 6127.64465950e3, 6380.34453270e3}, 0.02, "r TEME");
+    expectVecNear(teme.v, {-4.746131487e3, 0.785818041e3, 5.531931288e3}, 1e-5, "v TEME");
     const StateVector pef = ft.transform(itrf, Frame::ITRS, Frame::PEF);
-    expectVecNear(pef.r, {-1033.47503130e3, 7901.30558560e3, 6380.34453270e3}, 0.05, "r PEF");
-    expectVecNear(pef.v, {-3.2256327470e3, -2.8724425110e3, 5.5319312880e3}, 5e-5, "v PEF");
-    // TIRS and PEF agree closely for IAU 2006.
-    expectVecNear(ft.transform(itrf.r, Frame::ITRS, Frame::TIRS), pef.r, 0.01, "TIRS vs PEF");
+    // PEF is ITRS without polar motion: no precession-nutation model enters, and the agreement is
+    // 0.1 mm and 3e-7 m/s (measured). Tolerances 0.5 mm and 1e-6 m/s.
+    expectVecNear(pef.r, {-1033.47503130e3, 7901.30558560e3, 6380.34453270e3}, 5e-4, "r PEF");
+    expectVecNear(pef.v, {-3.2256327470e3, -2.8724425110e3, 5.5319312880e3}, 1e-6, "v PEF");
+    // TIRS and PEF differ by the TIO locator s' (about 1e-10 rad here): 3.5e-5 m (measured).
+    expectVecNear(ft.transform(itrf.r, Frame::ITRS, Frame::TIRS), pef.r, 1e-4, "TIRS vs PEF");
     // J2000 (EME2000) differs from GCRS by the frame bias (~23 mas -> ~0.7 m here).
     const Vec3 j2000 = ft.transform(itrf.r, Frame::ITRS, Frame::J2000);
     const Vec3 gcrs  = ft.transform(itrf.r, Frame::ITRS, Frame::GCRS);
@@ -197,13 +203,16 @@ TEST(FrameTransformer, ConsistencyAndRoundTrips) {
 }
 
 TEST(FrameTransformer, Model2000BWithinMilliarcsecond) {
+    // IAU 2000B is documented as a 1 mas approximation of 2000A for the CIO-based (ITRS) chain over
+    // 1995-2050. Measured here: 0.27 mas.
     const Time        t = Time::fromIso8601("2030-01-01T00:00:00Z");
     const ConstantEop eop;
     const Mat3        a     = gcrsToItrsMatrix(t, eop);
     const Mat3        b     = gcrsToItrsMatrix(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
     const Mat3        d     = a * b.transpose();
     const double      angle = std::sqrt(d(0, 1) * d(0, 1) + d(0, 2) * d(0, 2) + d(1, 2) * d(1, 2));
-    EXPECT_LT(angle, 2.0 * constants::masToRad);
+    EXPECT_LT(angle, 1.0 * constants::masToRad);
+    EXPECT_GT(angle, 0.01 * constants::masToRad); // the option does change the model
 }
 
 namespace {
