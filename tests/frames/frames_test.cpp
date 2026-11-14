@@ -664,6 +664,64 @@ TEST(EopTable, Lagrange4ErrorOnAQuarticIsTheNodePolynomial) {
     }
 }
 
+TEST(EopTable, FilesAreReadLikeTheirContents) {
+    // loadFinals2000A and loadC04 read a file and parse it as parseFinals2000A and parseC04 parse the
+    // same text; a file that cannot be opened throws.
+    std::string finals;
+    finals                += finalsLine(2020, 5, 31, 59000.0, 0.10, 0.40, -0.2400000, 0.5, 0.10, -0.10) + "\n";
+    finals                += finalsLine(2020, 6, 1, 59001.0, 0.11, 0.41, -0.2405000, 0.6, 0.11, -0.11) + "\n";
+    finals                += finalsLine(2020, 6, 2, 59002.0, 0.12, 0.42, -0.2410000, 0.7, 0.12, -0.12) + "\n";
+    const std::string c04  = "2020   5  31  59000   0.100000   0.400000  -0.2400000   0.0005000   0.000100  -0.000100\n"
+                             "2020   6   1  59001   0.110000   0.410000  -0.2405000   0.0006000   0.000110  -0.000110\n";
+    const auto        write = [](const std::string& name, const std::string& text) {
+        const std::string path = testing::TempDir() + name;
+        std::FILE*        f    = std::fopen(path.c_str(), "w");
+        EXPECT_NE(f, nullptr) << path;
+        if (f != nullptr) {
+            std::fputs(text.c_str(), f);
+            std::fclose(f);
+        }
+        return path;
+    };
+    const EopTable fromFile = EopTable::loadFinals2000A(write("astro_finals_test.txt", finals));
+    const EopTable fromText = EopTable::parseFinals2000A(finals);
+    ASSERT_EQ(fromFile.records().size(), 3u);
+    EXPECT_EQ(fromFile.firstMjd(), 59000.0);
+    EXPECT_EQ(fromFile.lastMjd(), 59002.0);
+    for (double mjd : {59000.0, 59001.3, 59002.0}) {
+        EXPECT_EQ(fromFile.at(mjd).xp, fromText.at(mjd).xp) << mjd;
+        EXPECT_EQ(fromFile.at(mjd).dut1, fromText.at(mjd).dut1) << mjd;
+    }
+    EXPECT_NEAR(rad2arcsec(fromFile.at(59001.0).xp), 0.11, 1e-12); // the value in the file
+    const EopTable c04FromFile = EopTable::loadC04(write("astro_c04_test.txt", c04));
+    ASSERT_EQ(c04FromFile.records().size(), 2u);
+    EXPECT_NEAR(c04FromFile.at(59001.0).lod, 0.0006, 1e-15);
+    EXPECT_EQ(c04FromFile.at(59000.5).yp, EopTable::parseC04(c04).at(59000.5).yp);
+    EXPECT_THROW((void)EopTable::loadFinals2000A(testing::TempDir() + "no_such_finals_file.txt"), Error);
+    EXPECT_THROW((void)EopTable::loadC04(testing::TempDir() + "no_such_c04_file.txt"), Error);
+}
+
+TEST(EopTable, TooFewRecordsOrAnEpochOutsideTheTableThrows) {
+    // Documented: fewer than two records (or no usable rows in a file), an epoch before 1960, and at()
+    // outside [firstMjd, lastMjd] or at NaN.
+    EopRecord a, b;
+    a.mjd = 59000.0;
+    b.mjd = 59001.0;
+    EXPECT_THROW(EopTable({}), Error);
+    EXPECT_THROW(EopTable({a}), Error);
+    EopRecord old;
+    old.mjd = 36000.0; // 1957
+    EXPECT_THROW(EopTable({old, a}), Error);
+    EXPECT_THROW((void)EopTable::parseFinals2000A("# nothing but a comment\n"), Error);
+    EXPECT_THROW((void)EopTable::parseC04("# nothing but a comment\n"), Error);
+    const EopTable table({a, b});
+    EXPECT_NO_THROW((void)table.at(59000.0));
+    EXPECT_NO_THROW((void)table.at(59001.0));
+    EXPECT_THROW((void)table.at(58999.999), Error);
+    EXPECT_THROW((void)table.at(59001.001), Error);
+    EXPECT_THROW((void)table.at(std::numeric_limits<double>::quiet_NaN()), Error);
+}
+
 TEST(EopTable, LinearInterpolationIsTheChord) {
     const EopTable table(PolynomialEop::records(), EopInterpolation::Linear);
     for (double mjd : {60000.3, 60003.7, 60006.8}) {
