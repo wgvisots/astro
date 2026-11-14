@@ -32,7 +32,7 @@ radians everywhere. Validated against ERFA/SOFA, JPL DE440 and Vallado's SGP4 ve
 - **[User guide](docs/index.md)**: getting started, time scales, geodesy, reference frames,
   ephemerides and astrometry, propagation, covariance and tracking, impact prediction, satellite
   geometry, conventions.
-- **[Accuracy](docs/accuracy.md)** and **[Performance](docs/performance.md)**: what is validated
+- **[Accuracy and validation](docs/accuracy.md)** and **[Performance](docs/performance.md)**: what is validated
   against what, measured propagation and consistency-check accuracy, timings, and the programs
   that reproduce them.
 - **[Compatibility](docs/compatibility.md)**: what a version number promises (0.x is still in flux;

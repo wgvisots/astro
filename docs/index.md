@@ -25,7 +25,7 @@ dependency is header-only Boost (Describe).
 
 ## Background
 
-- [Accuracy](accuracy.md): what each part is validated against, and measured accuracy of the
+- [Accuracy and validation](accuracy.md): what each part is validated against, and measured accuracy of the
   propagators and the consistency checks, with the programs that produce the numbers.
 - [Compatibility](compatibility.md): what a version number promises, how things are deprecated, and
   the supported platforms.

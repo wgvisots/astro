@@ -103,6 +103,13 @@ keplerianToEquinoctial(hyperbola);                   // throws astro::Error
   - what counts as public API, and what not to rely on
   - deprecation in 1.x, removal only in 2.0
   - the supported platforms
+- **[Accuracy and validation](docs/accuracy.md)** completed:
+  - a summary by module
+  - every number re-measured against today's tests (several tolerances had been tightened since)
+  - rows for every component checked against an independent reference
+  - separate lists of what is checked only for consistency and what is not yet validated
+- Study `astro_study_low_precision`: the low-precision Sun and Moon against the full DE440s kernel,
+  1950-2050. It confirms the documented 30" and 6' (measured 28.6" and 5.76').
 - **[Data files](docs/guide/data-files.md)**: what is built in, where each file comes from, how often
   it changes, what is lost without it, how to load it, and how each loader behaves when its data runs
   out (EOP throws; a leap-second table goes quietly stale, so check its expiry at start-up).

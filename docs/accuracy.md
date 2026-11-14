@@ -98,6 +98,8 @@ Two caveats about the rows that compare with ERFA, here and in the tables below:
 | JPL SPK reader, both byte orders | `jplephem` on DE440s, 125 states | 1e-12 relative + 1 mm; 1e-6 m/s | 0.37 of the tolerance (0.5 mm); 2.9e-9 m/s | `SpkTest.MatchesJplephem` |
 | Low-precision Sun | [DE440](references.md#ephemerides-and-astrometry), January to March 2024 | 0.01 deg, 6e-5 in distance | 0.0038 deg (14"), 9.0e-6 | `LowPrecision.SunAndMoonAgainstDe440` |
 | Low-precision Moon | DE440, January to March 2024 | 0.1 deg, 2e-3 in distance, 4 m/s | 0.038 deg (2.3'), 6.4e-4, 2.2 m/s | `LowPrecision.SunAndMoonAgainstDe440` |
+| Low-precision Sun, 1950-2050 | DE440s (the full kernel), every 6 h | documented: 30", 6e-5 in distance | 28.6", 5.2e-5 | study `astro_study_low_precision` |
+| Low-precision Moon, 1950-2050 | DE440s (the full kernel), every 6 h | documented: 6', 0.14% in distance | 5.76', 0.13% | study `astro_study_low_precision` |
 
 ### Astrometry
 
@@ -193,8 +195,6 @@ reference.
   against an outside program.
 - **Pass prediction and ground tracks against an outside predictor.** Only closed forms and brute
   force.
-- **The low-precision Sun and Moon outside January to March 2024**, the span of the committed DE440s
-  extract.
 
 ## Numerical propagation
 
@@ -504,6 +504,8 @@ build/studies/astro_study_consistency        # ~1 min; optional argument: sample
 build/studies/astro_study_impact 4000        # ~2 s; Monte Carlo samples (default 2000; the table above uses 4000)
 build/studies/astro_study_conjunctions       # ~45 s; optional argument: orbit pairs
 build/studies/astro_study_lambert            # ~11 s; optional argument: problems per regime
+scripts/fetch_iers_data.sh --de440s -o data   # the full DE440s kernel (32 MB), not in the repository
+build/studies/astro_study_low_precision data/de440s.bsp   # ~2 s; optional arguments: first and last year
 ```
 
 The tests enforce the tolerances but print nothing when they pass. The largest differences in the

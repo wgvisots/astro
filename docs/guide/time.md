@@ -16,7 +16,7 @@ sub-nanosecond resolution over centuries. Converting with `to(scale)` goes throu
 
 The definitions follow the IERS Conventions [IERS Conventions (2010), ch. 10](https://www.iers.org/TN36) and the
 IAU resolutions summarised in [USNO Circular 179](https://aa.usno.navy.mil/publications/Circular_179); results are validated against
-ERFA [ERFA](https://github.com/liberfa/erfa) to 1 ns over 1960-2035 ([Accuracy](../accuracy.md)).
+ERFA [ERFA](https://github.com/liberfa/erfa) to 0.1 ns over 1960-2035 ([Accuracy](../accuracy.md)).
 
 UTC is defined from 1960 on (the first entry of the leap-second table). Converting an earlier
 instant to or from UTC, or constructing an earlier `Time` in UTC, throws `astro::Error`; the
