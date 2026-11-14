@@ -613,3 +613,51 @@ TEST(EstimateTracker, PredictGridWithoutAnEstimateOrWithAZeroStepThrows) {
     EXPECT_NO_THROW((void)tracker.predictGrid(0.0, 60.0, 3));
     EXPECT_THROW((void)tracker.predictGrid(0.0, 0.0, 3), Error);
 }
+
+TEST(EstimateTracker, DeliveriesInTheOtherCelestialFramesGiveTheSameCheck) {
+    // As TrueOfDateDeliveries for the frames it does not cover: J2000, MOD, TEME and CIRS. The same
+    // truth, delivered in frame f of each epoch (converted with the full IAU 2006/2000A model), must
+    // give the residuals and sigmas of the GCRS deliveries, and predictions that are the GCRS ones in
+    // f of the output time.
+    const Time        t0 = Time::fromIso8601("2026-11-02T00:00:00Z");
+    const StateVector sg = leo();
+    TrackerOptions    tight;
+    tight.integrator.relTol = 1e-13;
+    tight.integrator.absTol = 1e-10;
+    const StateVector truth = makePropagator({t0, sg, Mat6{}}, tight).propagate(1800.0);
+    const Mat6        P     = diagonal(100.0, 1e-4);
+    EstimateTracker   gcrs;
+    (void)gcrs.update({t0, sg, P});
+    const auto cg = gcrs.update({t0 + 1800.0, truth, P});
+    ASSERT_TRUE(cg);
+    const auto pg = gcrs.predictGrid(0.0, 1800.0, 3);
+    for (Frame f : {Frame::J2000, Frame::MOD, Frame::TEME, Frame::CIRS}) {
+        SCOPED_TRACE(testing::Message() << f);
+        const auto into = [&](const StateVector& s, double dt) {
+            const Mat3 B = FrameTransformer(t0 + dt, ConstantEop{}).gcrsTo(f);
+            return StateVector{B * s.r, B * s.v};
+        };
+        TrackerOptions options;
+        options.frame = f;
+        EstimateTracker tracker(options);
+        (void)tracker.update({t0, into(sg, 0.0), P});
+        const auto c = tracker.update({t0 + 1800.0, into(truth, 1800.0), P});
+        ASSERT_TRUE(c);
+        // The tracker converts with IAU 2000B, the deliveries here with 2000A (up to 1 mas apart, 3 cm at
+        // 7000 km), but in and out alike, so most of it cancels: measured 1.6e-4 m, and 2e-12 in the
+        // sigma. Tolerances 1e-3 m and 1e-10.
+        test::expectVecNear(c->positionResidualRic, cg->positionResidualRic, 1e-3, "residual");
+        EXPECT_NEAR(c->positionSigmaRic.y / cg->positionSigmaRic.y, 1.0, 1e-10);
+        // The free function gives the same check.
+        const ConsistencyCheck free =
+            checkConsistency({t0, into(sg, 0.0), P}, {t0 + 1800.0, into(truth, 1800.0), P}, options);
+        test::expectVecNear(free.positionResidualRic, cg->positionResidualRic, 1e-3, "checkConsistency");
+        const auto p = tracker.predictGrid(0.0, 1800.0, 3);
+        for (std::size_t k = 0; k < p.size(); ++k) {
+            test::expectVecNear(p[k].state.r,
+                                into(pg[k].state, 1800.0 * static_cast<double>(k + 1)).r,
+                                1e-3,
+                                "prediction");
+        }
+    }
+}
