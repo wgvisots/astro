@@ -1,9 +1,12 @@
 # astro
-Space and coordinate conversion tools.
 
-This project mostly had to do with translations between Celestial Reference Systems and Terrestrial Reference Systems.  In particular, I try to use GCRS (Geocentric Celestial Reference System), that is the inertial coordinate system with its origin at the center of mass of the Earth.
+A C++20 library for time scales, geodesy, reference frames, ephemerides and orbits: IAU 2006/2000A
+frames, SGP4, numerical and analytic propagation with covariance, Lambert's problem, conjunction
+assessment and collision probability, impact prediction, and satellite geometry.
 
-In short, ECI <--> ECEF.
+It began with conversions between celestial and terrestrial reference systems: GCRS (the Geocentric
+Celestial Reference System, the inertial frame with its origin at the Earth's centre of mass) and
+ITRS, or in short, ECI <--> ECEF. It has grown from there.
 
 This project is based on the "Explanatory Supplement to the Astronomical Almanac 3rd Edition" {Urban and Seidelmann}.  This is an excellent book, and I highly recommend it.  All errors in the project are my own.
 
@@ -15,14 +18,14 @@ radians everywhere. Validated against ERFA/SOFA, JPL DE440 and Vallado's SGP4 ve
 
 | Module | Highlights |
 |---|---|
-| `core` | `Vec3`/`Mat3`/`Quat`, passive `R1/R2/R3`, all 12 Euler sequences, angle wrapping, HMS/DMS parse/format, root finders, constants (WGS84, GRS80, IERS 2010, EGM2008 zonals, DE440 GMs) |
+| `core` | `Vec3`/`Mat3`/`Mat6`/`Quat`, passive `R1/R2/R3`, all 12 Euler sequences, angle wrapping, HMS/DMS parse/format, root finders, constants (WGS84, GRS80, IERS 2010, EGM2008 zonals, DE440 GMs) |
 | `time` | Two-part Julian dates; `Time` over UTC, TAI, TT, TDB, TCG, TCB, UT1, GPS, Galileo, BeiDou; leap seconds (built in, or loaded from `Leap_Second.dat` / `leap-seconds.list` / `tai-utc.dat`); Unix and `std::chrono`; GNSS week/TOW with rollover; ISO-8601 |
 | `geodesy` | Geodetic <-> ECEF (closed form, exact everywhere), ENU/NED/AER, geocentric/reduced latitude, Vincenty geodesics, 7/14-parameter Helmert |
 | `frames` | IAU 2006/2000A (and 2000B) precession-nutation, ERA/GMST/GAST, polar motion; GCRS, J2000, MOD, TOD, TEME, CIRS, TIRS, PEF, ITRS with position+velocity; fast GCRS <-> ITRS over a time window; IERS EOP from `finals2000A` or C04 |
 | `ephemeris` | Low-precision Sun/Moon (no data files); JPL SPK (`.bsp`, e.g. DE440) reader |
 | `astrometry` | RA/Dec, ecliptic, galactic; apparent/observed places (space motion, parallax, light deflection, aberration, refraction); sidereal time; rise/set/transit, twilight, Moon phase |
 | `orbit` | Keplerian and equinoctial elements; Kepler's equation; universal-variable propagation; covariance through two-body (closed-form state transition matrix), secular and numerical propagators; Lambert (Izzo, multi-rev); J2/J2²/J4 secular rates, sun-synchronous and repeat-track design; zonal gravity, RK4/RKF7(8), numerical propagator with event detection; 12-component (position, velocity, acceleration, jerk) propagation with optional unmodeled force; closest approach, conjunction lists and collision probability for any two of elements, states or trajectories, or in one call from states and covariances; ballistic impact on the WGS84 ellipsoid with impact error ellipse; TLE parse/format and SGP4/SDP4 |
-| `satellite` | Look angles, range rate, Doppler; pass prediction; estimate tracking with consistency checks; eclipses (cylindrical/conical) and beta angle; sub-satellite point, ground track, footprint, line of sight; RIC/LVLH/VNC/NTW frames, relative motion, covariance rotation |
+| `satellite` | Look angles, range rate, Doppler; pass prediction; estimate tracking with consistency checks; eclipses (cylindrical/conical) and beta angle; sub-satellite point, ground track, footprint, line of sight; RIC/LVLH/VNC/NTW frames, relative motion |
 
 ## Documentation
 
@@ -97,12 +100,10 @@ it replaces the previous copy, so it is cron-friendly. See [Getting started](doc
 
 ## Contributing
 
-Code is formatted with clang-format 18 (`.clang-format`; `clang-format -i $(git ls-files '*.h' '*.cpp')`).
-CI builds with GCC and Clang with warnings as errors, runs the tests under ThreadSanitizer, checks
-formatting, and builds the documentation with Doxygen warnings as errors. The code in `docs/` must
-match the examples: `tools/check_doc_snippets.py --fix` refreshes it.
+See [CONTRIBUTING.md](CONTRIBUTING.md): how to build and test, what a change needs, the style, and
+what CI checks. Changes between releases are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-Apache License 2.0 ([LICENSE](LICENSE)). Third-party coefficient tables and test data are credited
-in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Apache License 2.0 ([LICENSE](LICENSE)). Third-party coefficient tables, test data and code that
+parts of the library follow are credited in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

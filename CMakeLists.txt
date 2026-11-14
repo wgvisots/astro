@@ -19,7 +19,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(astro
-        VERSION 0.1.0
+        VERSION 0.2.0
         DESCRIPTION "Time, geodesy, reference frame, ephemeris and orbit utilities"
         LANGUAGES CXX)
 
@@ -71,8 +71,11 @@ set_target_properties(astro PROPERTIES
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR})
 
+# astro/version.h is generated from include/astro/version.h.in.
+configure_file(include/astro/version.h.in ${PROJECT_BINARY_DIR}/include/astro/version.h @ONLY)
 target_include_directories(astro PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 # Boost.Describe (header-only, Boost >= 1.77) provides enum reflection; it is the only dependency.
@@ -102,7 +105,8 @@ install(TARGETS astro EXPORT astroTargets
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY include/astro DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/astro DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} PATTERN "*.in" EXCLUDE)
+install(FILES ${PROJECT_BINARY_DIR}/include/astro/version.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/astro)
 install(EXPORT astroTargets
         NAMESPACE astro::
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/astro)
@@ -117,7 +121,7 @@ write_basic_package_version_file(${PROJECT_BINARY_DIR}/astroConfigVersion.cmake
         COMPATIBILITY SameMajorVersion)
 install(FILES ${PROJECT_BINARY_DIR}/astroConfig.cmake ${PROJECT_BINARY_DIR}/astroConfigVersion.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/astro)
-install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
+install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md CHANGELOG.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
 # ---------------------------------------------------------------- packages
 # `cpack -G DEB` or `cpack -G RPM` in the build directory (see cmake/AstroPackaging.cmake). Only when
