@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -34,6 +35,7 @@
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
 #include "astro/satellite/estimate_tracker.h"
+#include "astro/time/leap_seconds.h"
 #include "test_util.h"
 
 using namespace astro;
@@ -125,6 +127,72 @@ TEST(ThreadSafety, SharedSecularPropagatorAndTracker) {
             EXPECT_EQ(tracks[i][k].covariance, refTrack[k].covariance);
         }
     }
+}
+
+// setLeapSecondTable replaces the table that every UTC conversion reads, and leapSecondTable() hands out a
+// snapshot of it; leap_seconds.h promises both are thread-safe. One thread swaps two tables back and forth
+// while the others take snapshots and check that each is one of the two, whole: its length, its last entry
+// and the TAI-UTC it gives in 2100 must all belong to the same table. If the swap were a plain (non-atomic)
+// shared_ptr assignment, a reader could copy a pointer whose table is freed and reused under it, or a pointer
+// and a reference count from different tables, and would see a mixture, garbage or a crash. (Under
+// ThreadSanitizer the race is also reported directly.) Takes about 30 ms.
+TEST(ThreadSafety, SwappingTheGlobalLeapSecondTableIsAtomic) {
+    struct RestoreBuiltin {
+        ~RestoreBuiltin() { setLeapSecondTable(LeapSecondTable::builtin()); }
+    } restore;
+    // Two made-up futures after the built-in history: A steps by one second a year from 2030 for 100 years
+    // (38 s in 2030, 108 s in 2100), B by two seconds a year for 150 years (39 s in 2030, 179 s in 2100).
+    const auto future = [](int years, double step) {
+        std::vector<LeapSecondEntry> entries = LeapSecondTable::builtin().entries();
+        for (int k = 0; k < years; ++k) {
+            entries.push_back({2030 + k, 1, 37.0 + step * (k + 1)});
+        }
+        return LeapSecondTable(entries);
+    };
+    const LeapSecondTable a = future(100, 1.0), b = future(150, 2.0);
+    const std::size_t     sizeA = a.entries().size(), sizeB = b.entries().size();
+    const std::size_t     sizeBuiltin = LeapSecondTable::builtin().entries().size();
+    const double          lastA = a.entries().back().offset, lastB = b.entries().back().offset;
+    constexpr double      in2100A = 37.0 + 1.0 * 71, in2100B = 37.0 + 2.0 * 71; // 2100 is the 71st year from 2030
+    std::atomic<int>      readersStarted{0}, wrong{0}, sawA{0}, sawB{0};
+    std::atomic<bool>     writerDone{false};
+    constexpr int         kSwaps = 20000;
+    concurrently([&](int i) {
+        if (i == 0) { // the writer, once every reader is running
+            while (readersStarted.load() < kThreads - 1) {
+                std::this_thread::yield();
+            }
+            for (int k = 0; k < kSwaps; ++k) {
+                setLeapSecondTable(k % 2 == 0 ? a : b);
+            }
+            writerDone = true;
+            return;
+        }
+        ++readersStarted;
+        int localWrong = 0, localA = 0, localB = 0;
+        while (!writerDone.load()) {
+            const std::shared_ptr<const LeapSecondTable> t      = leapSecondTable();
+            const std::size_t                            n      = t->entries().size();
+            const double                                 last   = t->entries().back().offset;
+            const double                                 in2100 = t->taiMinusUtc(2100, 1, 1);
+            if (n == sizeA && last == lastA && in2100 == in2100A) {
+                ++localA;
+            } else if (n == sizeB && last == lastB && in2100 == in2100B) {
+                ++localB;
+            } else if (!(n == sizeBuiltin && in2100 == 37.0)) { // the built-in table, before the first swap
+                ++localWrong;
+            }
+        }
+        wrong += localWrong;
+        sawA  += localA;
+        sawB  += localB;
+    });
+    EXPECT_EQ(wrong.load(), 0);
+    // The readers ran while the tables were being swapped, and saw both.
+    EXPECT_GT(sawA.load(), 0);
+    EXPECT_GT(sawB.load(), 0);
+    // The last table stored is the one in force: kSwaps is even, so the last swap installed b.
+    EXPECT_EQ(leapSecondTable()->entries().size(), sizeB);
 }
 
 TEST(ThreadSafety, SharedRotationSeriesForImpacts) {
