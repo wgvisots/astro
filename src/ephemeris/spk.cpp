@@ -306,6 +306,12 @@ struct SpkEphemeris::Impl {
                 out.v[c] = vv;
             }
         }
+        // The record's time tags were checked above; its coefficients can be damaged too. A state
+        // that is not a number is refused here rather than returned as a position.
+        if (!std::isfinite(out.r.x + out.r.y + out.r.z + out.v.x + out.v.y + out.v.z)) {
+            throw Error("SPK: corrupt record in segment '" + seg.info.name + "' of " + path
+                        + ": the state is not finite");
+        }
         return out;
     }
 
