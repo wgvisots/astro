@@ -32,6 +32,7 @@
 #include "astro/orbit/elements.h"
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/numerical.h"
+#include "astro/orbit/two_body.h"
 #include "test_util.h"
 
 using namespace astro;
@@ -490,6 +491,67 @@ TEST(Covariance, ProcessNoiseMatchesWhiteAccelerationModel) {
     std::vector<StateVector> st(2);
     std::vector<Mat6>        phi(3);
     EXPECT_THROW(prop.propagateGridStm(0.0, 1.0, st, phi), Error);
+}
+
+TEST(Covariance, ProcessNoiseOverAnOrbitMatchesQuadratureOfTheTwoBodyStm) {
+    // Over times where gravity couples the axes, Q(t) = q integral Phi(t, tau) B B^T Phi(t, tau)^T dtau
+    // over [0, t] (or [t, 0] before the epoch), with B = [0; I] (the noise enters the velocity). The
+    // truth evaluates it by Simpson's rule on 5 s intervals with the closed-form two-body transition
+    // matrix (propagateKeplerStm, from the state at tau to t), for a point-mass propagator: it shares
+    // neither the variational equations nor their integration. Compared in units of the standard
+    // deviations, |dQ_ij| / sqrt(Q_ii Q_jj). Measured: up to 3.3e-9 at the exact stops (3.6e-11 with
+    // relTol = 1e-14, which bounds the error of the quadrature) and 5.8e-8 where Q is interpolated
+    // between the integrator's steps.
+    const StateVector         s0 = leo();
+    const double              q  = 1e-9; // m^2/s^3
+    const NumericalPropagator prop(Time(), s0, {std::make_shared<GravityField>(std::vector<double>{})});
+    const auto                quadrature = [&](double t) {
+        const int    n = 2 * static_cast<int>(std::abs(t) / 10.0); // even, intervals of 5 s
+        const double h = t / n;
+        Mat6         Q{};
+        for (int k = 0; k <= n; ++k) {
+            const double tau = h * k;
+            const double w   = (k == 0 || k == n) ? 1.0 : (k % 2 == 1 ? 4.0 : 2.0);
+            const Mat6   phi = propagateKeplerStm(propagateKepler(s0, tau), t - tau).stm;
+            for (std::size_t i = 0; i < 6; ++i) {
+                for (std::size_t j = 0; j < 6; ++j) {
+                    double sum = 0.0;
+                    for (std::size_t m = 3; m < 6; ++m) {
+                        sum += phi[i][m] * phi[j][m];
+                    }
+                    Q[i][j] += w * sum;
+                }
+            }
+        }
+        for (auto& row : Q) {
+            for (double& x : row) {
+                x *= q * std::abs(h) / 3.0;
+            }
+        }
+        return Q;
+    };
+    const auto worstDifference = [](const Mat6& a, const Mat6& b) {
+        double worst = 0.0;
+        for (std::size_t i = 0; i < 6; ++i) {
+            for (std::size_t j = 0; j < 6; ++j) {
+                worst = std::max(worst, std::abs(a[i][j] - b[i][j]) / std::sqrt(b[i][i] * b[j][j]));
+            }
+        }
+        return worst;
+    };
+    // Integrated to each time exactly.
+    for (const double t : {3000.0, -3000.0, 6000.0}) {
+        const Mat6 stop = prop.propagateGridWithCovariance(t, 1.0, 1, Mat6{}, q)[0].covariance;
+        EXPECT_LT(worstDifference(stop, quadrature(t)), 1e-8) << "t = " << t;
+    }
+    // Interpolated between the integrator's steps, on grids each side of the epoch.
+    for (const double step : {750.0, -750.0}) {
+        const auto grid = prop.propagateGridWithCovariance(step, step, 8, Mat6{}, q);
+        for (std::size_t k = 0; k < grid.size(); ++k) {
+            const double t = step * static_cast<double>(k + 1);
+            EXPECT_LT(worstDifference(grid[k].covariance, quadrature(t)), 2e-7) << "t = " << t;
+        }
+    }
 }
 
 TEST(Covariance, ProcessNoiseGrowsInBothDirections) {
