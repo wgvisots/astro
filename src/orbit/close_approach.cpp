@@ -23,47 +23,22 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
 
-#include "../core/enum_io.h"
 #include "astro/core/constants.h"
 #include "astro/core/error.h"
 #include "astro/core/rootfind.h"
-#include "astro/orbit/two_body.h"
+#include "trajectory_detail.h"
 
 namespace astro {
-
-std::ostream& operator<<(std::ostream& os, TrajectoryModel value) {
-    return detail::writeEnum(os, "TrajectoryModel", value);
-}
 
 namespace {
 
 /// Shortest sampling step (s), so that a trajectory through the centre (|r| = 0) still advances.
 constexpr double kMinStep = 1e-3;
-
-/// The SecularOrder of a secular model; throws astro::Error for any other value.
-SecularOrder secularOrder(TrajectoryModel model) {
-    switch (model) {
-    case TrajectoryModel::SecularJ2:   return SecularOrder::J2;
-    case TrajectoryModel::SecularJ2J4: return SecularOrder::J2SquaredJ4;
-    case TrajectoryModel::TwoBody:     break;
-    }
-    throw Error("Trajectory: invalid TrajectoryModel");
-}
-
-/// Two-body propagation from s0: seconds after the epoch -> state.
-std::function<StateVector(double)> twoBody(const StateVector& s0, double mu) {
-    return [s0, mu](double dt) { return propagateKepler(s0, dt, mu); };
-}
-
-/// Secular propagation with velocity = d(position)/dt, which the range rate needs (see
-/// SecularPropagatorCorrected). Shared, so copies of the function stay cheap.
-std::function<StateVector(double)> secular(std::shared_ptr<const SecularPropagatorCorrected> p) {
-    return [p = std::move(p)](double dt) { return p->propagate(dt); };
-}
 
 [[nodiscard]] bool isFinite(const StateVector& s) noexcept {
     return std::isfinite(s.r.x) && std::isfinite(s.r.y) && std::isfinite(s.r.z) && std::isfinite(s.v.x)
@@ -165,58 +140,21 @@ private:
     return T;
 }
 
+/// Throws astro::Error unless both trajectories are in the same frame, and not an Earth-fixed one
+/// (the relative velocity in a rotating frame is not the inertial one).
+void checkFrames(const Trajectory& first, const Trajectory& second, std::string_view function) {
+    detail::requireSameFrame(first, second, function, "the first trajectory", "the second");
+    detail::requireInertial(first, function, "the trajectories");
+}
+
 } // namespace
-
-Trajectory::Trajectory(const Time& epoch, const StateVector& state, TrajectoryModel model, const CentralBody& body)
-    : epoch_(epoch) {
-    if (model == TrajectoryModel::TwoBody) {
-        fromEpoch_ = twoBody(state, body.mu);
-    } else {
-        fromEpoch_ = secular(std::make_shared<const SecularPropagatorCorrected>(state, body, secularOrder(model)));
-    }
-}
-
-Trajectory::Trajectory(const Time&              epoch,
-                       const KeplerianElements& elements,
-                       TrajectoryModel          model,
-                       const CentralBody&       body)
-    : epoch_(epoch) {
-    if (model == TrajectoryModel::TwoBody) {
-        fromEpoch_ = twoBody(elementsToState(elements, body.mu), body.mu);
-    } else {
-        fromEpoch_ = secular(std::make_shared<const SecularPropagatorCorrected>(elements, body, secularOrder(model)));
-    }
-}
-
-Trajectory::Trajectory(const Time&                epoch,
-                       const EquinoctialElements& elements,
-                       TrajectoryModel            model,
-                       const CentralBody&         body)
-    : Trajectory(epoch, equinoctialToKeplerian(elements), model, body) {}
-
-Trajectory::Trajectory(StateFunction stateAt)
-    : stateAt_(std::move(stateAt)) {
-    if (!stateAt_) {
-        throw Error("Trajectory: empty state function");
-    }
-}
-
-StateVector Trajectory::state(const Time& t) const {
-    return fromEpoch_ ? fromEpoch_(t - epoch_) : stateAt_(t);
-}
-
-std::function<StateVector(double)> Trajectory::secondsAfter(const Time& origin) const {
-    if (fromEpoch_) {
-        return [f = fromEpoch_, offset = origin - epoch_](double s) { return f(offset + s); };
-    }
-    return [f = stateAt_, origin](double s) { return f(origin + s); };
-}
 
 CloseApproach closestApproach(const Trajectory&           first,
                               const Trajectory&           second,
                               const Time&                 start,
                               const Time&                 end,
                               const CloseApproachOptions& options) {
+    checkFrames(first, second, "closestApproach");
     const double                 T = windowLength(start, end, options);
     const Search                 search(first, second, start, options);
     std::optional<CloseApproach> best;
@@ -238,6 +176,7 @@ std::vector<CloseApproach> closeApproaches(const Trajectory&           first,
                                            const Time&                 end,
                                            double                      maxDistance,
                                            const CloseApproachOptions& options) {
+    checkFrames(first, second, "closeApproaches");
     const double T = windowLength(start, end, options);
     if (std::isnan(maxDistance)) {
         throw Error("closeApproaches: maxDistance is NaN");
@@ -573,49 +512,13 @@ void checkHardBodyRadius(double hardBodyRadius) {
 
 } // namespace
 
-UncertainTrajectory::UncertainTrajectory(const Time&        epoch,
-                                         const StateVector& state,
-                                         const Mat6&        covariance,
-                                         TrajectoryModel    model,
-                                         const CentralBody& body)
-    : trajectory_(epoch, state, model, body) {
-    for (const auto& row : covariance.m) {
-        for (double x : row) {
-            if (!std::isfinite(x)) {
-                throw Error("UncertainTrajectory: covariance is not finite");
-            }
-        }
-    }
-    if (model == TrajectoryModel::TwoBody) {
-        covarianceAt_ = [epoch, state, covariance, mu = body.mu](const Time& t) {
-            return propagateKeplerWithCovariance(state, t - epoch, covariance, mu);
-        };
-    } else {
-        auto p        = std::make_shared<const SecularPropagatorCorrected>(state, body, secularOrder(model));
-        covarianceAt_ = [epoch, covariance, p = std::move(p)](const Time& t) {
-            return p->propagateWithCovariance(t - epoch, covariance);
-        };
-    }
-}
-
-UncertainTrajectory::UncertainTrajectory(Trajectory trajectory, StateCovarianceFunction stateCovarianceAt)
-    : trajectory_(std::move(trajectory))
-    , covarianceAt_(std::move(stateCovarianceAt)) {
-    if (!covarianceAt_) {
-        throw Error("UncertainTrajectory: empty state-covariance function");
-    }
-}
-
-StateCovariance UncertainTrajectory::stateCovariance(const Time& t) const {
-    return covarianceAt_(t);
-}
-
 ConjunctionAssessment assessConjunction(const UncertainTrajectory&  first,
                                         const UncertainTrajectory&  second,
                                         const Time&                 start,
                                         const Time&                 end,
                                         double                      hardBodyRadius,
                                         const CloseApproachOptions& options) {
+    checkFrames(first.trajectory(), second.trajectory(), "assessConjunction");
     checkHardBodyRadius(hardBodyRadius);
     return assess(closestApproach(first.trajectory(), second.trajectory(), start, end, options),
                   first,
@@ -630,6 +533,7 @@ std::vector<ConjunctionAssessment> assessConjunctions(const UncertainTrajectory&
                                                       double                      hardBodyRadius,
                                                       double                      maxDistance,
                                                       const CloseApproachOptions& options) {
+    checkFrames(first.trajectory(), second.trajectory(), "assessConjunctions");
     checkHardBodyRadius(hardBodyRadius);
     std::vector<ConjunctionAssessment> out;
     for (const CloseApproach& c :

@@ -244,29 +244,36 @@ verification set to 0.12 mm. It outputs TEME; see [Satellite geometry](satellite
 
 `closestApproach(first, second, start, end)` finds the smallest distance between two objects over a
 time window. `closeApproaches(..., maxDistance)` lists every local minimum of the distance under a
-threshold: a conjunction list. Each object is a `Trajectory`, built from any of these:
+threshold: a conjunction list. Each object is a `Trajectory` (`orbit/trajectory.h`): a state as a
+function of time that carries its frame. Every way of building one names the frame:
 
 | Built from | Propagated with |
 |---|---|
-| `{epoch, StateVector}` | `TrajectoryModel::TwoBody` (default, `propagateKepler`), `SecularJ2` or `SecularJ2J4` (`SecularPropagatorCorrected`) |
-| `{epoch, KeplerianElements}` | the same; osculating elements for two-body, mean elements for the secular models |
-| `{epoch, EquinoctialElements}` | the same, via `equinoctialToKeplerian` |
-| any callable `StateVector(const Time&)`, e.g. a lambda | your own: a `NumericalPropagator`, an `Sgp4`, an ephemeris table, ... |
+| `{epoch, StateVector, frame}` | `TrajectoryModel::TwoBody` (default, `propagateKepler`), `SecularJ2` or `SecularJ2J4` (`SecularPropagatorCorrected`) |
+| `{epoch, KeplerianElements, frame}` | the same; osculating elements for two-body, mean elements for the secular models |
+| `{epoch, EquinoctialElements, frame}` | the same, via `equinoctialToKeplerian` |
+| `{frame, callable}`, a callable `StateVector(const Time&)` such as a lambda | your own: a `NumericalPropagator`, an ephemeris table, ... |
+| `sgp4Trajectory(sgp4, eop, frame)` | `Sgp4::propagate`, converted from TEME to `frame` |
+| `bodyTrajectory(eph, target, center)` | `Ephemeris::state`, in `Frame::GCRS` |
 
-So two element sets, two states, or one of each pass straight in:
+The model (two-body and secular) is inertial, so those three forms throw `astro::Error` for an
+Earth-fixed frame (TIRS, PEF, ITRS); a callable may be in any frame. Two element sets, two states,
+or one of each pass straight in:
 
 <!-- snippet: examples/propagation.cpp#close_approach -->
 ```cpp
 // Closest approach within a day of a state vector and an element set (either may be either, or
-// any function of time, e.g. [&prop](const Time& t) { return prop.propagate(t); }). Both must be
-// in the same inertial frame; the default model is two-body.
+// any function of time, e.g. {Frame::GCRS, [&prop](const Time& t) { return prop.propagate(t); }}).
+// Each trajectory says its frame; both must be in the same inertial frame, or the search throws.
+// The default model is two-body.
 const KeplerianElements debris{6780e3, 0.001, degToRad(97.6), 0.25, 0.0, 1.22};
 const Time              end = epoch + 86400.0;
-const CloseApproach     ca  = closestApproach({epoch, s0}, {epoch, debris}, epoch, end);
+const Trajectory        sat{epoch, s0, Frame::GCRS}, junk{epoch, debris, Frame::GCRS};
+const CloseApproach     ca = closestApproach(sat, junk, epoch, end);
 std::cout << "closest approach " << ca.distance / 1e3 << " km at " << ca.time.iso8601(0) << ", "
           << ca.relativeSpeed / 1e3 << " km/s\n";
 // Every approach within 10 km: a conjunction list.
-for (const CloseApproach& c : closeApproaches({epoch, s0}, {epoch, debris}, epoch, end, 10e3)) {
+for (const CloseApproach& c : closeApproaches(sat, junk, epoch, end, 10e3)) {
     std::cout << "  " << c.time.iso8601(0) << "  " << c.distance / 1e3 << " km\n";
 }
 ```
@@ -288,9 +295,11 @@ minimum a 0.5 s brute-force scan did, at the default step and at twice it (see
 [Accuracy](../accuracy.md#closest-approach-search)). `closestApproach` also compares the window's two ends
 (flagged `atBoundary`) for objects still closing at the end or already separating at the start.
 
-**Both objects must be in the same inertial frame.** Convert first if they are not (for example
-an `Sgp4` gives TEME; see [Reference frames](frames.md)). The secular models also need the Earth's
-pole as z (TOD, TEME or CIRS), as for `SecularPropagator`.
+**Both objects must be in the same inertial frame.** The search checks the frames of the two
+trajectories and throws `astro::Error` if they differ or are Earth-fixed (a relative velocity in a
+rotating frame is not the inertial one). Convert first if they are not (for example
+`sgp4Trajectory(sgp4, eop, Frame::GCRS)`; see [Reference frames](frames.md)). The secular models also
+need the Earth's pole as z (TOD, TEME or CIRS), as for `SecularPropagator`.
 
 **Secular velocity.** The secular models use `SecularPropagatorCorrected`, whose velocity is the
 time derivative of its position (see [Two velocities](propagation.md#two-velocities-secularpropagator-or-secularpropagatorcorrected)).
@@ -370,20 +379,22 @@ true (false confidence).
 
 `assessConjunction` and `assessConjunctions` do all three steps from each object's state and
 covariance at its epoch: find the approach, propagate both covariances to it, and compute the
-probability. Each object is an `UncertainTrajectory`:
+probability. Each object is an `UncertainTrajectory`, whose covariance is in the frame of its
+trajectory; as for `closestApproach`, both must be in the same inertial frame:
 
 | Built from | Covariance propagated with |
 |---|---|
-| `{epoch, state, covariance}` | `propagateKeplerWithCovariance` (default `TrajectoryModel::TwoBody`) |
-| `{epoch, state, covariance, TrajectoryModel::SecularJ2J4}` (or `SecularJ2`) | `SecularPropagatorCorrected::propagateWithCovariance` |
-| a `Trajectory` and any function of time returning a `StateCovariance` | your own: a `NumericalPropagator`'s `propagateGridWithCovariance`, `EstimateTracker::predict`, ... |
+| `{epoch, state, covariance, frame}` | `propagateKeplerWithCovariance` (default `TrajectoryModel::TwoBody`) |
+| `{epoch, state, covariance, frame, TrajectoryModel::SecularJ2J4}` (or `SecularJ2`) | `SecularPropagatorCorrected::propagateWithCovariance` |
+| a `Trajectory` (which has the frame) and any function of time returning a `StateCovariance` | your own: a `NumericalPropagator`'s `propagateGridWithCovariance`, `EstimateTracker::predict`, ... |
 
 <!-- snippet: examples/propagation.cpp#conjunction_assessment -->
 ```cpp
 // The same from each object's state and covariance at the epoch, in one call: the covariances
 // are propagated to every approach within 10 km with the trajectory's model (two-body here;
-// TrajectoryModel::SecularJ2J4 needs a frame with z along the pole). 1 sigma per axis: 100 m and
-// 10 cm/s for the first object, 1 km and 1 m/s for the debris.
+// TrajectoryModel::SecularJ2J4 needs a frame with z along the pole, such as Frame::TOD). Each
+// covariance is in its state's frame. 1 sigma per axis: 100 m and 10 cm/s for the first object,
+// 1 km and 1 m/s for the debris.
 Mat6 P1{}, P2{};
 for (std::size_t i = 0; i < 3; ++i) {
     P1(i, i)         = 100.0 * 100.0;
@@ -391,7 +402,8 @@ for (std::size_t i = 0; i < 3; ++i) {
     P2(i, i)         = 1000.0 * 1000.0;
     P2(i + 3, i + 3) = 1.0 * 1.0;
 }
-const UncertainTrajectory first{epoch, s0, P1}, second{epoch, elementsToState(debris), P2};
+const UncertainTrajectory first{epoch, s0, P1, Frame::GCRS},
+    second{epoch, elementsToState(debris), P2, Frame::GCRS};
 for (const ConjunctionAssessment& c : assessConjunctions(first, second, epoch, end, 6.0, 10e3)) {
     std::cout << "  " << c.approach.time.iso8601(0) << "  " << c.approach.distance / 1e3 << " km, Pc "
               << std::scientific << std::setprecision(2) << c.collision.probability << std::fixed
@@ -420,7 +432,7 @@ most probable collision, so to rank a window's approaches use `assessConjunction
 ```cpp
 const auto prop = NumericalPropagator::j2j4(epoch, s0, Frame::TOD);
 const UncertainTrajectory object{
-    Trajectory([&prop](const Time& t) { return prop.propagate(t); }),
+    Trajectory(Frame::TOD, [&prop](const Time& t) { return prop.propagate(t); }),
     [&prop, P0, epoch](const Time& t) { return prop.propagateWithCovariance(t - epoch, P0); }};
 ```
 

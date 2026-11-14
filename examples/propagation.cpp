@@ -87,15 +87,17 @@ int main() {
 
     //! [close_approach]
     // Closest approach within a day of a state vector and an element set (either may be either, or
-    // any function of time, e.g. [&prop](const Time& t) { return prop.propagate(t); }). Both must be
-    // in the same inertial frame; the default model is two-body.
+    // any function of time, e.g. {Frame::GCRS, [&prop](const Time& t) { return prop.propagate(t); }}).
+    // Each trajectory says its frame; both must be in the same inertial frame, or the search throws.
+    // The default model is two-body.
     const KeplerianElements debris{6780e3, 0.001, degToRad(97.6), 0.25, 0.0, 1.22};
     const Time              end = epoch + 86400.0;
-    const CloseApproach     ca  = closestApproach({epoch, s0}, {epoch, debris}, epoch, end);
+    const Trajectory        sat{epoch, s0, Frame::GCRS}, junk{epoch, debris, Frame::GCRS};
+    const CloseApproach     ca = closestApproach(sat, junk, epoch, end);
     std::cout << "closest approach " << ca.distance / 1e3 << " km at " << ca.time.iso8601(0) << ", "
               << ca.relativeSpeed / 1e3 << " km/s\n";
     // Every approach within 10 km: a conjunction list.
-    for (const CloseApproach& c : closeApproaches({epoch, s0}, {epoch, debris}, epoch, end, 10e3)) {
+    for (const CloseApproach& c : closeApproaches(sat, junk, epoch, end, 10e3)) {
         std::cout << "  " << c.time.iso8601(0) << "  " << c.distance / 1e3 << " km\n";
     }
     //! [close_approach]
@@ -119,8 +121,9 @@ int main() {
     //! [conjunction_assessment]
     // The same from each object's state and covariance at the epoch, in one call: the covariances
     // are propagated to every approach within 10 km with the trajectory's model (two-body here;
-    // TrajectoryModel::SecularJ2J4 needs a frame with z along the pole). 1 sigma per axis: 100 m and
-    // 10 cm/s for the first object, 1 km and 1 m/s for the debris.
+    // TrajectoryModel::SecularJ2J4 needs a frame with z along the pole, such as Frame::TOD). Each
+    // covariance is in its state's frame. 1 sigma per axis: 100 m and 10 cm/s for the first object,
+    // 1 km and 1 m/s for the debris.
     Mat6 P1{}, P2{};
     for (std::size_t i = 0; i < 3; ++i) {
         P1(i, i)         = 100.0 * 100.0;
@@ -128,7 +131,8 @@ int main() {
         P2(i, i)         = 1000.0 * 1000.0;
         P2(i + 3, i + 3) = 1.0 * 1.0;
     }
-    const UncertainTrajectory first{epoch, s0, P1}, second{epoch, elementsToState(debris), P2};
+    const UncertainTrajectory first{epoch, s0, P1, Frame::GCRS},
+        second{epoch, elementsToState(debris), P2, Frame::GCRS};
     for (const ConjunctionAssessment& c : assessConjunctions(first, second, epoch, end, 6.0, 10e3)) {
         std::cout << "  " << c.approach.time.iso8601(0) << "  " << c.approach.distance / 1e3 << " km, Pc "
                   << std::scientific << std::setprecision(2) << c.collision.probability << std::fixed

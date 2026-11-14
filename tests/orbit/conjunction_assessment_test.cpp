@@ -26,6 +26,7 @@
 #include <memory>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -89,11 +90,12 @@ TEST(ConjunctionAssessment, TwoBodyIsTheChainOfItsParts) {
     const Time       start = c.tca - 600.0, end = c.tca + 600.0;
 
     const ConjunctionAssessment a =
-        assessConjunction({c.epoch, c.first, P1}, {c.epoch, c.second, P2}, start, end, 20.0);
+        assessConjunction({c.epoch, c.first, P1, Frame::GCRS}, {c.epoch, c.second, P2, Frame::GCRS}, start, end, 20.0);
 
     // The same approach as closestApproach, the covariances of propagateKeplerWithCovariance, and
     // the probability of collisionProbability.
-    const CloseApproach ca = closestApproach({c.epoch, c.first}, {c.epoch, c.second}, start, end);
+    const CloseApproach ca =
+        closestApproach({c.epoch, c.first, Frame::GCRS}, {c.epoch, c.second, Frame::GCRS}, start, end);
     EXPECT_EQ(a.approach.time - ca.time, 0.0);
     EXPECT_EQ(a.approach.distance, ca.distance);
     EXPECT_NEAR(a.approach.time - c.tca, 0.0, 1e-6);
@@ -114,10 +116,13 @@ TEST(ConjunctionAssessment, MatchesMonteCarloOfInitialStates) {
     // The radius is large enough for Pc ~ 0.3, so that 100 000 draws resolve it to 0.5 %.
     const Crossing60            c;
     const double                sr = 10.0, sv = 0.005, hbr = 60.0;
-    const Mat6                  P = diagonalCovariance(sr, sv);
-    const ConjunctionAssessment a =
-        assessConjunction({c.epoch, c.first, P}, {c.epoch, c.second, P}, c.tca - 600.0, c.tca + 600.0, hbr);
-    const double pc = a.collision.probability;
+    const Mat6                  P  = diagonalCovariance(sr, sv);
+    const ConjunctionAssessment a  = assessConjunction({c.epoch, c.first, P, Frame::GCRS},
+                                                       {c.epoch, c.second, P, Frame::GCRS},
+                                                      c.tca - 600.0,
+                                                      c.tca + 600.0,
+                                                      hbr);
+    const double                pc = a.collision.probability;
 
     std::mt19937_64                  rng(3);
     std::normal_distribution<double> n01;
@@ -131,7 +136,11 @@ TEST(ConjunctionAssessment, MatchesMonteCarloOfInitialStates) {
     int       hits = 0;
     for (int k = 0; k < N; ++k) {
         const StateVector a1 = draw(c.first), a2 = draw(c.second);
-        hits += closestApproach({c.epoch, a1}, {c.epoch, a2}, c.tca - 60.0, c.tca + 60.0).distance < hbr ? 1 : 0;
+        hits +=
+            closestApproach({c.epoch, a1, Frame::GCRS}, {c.epoch, a2, Frame::GCRS}, c.tca - 60.0, c.tca + 60.0).distance
+                    < hbr
+                ? 1
+                : 0;
     }
     const double mc    = static_cast<double>(hits) / N;
     const double sigma = std::sqrt(pc * (1.0 - pc) / N);
@@ -142,8 +151,8 @@ TEST(ConjunctionAssessment, MatchesMonteCarloOfInitialStates) {
 TEST(ConjunctionAssessment, SecularModel) {
     const Crossing60                 c;
     const Mat6                       P = diagonalCovariance(10.0, 0.005);
-    const UncertainTrajectory        first{c.epoch, c.first, P, TrajectoryModel::SecularJ2J4};
-    const UncertainTrajectory        second{c.epoch, c.second, P, TrajectoryModel::SecularJ2J4};
+    const UncertainTrajectory        first{c.epoch, c.first, P, Frame::TOD, TrajectoryModel::SecularJ2J4};
+    const UncertainTrajectory        second{c.epoch, c.second, P, Frame::TOD, TrajectoryModel::SecularJ2J4};
     const SecularPropagatorCorrected prop(c.first);
 
     // The covariance is SecularPropagatorCorrected's, and its state is the trajectory's.
@@ -173,15 +182,15 @@ TEST(ConjunctionAssessment, AnyTrajectoryWithACovarianceFunction) {
                                                             c.second,
                                                             std::vector<std::shared_ptr<const ForceModel>>{mass},
                                                             tight);
-    const UncertainTrajectory numerical{Trajectory([prop](const Time& t) { return prop->propagate(t); }),
+    const UncertainTrajectory numerical{Trajectory(Frame::GCRS, [prop](const Time& t) { return prop->propagate(t); }),
                                         [prop, P, epoch = c.epoch](const Time& t) {
                                             return prop->propagateGridWithCovariance(t - epoch, 1.0, 1, P)[0];
                                         }};
 
-    const UncertainTrajectory   first{c.epoch, c.first, P};
+    const UncertainTrajectory   first{c.epoch, c.first, P, Frame::GCRS};
     const ConjunctionAssessment viaFunction = assessConjunction(first, numerical, c.tca - 600.0, c.tca + 600.0, 20.0);
     const ConjunctionAssessment twoBody =
-        assessConjunction(first, {c.epoch, c.second, P}, c.tca - 600.0, c.tca + 600.0, 20.0);
+        assessConjunction(first, {c.epoch, c.second, P, Frame::GCRS}, c.tca - 600.0, c.tca + 600.0, 20.0);
     EXPECT_NEAR(viaFunction.approach.time - twoBody.approach.time, 0.0, 1e-6);
     expectMatNear(viaFunction.secondCovariance, twoBody.secondCovariance, 1e-7, "covariance");
     EXPECT_NEAR(viaFunction.collision.probability, twoBody.collision.probability, 1e-6 * twoBody.collision.probability);
@@ -190,7 +199,7 @@ TEST(ConjunctionAssessment, AnyTrajectoryWithACovarianceFunction) {
 TEST(ConjunctionAssessment, ListAssessesEveryApproach) {
     const Crossing60          c;
     const Mat6                P = diagonalCovariance(10.0, 0.005);
-    const UncertainTrajectory first{c.epoch, c.first, P}, second{c.epoch, c.second, P};
+    const UncertainTrajectory first{c.epoch, c.first, P, Frame::GCRS}, second{c.epoch, c.second, P, Frame::GCRS};
     const Time                end = c.epoch + 86400.0;
 
     const std::vector<ConjunctionAssessment> all = assessConjunctions(first, second, c.epoch, end, 20.0);
@@ -219,15 +228,76 @@ TEST(ConjunctionAssessment, Errors) {
     const Mat6       P   = diagonalCovariance(10.0, 0.005);
     Mat6             bad = P;
     bad(2, 4)            = std::numeric_limits<double>::quiet_NaN();
-    EXPECT_THROW((void)UncertainTrajectory(c.epoch, c.first, bad), Error);
-    EXPECT_THROW(
-        (void)UncertainTrajectory(Trajectory{c.epoch, c.first}, UncertainTrajectory::StateCovarianceFunction{}),
-        Error);
-    const UncertainTrajectory a{c.epoch, c.first, P}, b{c.epoch, c.second, P};
+    EXPECT_THROW((void)UncertainTrajectory(c.epoch, c.first, bad, Frame::GCRS), Error);
+    EXPECT_THROW((void)UncertainTrajectory(Trajectory{c.epoch, c.first, Frame::GCRS},
+                                           UncertainTrajectory::StateCovarianceFunction{}),
+                 Error);
+    const UncertainTrajectory a{c.epoch, c.first, P, Frame::GCRS}, b{c.epoch, c.second, P, Frame::GCRS};
     // The radius is checked even when no approach is found.
     EXPECT_THROW((void)assessConjunctions(a, b, c.epoch, c.epoch + 60.0, 0.0, 1.0), Error);
     EXPECT_THROW((void)assessConjunction(a, b, c.epoch, c.epoch + 60.0, -1.0), Error);
     EXPECT_THROW((void)assessConjunction(a, b, c.epoch + 60.0, c.epoch, 20.0), Error); // window backwards
+}
+
+namespace {
+
+/// The message of the astro::Error that `call` throws, or "no error".
+template <class Call>
+std::string errorMessage(Call&& call) {
+    try {
+        call();
+    } catch (const Error& e) {
+        return e.what();
+    }
+    return "no error";
+}
+
+} // namespace
+
+TEST(ConjunctionAssessment, ChecksTheFrames) {
+    const Crossing60 c;
+    const Mat6       P     = diagonalCovariance(10.0, 0.005);
+    const Time       start = c.tca - 600.0, end = c.tca + 600.0;
+    // The frame comes from the state, or from the Trajectory, and is the covariance's too.
+    const UncertainTrajectory gcrs{c.epoch, c.first, P, Frame::GCRS}, teme{c.epoch, c.second, P, Frame::TEME};
+    EXPECT_EQ(gcrs.frame(), Frame::GCRS);
+    EXPECT_EQ(teme.frame(), Frame::TEME);
+    EXPECT_EQ(teme.trajectory().frame(), Frame::TEME);
+
+    // Two frames: an error that names both, from each function.
+    for (const std::string& message : {errorMessage([&] { (void)assessConjunction(gcrs, teme, start, end, 20.0); }),
+                                       errorMessage([&] { (void)assessConjunctions(gcrs, teme, start, end, 20.0); })}) {
+        EXPECT_NE(message.find("assessConjunction"), std::string::npos) << message;
+        EXPECT_NE(message.find("Frame::GCRS"), std::string::npos) << message;
+        EXPECT_NE(message.find("Frame::TEME"), std::string::npos) << message;
+    }
+
+    // The analytic models are inertial: an Earth-fixed state is an error.
+    for (Frame f : {Frame::TIRS, Frame::PEF, Frame::ITRS}) {
+        EXPECT_THROW((void)UncertainTrajectory(c.epoch, c.first, P, f), Error) << f;
+    }
+
+    // A function may be Earth-fixed, but the search is not: the relative velocity in a rotating
+    // frame is not the inertial one.
+    const auto earthFixed = [&](const StateVector& s0) {
+        return UncertainTrajectory(
+            Trajectory{Frame::ITRS, [s0, epoch = c.epoch](const Time& t) { return propagateKepler(s0, t - epoch); }},
+            [P](const Time&) { return StateCovariance{{}, P}; });
+    };
+    const UncertainTrajectory itrs1 = earthFixed(c.first), itrs2 = earthFixed(c.second);
+    const std::string         m1 = errorMessage([&] { (void)assessConjunction(itrs1, itrs2, start, end, 20.0); });
+    const std::string         m2 = errorMessage([&] { (void)assessConjunctions(itrs1, itrs2, start, end, 20.0); });
+    EXPECT_NE(m1.find("assessConjunction: "), std::string::npos) << m1;
+    EXPECT_NE(m1.find("Frame::ITRS"), std::string::npos) << m1;
+    EXPECT_NE(m2.find("assessConjunctions: "), std::string::npos) << m2;
+    EXPECT_NE(m2.find("inertial"), std::string::npos) << m2;
+
+    // The same states in another inertial frame give the same numbers: the frame is a label.
+    const UncertainTrajectory   teme1{c.epoch, c.first, P, Frame::TEME};
+    const ConjunctionAssessment inGcrs = assessConjunction(gcrs, {c.epoch, c.second, P, Frame::GCRS}, start, end, 20.0);
+    const ConjunctionAssessment inTeme = assessConjunction(teme1, teme, start, end, 20.0);
+    EXPECT_EQ(inGcrs.approach.distance, inTeme.approach.distance);
+    EXPECT_EQ(inGcrs.collision.probability, inTeme.collision.probability);
 }
 
 TEST(ConjunctionAssessment, ApproachAtAnEndOfTheWindowIsFlaggedAndAssessedThere) {
@@ -240,7 +310,7 @@ TEST(ConjunctionAssessment, ApproachAtAnEndOfTheWindowIsFlaggedAndAssessedThere)
     // the covariances are those 100 s away).
     const Crossing60            c;
     const Mat6                  P1 = diagonalCovariance(10.0, 0.005), P2 = diagonalCovariance(30.0, 0.02);
-    const UncertainTrajectory   first{c.epoch, c.first, P1}, second{c.epoch, c.second, P2};
+    const UncertainTrajectory   first{c.epoch, c.first, P1, Frame::GCRS}, second{c.epoch, c.second, P2, Frame::GCRS};
     const ConjunctionAssessment inside = assessConjunction(first, second, c.tca - 600.0, c.tca + 600.0, 20.0);
     EXPECT_FALSE(inside.approach.atBoundary);
     for (const auto& [start, end, edge] : {
@@ -270,24 +340,25 @@ TEST(ConjunctionAssessment, CovarianceFunctionThatIsNotFiniteIsAnError) {
     // An exception thrown by the function passes through.
     const Crossing60          c;
     const Mat6                P = diagonalCovariance(10.0, 0.005);
-    const UncertainTrajectory first{c.epoch, c.first, P};
+    const UncertainTrajectory first{c.epoch, c.first, P, Frame::GCRS};
     const auto                withCovariance = [&](double value, std::size_t i, std::size_t j) {
-        return UncertainTrajectory(Trajectory{c.epoch, c.second}, [=, epoch = c.epoch, s = c.second](const Time& t) {
-            StateCovariance out  = propagateKeplerWithCovariance(s, t - epoch, P);
-            out.covariance(i, j) = value;
-            out.covariance(j, i) = value;
-            return out;
-        });
+        return UncertainTrajectory(Trajectory{c.epoch, c.second, Frame::GCRS},
+                                   [=, epoch = c.epoch, s = c.second](const Time& t) {
+                                       StateCovariance out = propagateKeplerWithCovariance(s, t - epoch, P);
+                                       out.covariance(i, j) = value;
+                                       out.covariance(j, i) = value;
+                                       return out;
+                                   });
     };
     const double nan = std::numeric_limits<double>::quiet_NaN(), inf = std::numeric_limits<double>::infinity();
     const Time   start = c.tca - 600.0, end = c.tca + 600.0;
     EXPECT_THROW((void)assessConjunction(first, withCovariance(nan, 0, 1), start, end, 20.0), Error);
     EXPECT_THROW((void)assessConjunction(first, withCovariance(inf, 2, 2), start, end, 20.0), Error);
     EXPECT_THROW((void)assessConjunctions(first, withCovariance(nan, 1, 1), start, end, 20.0), Error);
-    const ConjunctionAssessment clean    = assessConjunction(first, {c.epoch, c.second, P}, start, end, 20.0);
+    const ConjunctionAssessment clean = assessConjunction(first, {c.epoch, c.second, P, Frame::GCRS}, start, end, 20.0);
     const ConjunctionAssessment velocity = assessConjunction(first, withCovariance(nan, 4, 4), start, end, 20.0);
     EXPECT_EQ(velocity.collision.probability, clean.collision.probability);
-    const UncertainTrajectory throwing(Trajectory{c.epoch, c.second}, [](const Time&) -> StateCovariance {
+    const UncertainTrajectory throwing(Trajectory{c.epoch, c.second, Frame::GCRS}, [](const Time&) -> StateCovariance {
         throw std::runtime_error("no covariance");
     });
     EXPECT_THROW((void)assessConjunction(first, throwing, start, end, 20.0), std::runtime_error);

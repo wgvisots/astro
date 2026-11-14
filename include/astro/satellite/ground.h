@@ -18,11 +18,11 @@
 
 #pragma once
 
-#include <functional>
 #include <vector>
 
 #include "astro/core/vec.h"
 #include "astro/geodesy/geodetic.h"
+#include "astro/orbit/trajectory.h"
 #include "astro/time/time.h"
 
 /// \file
@@ -33,18 +33,18 @@ namespace astro {
 /// normal through the satellite) of an ITRS position; h is the altitude.
 [[nodiscard]] Geodetic subSatellitePoint(const Vec3& satItrs, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
-/// Sub-satellite points at times start, start+step, ..., end (`end` is the last
-/// point even when it is not a whole number of steps from `start`). An empty window
-/// (end == start) gives the one point at `start`. Throws astro::Error if `end` is
-/// before `start`, if either time is NaN, if `step` is not positive and finite, or
-/// if the window holds more than 2e9 steps. Also throws if `end - start` does (one
-/// of the two in UT1, or a UTC time before 1960; see Time). An exception thrown by
-/// `satItrs` passes through.
-[[nodiscard]] std::vector<Geodetic> groundTrack(const std::function<Vec3(const Time&)>& satItrs,
-                                                const Time&                             start,
-                                                const Time&                             end,
-                                                double                                  step,
-                                                const Ellipsoid&                        ell = Ellipsoid::wgs84());
+/// Sub-satellite points of satellite `sat` (a Trajectory in Frame::ITRS) at times start,
+/// start+step, ..., end (`end` is the last point even when it is not a whole number of steps from
+/// `start`). An empty window (end == start) gives the one point at `start`. Throws astro::Error if
+/// `sat` is not in Frame::ITRS, if `end` is before `start`, if either time is NaN, if `step` is not
+/// positive and finite, or if the window holds more than 2e9 steps. Also throws if `end - start`
+/// does (one of the two in UT1, or a UTC time before 1960; see Time). An exception thrown by `sat`
+/// passes through.
+[[nodiscard]] std::vector<Geodetic> groundTrack(const Trajectory& sat,
+                                                const Time&       start,
+                                                const Time&       end,
+                                                double            step,
+                                                const Ellipsoid&  ell = Ellipsoid::wgs84());
 
 /// Earth central angle (rad) from the sub-satellite point to the edge of
 /// coverage for a satellite at `altitude` and a minimum elevation, spherical

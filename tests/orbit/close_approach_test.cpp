@@ -19,9 +19,11 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <initializer_list>
 #include <memory>
 #include <random>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "astro/core/angle.h"
@@ -104,8 +106,8 @@ struct Conjunction {
 TEST(CloseApproach, FindsAnExactConstructedConjunction) {
     const Conjunction c;
     // One object as elements, the other as a state at a different epoch.
-    const Trajectory first{kEpoch, c.elements};
-    const Trajectory second{kEpoch + Conjunction::kTca, c.atTca};
+    const Trajectory first{kEpoch, c.elements, Frame::GCRS};
+    const Trajectory second{kEpoch + Conjunction::kTca, c.atTca, Frame::GCRS};
     const Time       end = kEpoch + 86400.0;
 
     const CloseApproach ca = closestApproach(first, second, kEpoch, end);
@@ -120,7 +122,7 @@ TEST(CloseApproach, FindsAnExactConstructedConjunction) {
     EXPECT_NEAR(dot(ca.relativePosition(), ca.relativeVelocity()), 0.0, 1e-3); // zero range rate
 
     // The same answer through the function-of-time constructor, and with the arguments swapped.
-    const Trajectory    viaFunction([&first](const Time& t) { return first.state(t); });
+    const Trajectory    viaFunction(Frame::GCRS, [&first](const Time& t) { return first.state(t); });
     const CloseApproach swapped = closestApproach(second, viaFunction, kEpoch, end);
     EXPECT_NEAR(swapped.time - ca.time, 0.0, 1e-6);
     EXPECT_NEAR(swapped.distance, ca.distance, 1e-9);
@@ -128,8 +130,8 @@ TEST(CloseApproach, FindsAnExactConstructedConjunction) {
 
 TEST(CloseApproach, ListsEveryMinimumAgainstBruteForce) {
     const Conjunction c;
-    const Trajectory  first{kEpoch, c.elements};
-    const Trajectory  second{kEpoch + Conjunction::kTca, c.atTca};
+    const Trajectory  first{kEpoch, c.elements, Frame::GCRS};
+    const Trajectory  second{kEpoch + Conjunction::kTca, c.atTca, Frame::GCRS};
     const double      T = 86400.0;
 
     // The orbits cross at two antipodal points, so the objects meet every half revolution, a
@@ -173,8 +175,8 @@ TEST(CloseApproach, RandomOrbitPairsMatchBruteForce) {
     };
     const double T = 86400.0;
     for (int trial = 0; trial < 12; ++trial) {
-        const Trajectory                 first{kEpoch, randomOrbit()};
-        const Trajectory                 second{kEpoch - 3600.0 * trial, elementsToState(randomOrbit())};
+        const Trajectory                 first{kEpoch, randomOrbit(), Frame::GCRS};
+        const Trajectory                 second{kEpoch - 3600.0 * trial, elementsToState(randomOrbit()), Frame::GCRS};
         const std::vector<CloseApproach> all   = closeApproaches(first, second, kEpoch, kEpoch + T);
         const std::vector<Minimum>       brute = bruteForceMinima(first, second, kEpoch, T, 2.0);
         ASSERT_EQ(all.size(), brute.size()) << "trial " << trial;
@@ -199,8 +201,8 @@ TEST(CloseApproach, NumericalPropagatorThroughAFunction) {
     const Conjunction         c;
     const StateVector         s0 = elementsToState(c.elements);
     const NumericalPropagator prop{kEpoch, s0, {std::make_shared<GravityField>(CentralBody::pointMass())}};
-    const Trajectory          numerical([&prop](const Time& t) { return prop.propagate(t); });
-    const Trajectory          second{kEpoch + Conjunction::kTca, c.atTca};
+    const Trajectory          numerical(Frame::GCRS, [&prop](const Time& t) { return prop.propagate(t); });
+    const Trajectory          second{kEpoch + Conjunction::kTca, c.atTca, Frame::GCRS};
     const CloseApproach       ca =
         closestApproach(numerical, second, kEpoch + Conjunction::kTca - 3000.0, kEpoch + Conjunction::kTca + 3000.0);
     EXPECT_FALSE(ca.atBoundary);
@@ -211,13 +213,13 @@ TEST(CloseApproach, NumericalPropagatorThroughAFunction) {
 TEST(CloseApproach, SecularModelsAndEquinoctialElements) {
     const KeplerianElements el{7000 * km, 0.01, degToRad(51.6), 0.3, 0.2, 0.1};
     const SecularPropagator sp(el);
-    const Trajectory        secular{kEpoch, el, TrajectoryModel::SecularJ2J4};
+    const Trajectory        secular{kEpoch, el, Frame::TOD, TrajectoryModel::SecularJ2J4};
     test::expectVecNear(secular.state(kEpoch + 5000.0).r, sp.propagate(5000.0).r, 1e-6);
     const SecularPropagator spJ2(el, {}, SecularOrder::J2);
-    const Trajectory        secularJ2{kEpoch, el, TrajectoryModel::SecularJ2};
+    const Trajectory        secularJ2{kEpoch, el, Frame::TOD, TrajectoryModel::SecularJ2};
     test::expectVecNear(secularJ2.state(kEpoch - 5000.0).r, spJ2.propagate(-5000.0).r, 1e-6);
     const StateVector s0 = elementsToState(el);
-    const Trajectory  secularState{kEpoch, s0, TrajectoryModel::SecularJ2J4};
+    const Trajectory  secularState{kEpoch, s0, Frame::TOD, TrajectoryModel::SecularJ2J4};
     test::expectVecNear(secularState.state(kEpoch + 5000.0).r, SecularPropagator(s0).propagate(5000.0).r, 1e-6);
 
     // The secular models are SecularPropagatorCorrected (velocity = d(position)/dt).
@@ -226,8 +228,8 @@ TEST(CloseApproach, SecularModelsAndEquinoctialElements) {
     EXPECT_EQ(secular.state(kEpoch + 7000.0).v, corrected.v);
 
     // Equinoctial elements give the same trajectory as the Keplerian ones.
-    const Trajectory kepler{kEpoch, el};
-    const Trajectory equinoctial{kEpoch, keplerianToEquinoctial(el)};
+    const Trajectory kepler{kEpoch, el, Frame::TOD};
+    const Trajectory equinoctial{kEpoch, keplerianToEquinoctial(el), Frame::TOD};
     test::expectVecNear(equinoctial.state(kEpoch + 5000.0).r, kepler.state(kEpoch + 5000.0).r, 1e-4);
 
     // The node regression separates a J2/J4 orbit from its two-body twin; the search follows it.
@@ -254,11 +256,13 @@ TEST(CloseApproach, ConstantDistanceHasNoMinimum) {
         const Trajectory lead{
             kEpoch,
             KeplerianElements{7000 * km, 0.0, 0.9, 0.3, 0.0, 0.001},
+            Frame::TOD,
             model
         };
         const Trajectory trail{
             kEpoch,
             KeplerianElements{7000 * km, 0.0, 0.9, 0.3, 0.0, 0.0},
+            Frame::TOD,
             model
         };
         EXPECT_TRUE(closeApproaches(lead, trail, kEpoch, kEpoch + 86400.0).empty()) << model;
@@ -270,11 +274,13 @@ TEST(CloseApproach, ConstantDistanceHasNoMinimum) {
 
 TEST(CloseApproach, AcceptsACallableAndAMinimumAtTheWindowEnd) {
     const Conjunction c;
-    const Trajectory  first{kEpoch, c.elements};
-    const Trajectory  second{kEpoch + Conjunction::kTca, c.atTca};
-    // A lambda converts to a Trajectory where one is expected.
-    const CloseApproach viaLambda =
-        closestApproach([&first](const Time& t) { return first.state(t); }, second, kEpoch + 36000.0, kEpoch + 38000.0);
+    const Trajectory  first{kEpoch, c.elements, Frame::GCRS};
+    const Trajectory  second{kEpoch + Conjunction::kTca, c.atTca, Frame::GCRS};
+    // A frame and a lambda make a Trajectory where one is expected.
+    const CloseApproach viaLambda = closestApproach({Frame::GCRS, [&first](const Time& t) { return first.state(t); }},
+                                                    second,
+                                                    kEpoch + 36000.0,
+                                                    kEpoch + 38000.0);
     EXPECT_NEAR(viaLambda.time - kEpoch, Conjunction::kTca, 1e-6);
     EXPECT_NEAR(viaLambda.distance, Conjunction::kMiss, 1e-6);
 
@@ -290,8 +296,8 @@ TEST(CloseApproach, AcceptsACallableAndAMinimumAtTheWindowEnd) {
 
 TEST(CloseApproach, WindowEnds) {
     const Conjunction c;
-    const Trajectory  first{kEpoch, c.elements};
-    const Trajectory  second{kEpoch + Conjunction::kTca, c.atTca};
+    const Trajectory  first{kEpoch, c.elements, Frame::GCRS};
+    const Trajectory  second{kEpoch + Conjunction::kTca, c.atTca, Frame::GCRS};
     const Time        tca = kEpoch + Conjunction::kTca;
 
     // Still closing at the end of the window: the minimum is the end.
@@ -322,8 +328,8 @@ TEST(CloseApproach, WindowEnds) {
 
 TEST(CloseApproach, Errors) {
     const Conjunction c;
-    const Trajectory  first{kEpoch, c.elements};
-    const Trajectory  second{kEpoch, c.atTca};
+    const Trajectory  first{kEpoch, c.elements, Frame::GCRS};
+    const Trajectory  second{kEpoch, c.atTca, Frame::GCRS};
     const Time        end = kEpoch + 3600.0;
 
     EXPECT_THROW((void)closestApproach(first, second, end, kEpoch), Error);
@@ -335,8 +341,8 @@ TEST(CloseApproach, Errors) {
     EXPECT_THROW((void)closestApproach(first, second, kEpoch, end, bad), Error);
     EXPECT_THROW((void)closeApproaches(first, second, kEpoch, end, std::nan("")), Error);
 
-    EXPECT_THROW(Trajectory{Trajectory::StateFunction{}}, Error);
-    const Trajectory nan([](const Time&) {
+    EXPECT_THROW(Trajectory(Frame::GCRS, Trajectory::StateFunction{}), Error);
+    const Trajectory nan(Frame::GCRS, [](const Time&) {
         return StateVector{
             {std::nan(""), 0.0,    0.0},
             {0.0,          7500.0, 0.0}
@@ -349,11 +355,103 @@ TEST(CloseApproach, Errors) {
         {7000 * km, 0.0,     0.0},
         {0.0,       12 * km, 0.0}
     };
-    EXPECT_NO_THROW(Trajectory(kEpoch, hyperbolic));
-    EXPECT_THROW(Trajectory(kEpoch, hyperbolic, TrajectoryModel::SecularJ2J4), Error);
-    EXPECT_THROW(Trajectory(kEpoch, hyperbolic, static_cast<TrajectoryModel>(42)), Error);
+    EXPECT_NO_THROW(Trajectory(kEpoch, hyperbolic, Frame::GCRS));
+    EXPECT_THROW(Trajectory(kEpoch, hyperbolic, Frame::GCRS, TrajectoryModel::SecularJ2J4), Error);
+    EXPECT_THROW(Trajectory(kEpoch, hyperbolic, Frame::GCRS, static_cast<TrajectoryModel>(42)), Error);
 
     std::ostringstream os;
     os << TrajectoryModel::SecularJ2 << ' ' << static_cast<TrajectoryModel>(42);
     EXPECT_EQ(os.str(), "TrajectoryModel::SecularJ2 TrajectoryModel::INVALID_VALUE");
+}
+
+namespace {
+
+/// The message of the astro::Error that `call` throws, or "no error".
+template <class Call>
+std::string errorMessage(Call&& call) {
+    try {
+        call();
+    } catch (const Error& e) {
+        return e.what();
+    }
+    return "no error";
+}
+
+/// Whether `message` holds every one of `parts`.
+testing::AssertionResult names(const std::string& message, std::initializer_list<const char*> parts) {
+    for (const char* part : parts) {
+        if (message.find(part) == std::string::npos) {
+            return testing::AssertionFailure() << "\"" << message << "\" does not name \"" << part << "\"";
+        }
+    }
+    return testing::AssertionSuccess();
+}
+
+} // namespace
+
+TEST(Trajectory, CarriesItsFrame) {
+    const Conjunction c;
+    EXPECT_EQ(Trajectory(kEpoch, c.elements, Frame::TEME).frame(), Frame::TEME);
+    EXPECT_EQ(Trajectory(kEpoch, c.atTca, Frame::CIRS, TrajectoryModel::SecularJ2).frame(), Frame::CIRS);
+    EXPECT_EQ(Trajectory(kEpoch, keplerianToEquinoctial(c.elements), Frame::TOD).frame(), Frame::TOD);
+    // A function may be in any frame, Earth-fixed included: the function says what it returns.
+    const Trajectory itrs{Frame::ITRS, [&c](const Time&) { return c.atTca; }};
+    EXPECT_EQ(itrs.frame(), Frame::ITRS);
+    EXPECT_EQ(Trajectory(Frame::PEF, Trajectory::StateFunction([&c](const Time&) { return c.atTca; })).frame(),
+              Frame::PEF);
+    // Copies keep the frame.
+    const Trajectory copy = itrs;
+    EXPECT_EQ(copy.frame(), Frame::ITRS);
+}
+
+TEST(Trajectory, AnalyticModelsAreInertial) {
+    const Conjunction         c;
+    const EquinoctialElements eq = keplerianToEquinoctial(c.elements);
+    for (TrajectoryModel model : {TrajectoryModel::TwoBody, TrajectoryModel::SecularJ2J4}) {
+        for (Frame f : {Frame::TIRS, Frame::PEF, Frame::ITRS}) {
+            const std::string name = std::string("Frame::") + std::string(toString(f));
+            EXPECT_TRUE(names(errorMessage([&] { (void)Trajectory(kEpoch, c.atTca, f, model); }),
+                              {"Trajectory", name.c_str(), "inertial"}))
+                << model;
+            EXPECT_TRUE(names(errorMessage([&] { (void)Trajectory(kEpoch, c.elements, f, model); }), {name.c_str()}));
+            EXPECT_TRUE(names(errorMessage([&] { (void)Trajectory(kEpoch, eq, f, model); }), {name.c_str()}));
+        }
+        for (Frame f : {Frame::GCRS, Frame::J2000, Frame::MOD, Frame::TOD, Frame::TEME, Frame::CIRS}) {
+            EXPECT_NO_THROW((void)Trajectory(kEpoch, c.atTca, f, model)) << f << ' ' << model;
+        }
+    }
+}
+
+TEST(CloseApproach, ChecksTheFrames) {
+    const Conjunction c;
+    const Time        start = kEpoch + 36000.0, end = kEpoch + 38000.0;
+    const Trajectory  gcrs1{kEpoch, c.elements, Frame::GCRS};
+    const Trajectory  gcrs2{kEpoch + Conjunction::kTca, c.atTca, Frame::GCRS};
+    const Trajectory  teme2{kEpoch + Conjunction::kTca, c.atTca, Frame::TEME};
+
+    // Two frames: an error that names both, whichever comes first.
+    EXPECT_TRUE(names(errorMessage([&] { (void)closestApproach(gcrs1, teme2, start, end); }),
+                      {"closestApproach: ", "Frame::GCRS", "Frame::TEME"}));
+    EXPECT_TRUE(names(errorMessage([&] { (void)closestApproach(teme2, gcrs1, start, end); }),
+                      {"closestApproach: ", "Frame::GCRS", "Frame::TEME"}));
+    EXPECT_TRUE(names(errorMessage([&] { (void)closeApproaches(gcrs1, teme2, start, end); }),
+                      {"closeApproaches: ", "Frame::GCRS", "Frame::TEME"}));
+
+    // The same frame, but Earth-fixed: the relative velocity would not be the inertial one.
+    const Trajectory itrs1{Frame::ITRS, [&gcrs1](const Time& t) { return gcrs1.state(t); }};
+    const Trajectory itrs2{Frame::ITRS, [&gcrs2](const Time& t) { return gcrs2.state(t); }};
+    EXPECT_TRUE(names(errorMessage([&] { (void)closestApproach(itrs1, itrs2, start, end); }),
+                      {"closestApproach: ", "Frame::ITRS", "inertial"}));
+    EXPECT_TRUE(names(errorMessage([&] { (void)closeApproaches(itrs1, itrs2, start, end); }),
+                      {"closeApproaches: ", "Frame::ITRS", "inertial"}));
+    // One Earth-fixed and one inertial: different frames.
+    EXPECT_TRUE(
+        names(errorMessage([&] { (void)closestApproach(gcrs1, itrs2, start, end); }), {"Frame::GCRS", "Frame::ITRS"}));
+
+    // Any inertial frame, the same for both, is accepted, and the frame does not change the numbers.
+    const Trajectory    teme1{kEpoch, c.elements, Frame::TEME};
+    const CloseApproach inGcrs = closestApproach(gcrs1, gcrs2, start, end);
+    const CloseApproach inTeme = closestApproach(teme1, teme2, start, end);
+    EXPECT_EQ(inGcrs.distance, inTeme.distance);
+    EXPECT_EQ(inGcrs.time - inTeme.time, 0.0);
 }

@@ -22,6 +22,7 @@
 #include <cmath>
 
 #include "../core/enum_io.h"
+#include "../orbit/trajectory_detail.h"
 #include "astro/core/error.h"
 #include "astro/core/rootfind.h"
 
@@ -93,13 +94,14 @@ double betaAngle(const StateVector& sat, const Vec3& sun) noexcept {
     return std::asin(std::clamp(dot(normalized(cross(sat.r, sat.v)), normalized(sun)), -1.0, 1.0));
 }
 
-std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>& satPos,
-                                          const std::function<Vec3(const Time&)>& sunPos,
-                                          const Time&                             start,
-                                          const Time&                             end,
-                                          double                                  step,
-                                          ShadowModel                             model,
-                                          double                                  re) {
+std::vector<EclipseInterval> findEclipses(const Trajectory& sat,
+                                          const Trajectory& sun,
+                                          const Time&       start,
+                                          const Time&       end,
+                                          double            step,
+                                          ShadowModel       model,
+                                          double            re) {
+    detail::requireSameFrame(sat, sun, "findEclipses", "the satellite trajectory", "the Sun's");
     const double rs   = constants::sunRadius;
     const double span = end - start;
     if (!std::isfinite(span) || span < 0.0) {
@@ -117,11 +119,11 @@ std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>
     }
     auto fp = [&](double s) {
         const Time t = start + s;
-        return penumbraFunction(satPos(t), sunPos(t), model, re, rs);
+        return penumbraFunction(sat.state(t).r, sun.state(t).r, model, re, rs);
     };
     auto fu = [&](double s) {
         const Time t = start + s;
-        return umbraFunction(satPos(t), sunPos(t), model, re, rs);
+        return umbraFunction(sat.state(t).r, sun.state(t).r, model, re, rs);
     };
     const int    n = std::max(2, static_cast<int>(std::ceil(span / step)));
     const double h = span / n;

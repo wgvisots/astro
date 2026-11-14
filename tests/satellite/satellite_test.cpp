@@ -43,6 +43,13 @@ namespace {
 constexpr double km   = 1000.0;
 const Tle        kIss = Tle::parse("1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927",
                             "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537");
+
+/// A Trajectory in `frame` from a function giving only a position (m; the velocity is zero), for the
+/// searches that use positions only (findEclipses, groundTrack).
+template <class F>
+Trajectory positionOnly(Frame frame, F position) {
+    return {frame, [position](const Time& t) { return StateVector{position(t), {}}; }};
+}
 } // namespace
 
 TEST(Look, OverheadAndRangeRate) {
@@ -67,7 +74,7 @@ TEST(Look, OverheadAndRangeRate) {
 TEST(Passes, IssOverSiteMatchesBruteForce) {
     const Sgp4        sgp4(kIss);
     const ConstantEop eop;
-    const auto        sat = sgp4ItrsFunction(sgp4, eop);
+    const Trajectory  sat = sgp4Trajectory(sgp4, eop, Frame::ITRS);
     const Geodetic    site{degToRad(40.0), degToRad(-105.0), 1600.0};
     const Time        start  = kIss.epoch;
     const Time        end    = start + 86400.0;
@@ -82,28 +89,28 @@ TEST(Passes, IssOverSiteMatchesBruteForce) {
         EXPECT_LT(p.los - p.aos, 15 * 60.0); // ISS passes last < 15 minutes
         if (p.startsBeforeWindow) {
             EXPECT_EQ(p.aos, start);
-            EXPECT_GT(lookAngles(sat(start), site).el, mask);
+            EXPECT_GT(lookAngles(sat.state(start), site).el, mask);
         } else {
-            EXPECT_NEAR(lookAngles(sat(p.aos), site).el, mask, 1e-5);
+            EXPECT_NEAR(lookAngles(sat.state(p.aos), site).el, mask, 1e-5);
         }
         if (p.endsAfterWindow) {
             EXPECT_EQ(p.los, end);
-            EXPECT_GT(lookAngles(sat(end), site).el, mask);
+            EXPECT_GT(lookAngles(sat.state(end), site).el, mask);
         } else {
-            EXPECT_NEAR(lookAngles(sat(p.los), site).el, mask, 1e-5);
+            EXPECT_NEAR(lookAngles(sat.state(p.los), site).el, mask, 1e-5);
         }
         // Brute-force maximum elevation within the pass (and the window): 1 s scan, then 10 ms around the
         // best sample (high passes peak sharply).
         double best = -1.0, bestS = 0.0;
         for (double s = 0.0; s <= p.los - p.aos; s += 1.0) {
-            const double el = lookAngles(sat(p.aos + s), site).el;
+            const double el = lookAngles(sat.state(p.aos + s), site).el;
             if (el > best) {
                 best  = el;
                 bestS = s;
             }
         }
         for (double s = std::max(0.0, bestS - 1.0); s <= std::min(p.los - p.aos, bestS + 1.0); s += 0.01) {
-            best = std::max(best, lookAngles(sat(p.aos + s), site).el);
+            best = std::max(best, lookAngles(sat.state(p.aos + s), site).el);
         }
         EXPECT_NEAR(p.maxElevation, best, degToRad(0.001));
         EXPECT_GE(p.maxElevation, best - 1e-9);
@@ -120,11 +127,11 @@ struct StraightPass {
     Time     peak   = Time::fromIso8601("2024-03-01T12:00:00Z");
     double   height = 400 * km, offset = 50 * km, speed = 7 * km;
 
-    [[nodiscard]] ItrsStateFunction state() const {
-        return [*this](const Time& t) {
-            const Vec3 velocity = ecefToEnuMatrix(site.lat, site.lon).transpose() * Vec3{speed, 0.0, 0.0};
-            return StateVector{enuToEcef({speed * (t - peak), offset, height}, site), velocity};
-        };
+    [[nodiscard]] Trajectory state() const {
+        return {Frame::ITRS, [*this](const Time& t) {
+                    const Vec3 velocity = ecefToEnuMatrix(site.lat, site.lon).transpose() * Vec3{speed, 0.0, 0.0};
+                    return StateVector{enuToEcef({speed * (t - peak), offset, height}, site), velocity};
+                }};
     }
     /// Elevation (rad) `s` seconds after the peak; the greatest is atan(height / offset), 82.9 deg.
     [[nodiscard]] double elevation(double s) const { return std::atan2(height, std::hypot(speed * s, offset)); }
@@ -219,8 +226,8 @@ struct EquatorialPass {
             {-r * w * std::sin(th), r * w * std::cos(th), 0.0}
         };
     }
-    [[nodiscard]] ItrsStateFunction state() const {
-        return [*this](const Time& t) { return at(angle(t)); };
+    [[nodiscard]] Trajectory state() const {
+        return {Frame::ITRS, [*this](const Time& t) { return at(angle(t)); }};
     }
     [[nodiscard]] double east(double th) const { return r * std::sin(th); }
     [[nodiscard]] double north(double th) const { return -r * std::cos(th) * std::sin(lat); }
@@ -303,7 +310,7 @@ TEST(Ground, GroundTrackOfACircularEquatorialOrbitRunsAlongTheEquator) {
     // The sub-satellite point of EquatorialPass is on the equator at longitude th, at height r - R, at
     // start, start + step, ... and at `end`.
     const EquatorialPass p;
-    const auto           sat   = [&](const Time& t) { return p.state()(t).r; };
+    const Trajectory     sat   = p.state();
     const Time           start = p.peak - 1000.0;
     const auto           track = groundTrack(sat, start, p.peak + 1100.0, 600.0, p.sphere());
     ASSERT_EQ(track.size(), 5u); // -1000, -400, 200, 800 s and the end at 1100 s
@@ -463,9 +470,9 @@ TEST(Eclipse, ConicalAndCylindricalEclipseTimesMatchTheGeometry) {
     const double      period = orbitalPeriod(r);
     const double      n      = constants::twoPi / period;
     const Time        t0;
-    auto              sat = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
+    const Trajectory  sat{Frame::GCRS, [&](const Time& t) { return propagateKepler(s0, t - t0); }};
     const Vec3        sunAt{constants::au, 0, 0};
-    auto              sun       = [&](const Time&) { return sunAt; };
+    const Trajectory  sun       = positionOnly(Frame::GCRS, [&](const Time&) { return sunAt; });
     const auto        position  = [&](double u) { return Vec3{r * std::cos(u), r * std::sin(u), 0.0}; };
     const double      uCylinder = constants::pi - std::asin(constants::wgs84A / r);
     const double      uPenumbra = bisect(
@@ -514,8 +521,8 @@ TEST(Eclipse, EclipseInProgressAtTheWindowEdgesIsClippedToThem) {
     const double      period = orbitalPeriod(r);
     const double      n      = constants::twoPi / period;
     const Time        t0;
-    auto              sat = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
-    auto              sun = [](const Time&) { return Vec3{constants::au, 0, 0}; };
+    const Trajectory  sat{Frame::GCRS, [&](const Time& t) { return propagateKepler(s0, t - t0); }};
+    const Trajectory  sun = positionOnly(Frame::GCRS, [](const Time&) { return Vec3{constants::au, 0, 0}; });
     const double      uIn = constants::pi - std::asin(constants::wgs84A / r), uOut = constants::twoPi - uIn;
     const Time        start = t0 + constants::pi / n;          // behind the Earth
     const Time        end   = t0 + period + constants::pi / n; // behind the Earth again, one orbit later
@@ -543,19 +550,15 @@ TEST(Eclipse, IssWithRealSun) {
     const Sgp4                  sgp4(kIss);
     const ConstantEop           eop;
     const LowPrecisionEphemeris eph;
-    auto                        sat = [&](const Time& t) {
-        return FrameTransformer(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B})
-            .transform(sgp4.propagate(t), Frame::TEME, Frame::GCRS)
-            .r;
-    };
-    auto       sun   = [&](const Time& t) { return sunPositionLowPrecision(t); };
-    const Time start = kIss.epoch;
-    const auto ecl   = findEclipses(sat, sun, start, start + 86400.0);
+    const Trajectory            sat   = sgp4Trajectory(sgp4, eop, Frame::GCRS);
+    const Trajectory            sun   = bodyTrajectory(eph, Body::Sun);
+    const Time                  start = kIss.epoch;
+    const auto                  ecl   = findEclipses(sat, sun, start, start + 86400.0);
     // ~15.7 orbits/day; one eclipse per orbit unless beta is large.
     EXPECT_GE(ecl.size(), 14u);
     EXPECT_LE(ecl.size(), 17u);
     const Time end   = start + 86400.0;
-    const auto state = [&](const Time& t) { return earthShadow(sat(t), sun(t)).state; };
+    const auto state = [&](const Time& t) { return earthShadow(sat.state(t).r, sun.state(t).r).state; };
     for (const auto& e : ecl) {
         // An eclipse cut by the window starts (or ends) at the window's edge, where the satellite is
         // then in shadow, and is no longer than a whole one. One that is not cut has a sunlit moment
@@ -608,7 +611,7 @@ TEST(Ground, SubpointFootprintAndLineOfSight) {
     EXPECT_FALSE(lineOfSight({7000 * km, 0, 0}, {0, 7000 * km, 0})); // chord dips to 4950 km
     EXPECT_FALSE(lineOfSight({6400 * km, 0, 0}, {0, 6400 * km, 0}, Ellipsoid::wgs84(), 100 * km));
     // Ground track sampling.
-    auto geo = [](const Time&) { return Vec3{42164.17 * km, 0, 0}; };
+    const Trajectory geo = positionOnly(Frame::ITRS, [](const Time&) { return Vec3{42164.17 * km, 0, 0}; });
     EXPECT_EQ(groundTrack(geo, Time(), Time() + 3600.0, 600.0).size(), 7u);
 }
 
@@ -690,10 +693,10 @@ TEST(Eclipse, BadWindowOrStepThrows) {
     const double      r  = constants::wgs84A + 500 * km;
     const StateVector s0 = elementsToState({r, 0.0, 0.0, 0.0, 0.0, 0.0});
     const Time        t0;
-    auto              sat = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
-    auto              sun = [](const Time&) { return Vec3{constants::au, 0, 0}; };
+    const Trajectory  sat{Frame::GCRS, [&](const Time& t) { return propagateKepler(s0, t - t0); }};
+    const Trajectory  sun = positionOnly(Frame::GCRS, [](const Time&) { return Vec3{constants::au, 0, 0}; });
     const Time        mid = t0 + 0.5 * orbitalPeriod(r); // behind the Earth: in eclipse
-    ASSERT_EQ(earthShadow(sat(mid), sun(mid)).state, ShadowState::Umbra);
+    ASSERT_EQ(earthShadow(sat.state(mid).r, sun.state(mid).r).state, ShadowState::Umbra);
     EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, mid, t0); }, "findEclipses", "end"));
     for (double step : {0.0, -30.0, kNan, kInf}) {
         EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, t0, mid, step); }, "findEclipses", "step")) << step;
@@ -704,8 +707,8 @@ TEST(Eclipse, BadWindowOrStepThrows) {
 }
 
 TEST(Ground, GroundTrackBadWindowOrStepThrows) {
-    auto       geo = [](const Time&) { return Vec3{42164.17 * km, 0, 0}; };
-    const Time t0;
+    const Trajectory geo = positionOnly(Frame::ITRS, [](const Time&) { return Vec3{42164.17 * km, 0, 0}; });
+    const Time       t0;
     EXPECT_TRUE(throwsNaming([&] { (void)groundTrack(geo, t0 + 3600.0, t0, 600.0); }, "groundTrack", "end"));
     for (double step : {0.0, -600.0, kNan, kInf}) {
         EXPECT_TRUE(throwsNaming([&] { (void)groundTrack(geo, t0, t0 + 3600.0, step); }, "groundTrack", "step"))
@@ -717,6 +720,106 @@ TEST(Ground, GroundTrackBadWindowOrStepThrows) {
     EXPECT_EQ(groundTrack(geo, t0, t0 + 3700.0, 600.0).size(), 8u);
     // An empty window is the one point at `start`.
     EXPECT_EQ(groundTrack(geo, t0, t0, 600.0).size(), 1u);
+}
+
+TEST(Passes, SatelliteMustBeInItrs) {
+    const StraightPass p;
+    const Trajectory   itrs = p.state();
+    const Time         a = p.peak - 600.0, b = p.peak + 600.0;
+    // The same function said to be in another frame: an error that names the frame it got and the one
+    // it needs, for an inertial and for another Earth-fixed frame.
+    for (Frame f : {Frame::GCRS, Frame::TEME, Frame::TIRS}) {
+        const Trajectory  other{f, [&itrs](const Time& t) { return itrs.state(t); }};
+        const std::string message = errorMessage([&] { (void)findPasses(other, p.site, a, b); });
+        EXPECT_NE(message.find("findPasses"), std::string::npos) << message;
+        EXPECT_NE(message.find(std::string("Frame::") + std::string(toString(f))), std::string::npos) << message;
+        EXPECT_NE(message.find("Frame::ITRS"), std::string::npos) << message;
+    }
+    // Checked before anything else, even for an empty window.
+    const Trajectory gcrs{Frame::GCRS, [&itrs](const Time& t) { return itrs.state(t); }};
+    EXPECT_TRUE(throwsNaming([&] { (void)findPasses(gcrs, p.site, p.peak, p.peak); }, "findPasses", "Frame::GCRS"));
+    EXPECT_EQ(findPasses(itrs, p.site, a, b).size(), 1u);
+}
+
+TEST(Ground, GroundTrackSatelliteMustBeInItrs) {
+    const auto geo = [](const Time&) { return Vec3{42164.17 * km, 0, 0}; };
+    const Time t0;
+    for (Frame f : {Frame::GCRS, Frame::J2000, Frame::PEF}) {
+        const std::string message =
+            errorMessage([&] { (void)groundTrack(positionOnly(f, geo), t0, t0 + 3600.0, 600.0); });
+        EXPECT_NE(message.find("groundTrack"), std::string::npos) << message;
+        EXPECT_NE(message.find(std::string("Frame::") + std::string(toString(f))), std::string::npos) << message;
+        EXPECT_NE(message.find("Frame::ITRS"), std::string::npos) << message;
+    }
+    EXPECT_EQ(groundTrack(positionOnly(Frame::ITRS, geo), t0, t0 + 3600.0, 600.0).size(), 7u);
+}
+
+TEST(Eclipse, SatelliteAndSunMustShareAFrame) {
+    const double      r  = constants::wgs84A + 500 * km;
+    const StateVector s0 = elementsToState({r, 0.0, 0.0, 0.0, 0.0, 0.0});
+    const Time        t0;
+    const auto        satAt = [&](const Time& t) { return propagateKepler(s0, t - t0); };
+    const auto        sunAt = [](const Time&) { return Vec3{constants::au, 0, 0}; };
+    const Time        end   = t0 + orbitalPeriod(r);
+    // Different frames, in either order: an error that names both.
+    const Trajectory gcrsSat{Frame::GCRS, satAt}, temeSat{Frame::TEME, satAt};
+    const Trajectory gcrsSun = positionOnly(Frame::GCRS, sunAt), itrsSun = positionOnly(Frame::ITRS, sunAt);
+    for (const std::string& message : {errorMessage([&] { (void)findEclipses(temeSat, gcrsSun, t0, end); }),
+                                       errorMessage([&] { (void)findEclipses(gcrsSat, itrsSun, t0, end); })}) {
+        EXPECT_NE(message.find("findEclipses"), std::string::npos) << message;
+        EXPECT_NE(message.find("Frame::GCRS"), std::string::npos) << message;
+        EXPECT_TRUE(message.find("Frame::TEME") != std::string::npos
+                    || message.find("Frame::ITRS") != std::string::npos)
+            << message;
+    }
+    // Any frame, the same for both, Earth-fixed included (only the positions are used); the frame does
+    // not change the numbers.
+    const auto inGcrs = findEclipses(gcrsSat, gcrsSun, t0, end, 20.0);
+    const auto inItrs = findEclipses(Trajectory{Frame::ITRS, satAt}, itrsSun, t0, end, 20.0);
+    ASSERT_EQ(inGcrs.size(), 1u);
+    ASSERT_EQ(inItrs.size(), 1u);
+    EXPECT_EQ(inGcrs[0].penumbraEntry, inItrs[0].penumbraEntry);
+    EXPECT_EQ(inGcrs[0].umbraExit, inItrs[0].umbraExit);
+}
+
+TEST(Trajectory, Sgp4TrajectoryConvertsTemeToTheFrameAsked) {
+    const Sgp4        sgp4(kIss);
+    const ConstantEop eop;
+    const Trajectory  teme = sgp4Trajectory(sgp4, eop, Frame::TEME);
+    const Trajectory  gcrs = sgp4Trajectory(sgp4, eop, Frame::GCRS);
+    const Trajectory  itrs = sgp4Trajectory(sgp4, eop, Frame::ITRS);
+    EXPECT_EQ(teme.frame(), Frame::TEME);
+    EXPECT_EQ(gcrs.frame(), Frame::GCRS);
+    EXPECT_EQ(itrs.frame(), Frame::ITRS);
+    for (double dt : {0.0, 1234.5, 86400.0}) {
+        const Time        t = kIss.epoch + dt;
+        const StateVector s = sgp4.propagate(t);
+        // TEME is the SGP4 output itself.
+        EXPECT_EQ(teme.state(t).r, s.r) << dt;
+        EXPECT_EQ(teme.state(t).v, s.v) << dt;
+        // The other frames: the TEME state converted with the IAU 2000B nutation model, as the ITRS
+        // state function of 0.2.0 did, bit for bit (temeToItrs uses the default model, IAU 2000A).
+        const FrameTransformer ft(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
+        EXPECT_EQ(itrs.state(t).r, ft.transform(s, Frame::TEME, Frame::ITRS).r) << dt;
+        EXPECT_EQ(itrs.state(t).v, ft.transform(s, Frame::TEME, Frame::ITRS).v) << dt;
+        EXPECT_EQ(gcrs.state(t).r, ft.transform(s, Frame::TEME, Frame::GCRS).r) << dt;
+        EXPECT_EQ(gcrs.state(t).v, ft.transform(s, Frame::TEME, Frame::GCRS).v) << dt;
+    }
+}
+
+TEST(Trajectory, BodyTrajectoryIsTheEphemerisStateInGcrs) {
+    const LowPrecisionEphemeris eph;
+    const Trajectory            sun  = bodyTrajectory(eph, Body::Sun);
+    const Trajectory            moon = bodyTrajectory(eph, Body::Moon, Body::Sun);
+    EXPECT_EQ(sun.frame(), Frame::GCRS);
+    EXPECT_EQ(moon.frame(), Frame::GCRS);
+    for (double dt : {0.0, 3600.0, 30 * 86400.0}) {
+        const Time t = kIss.epoch + dt;
+        EXPECT_EQ(sun.state(t).r, eph.state(Body::Sun, Body::Earth, t).r) << dt;
+        EXPECT_EQ(sun.state(t).v, eph.state(Body::Sun, Body::Earth, t).v) << dt;
+        EXPECT_EQ(moon.state(t).r, eph.state(Body::Moon, Body::Sun, t).r) << dt;
+        EXPECT_EQ(moon.state(t).v, eph.state(Body::Moon, Body::Sun, t).v) << dt;
+    }
 }
 
 namespace {
@@ -852,7 +955,7 @@ TEST(Eclipse, GrazingPassThroughThePenumbraOnlyIsAPenumbralEclipse) {
     const StateVector s0     = elementsToState({r, 0.0, 0.0, 0.0, 0.0, 0.0});
     const double      period = orbitalPeriod(r);
     const Time        t0;
-    auto              sat   = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
+    const Trajectory  sat{Frame::GCRS, [&](const Time& t) { return propagateKepler(s0, t - t0); }};
     const auto        sunAt = [](double beta) { return constants::au * Vec3{std::cos(beta), 0.0, std::sin(beta)}; };
     const Vec3        behind{-r, 0.0, 0.0};
     const double      betaUmbra = bisect(
@@ -870,8 +973,8 @@ TEST(Eclipse, GrazingPassThroughThePenumbraOnlyIsAPenumbralEclipse) {
         0.0,
         constants::halfPi);
     ASSERT_LT(betaUmbra, betaPenumbra);
-    const double beta = 0.5 * (betaUmbra + betaPenumbra);
-    auto         sun  = [&](const Time&) { return sunAt(beta); };
+    const double     beta = 0.5 * (betaUmbra + betaPenumbra);
+    const Trajectory sun  = positionOnly(Frame::GCRS, [&](const Time&) { return sunAt(beta); });
     ASSERT_EQ(earthShadow(behind, sunAt(beta)).state, ShadowState::Penumbra);
     const auto ecl = findEclipses(sat, sun, t0, t0 + period, 20.0);
     ASSERT_EQ(ecl.size(), 1u);

@@ -74,13 +74,14 @@ int main(int argc, char** argv) {
     const auto search = [&](const char* name, const Trajectory& a, const Trajectory& b) {
         report(name, secondsPerRun([&] { sink += closestApproach(a, b, epoch, end).distance; }));
     };
-    search("closestApproach, LEO-LEO, two-body", {epoch, leo1}, {epoch, leo2});
+    search("closestApproach, LEO-LEO, two-body", {epoch, leo1, Frame::GCRS}, {epoch, leo2, Frame::GCRS});
     search("closestApproach, LEO-LEO, secular J2/J4",
-           {epoch, leo1, TrajectoryModel::SecularJ2J4},
-           {epoch, leo2, TrajectoryModel::SecularJ2J4});
-    search("closestApproach, LEO-GTO, two-body", {epoch, leo1}, {epoch, gto});
+           {epoch, leo1, Frame::TOD, TrajectoryModel::SecularJ2J4},
+           {epoch, leo2, Frame::TOD, TrajectoryModel::SecularJ2J4});
+    search("closestApproach, LEO-GTO, two-body", {epoch, leo1, Frame::GCRS}, {epoch, gto, Frame::GCRS});
     report("closeApproaches (all minima), LEO-LEO, two-body", secondsPerRun([&] {
-               sink += static_cast<double>(closeApproaches({epoch, leo1}, {epoch, leo2}, epoch, end).size());
+               sink += static_cast<double>(
+                   closeApproaches({epoch, leo1, Frame::GCRS}, {epoch, leo2, Frame::GCRS}, epoch, end).size());
            }));
 
     // probabilityInCircle(mx, my, xx, xy, yy, R) on the geometries of docs/performance.md.
@@ -118,9 +119,10 @@ int main(int argc, char** argv) {
         P0(i, i)         = 100.0 * 100.0;
         P0(i + 3, i + 3) = 0.1 * 0.1;
     }
-    const UncertainTrajectory u1{epoch, elementsToState(leo1), P0}, u2{epoch, elementsToState(leo2), P0};
-    const UncertainTrajectory s1{epoch, elementsToState(leo1), P0, TrajectoryModel::SecularJ2J4};
-    const UncertainTrajectory s2{epoch, elementsToState(leo2), P0, TrajectoryModel::SecularJ2J4};
+    const UncertainTrajectory u1{epoch, elementsToState(leo1), P0, Frame::GCRS},
+        u2{epoch, elementsToState(leo2), P0, Frame::GCRS};
+    const UncertainTrajectory s1{epoch, elementsToState(leo1), P0, Frame::TOD, TrajectoryModel::SecularJ2J4};
+    const UncertainTrajectory s2{epoch, elementsToState(leo2), P0, Frame::TOD, TrajectoryModel::SecularJ2J4};
     report("assessConjunction, LEO-LEO, two-body",
            secondsPerRun([&] { sink += assessConjunction(u1, u2, epoch, end, 10.0).collision.missDistance; }));
     report("assessConjunction, LEO-LEO, secular J2/J4",

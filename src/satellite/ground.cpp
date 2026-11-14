@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../orbit/trajectory_detail.h"
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
 
@@ -30,11 +31,9 @@ Geodetic subSatellitePoint(const Vec3& satItrs, const Ellipsoid& ell) noexcept {
     return ecefToGeodetic(satItrs, ell);
 }
 
-std::vector<Geodetic> groundTrack(const std::function<Vec3(const Time&)>& satItrs,
-                                  const Time&                             start,
-                                  const Time&                             end,
-                                  double                                  step,
-                                  const Ellipsoid&                        ell) {
+std::vector<Geodetic>
+groundTrack(const Trajectory& sat, const Time& start, const Time& end, double step, const Ellipsoid& ell) {
+    detail::requireFrame(sat, Frame::ITRS, "groundTrack", "the satellite trajectory");
     const double span = end - start;
     if (!std::isfinite(span) || span < 0.0) {
         throw Error("groundTrack: start and end must be finite, with end not before start");
@@ -48,10 +47,10 @@ std::vector<Geodetic> groundTrack(const std::function<Vec3(const Time&)>& satItr
     std::vector<Geodetic> out;
     const auto            n = static_cast<int>(std::floor(span / step + 1e-9));
     for (int i = 0; i <= n; ++i) {
-        out.push_back(subSatellitePoint(satItrs(start + i * step), ell));
+        out.push_back(subSatellitePoint(sat.state(start + i * step).r, ell));
     }
     if (span - n * step > 1e-6) {
-        out.push_back(subSatellitePoint(satItrs(end), ell));
+        out.push_back(subSatellitePoint(sat.state(end).r, ell));
     }
     return out;
 }

@@ -82,7 +82,7 @@ void searchStepStudy(int nPairs) {
     std::vector<int>                               brute;
     int                                            total = 0;
     for (int k = 0; k < nPairs; ++k) {
-        pairs.emplace_back(Trajectory{kEpoch, orbit()}, Trajectory{kEpoch, orbit()});
+        pairs.emplace_back(Trajectory{kEpoch, orbit(), Frame::GCRS}, Trajectory{kEpoch, orbit(), Frame::GCRS});
         brute.push_back(bruteForceMinima(pairs.back().first, pairs.back().second, T, 0.5));
         total += brute.back();
     }
