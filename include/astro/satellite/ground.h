@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/geodesy/geodetic.h"
 #include "astro/orbit/trajectory.h"
 #include "astro/time/time.h"
@@ -31,7 +32,8 @@ namespace astro {
 
 /// Geodetic sub-satellite point (the point on the ellipsoid along the local
 /// normal through the satellite) of an ITRS position; h is the altitude.
-[[nodiscard]] Geodetic subSatellitePoint(const Vec3& satItrs, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Geodetic subSatellitePoint(const Vec3&      satItrs,
+                                                      const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Sub-satellite points of satellite `sat` (a Trajectory in Frame::ITRS) at times start,
 /// start+step, ..., end (`end` is the last point even when it is not a whole number of steps from
@@ -40,21 +42,23 @@ namespace astro {
 /// positive and finite, or if the window holds more than 2e9 steps. Also throws if `end - start`
 /// does (one of the two in UT1, or a UTC time before 1960; see Time). An exception thrown by `sat`
 /// passes through.
-[[nodiscard]] std::vector<Geodetic> groundTrack(const Trajectory& sat,
-                                                const Time&       start,
-                                                const Time&       end,
-                                                double            step,
-                                                const Ellipsoid&  ell = Ellipsoid::wgs84());
+[[nodiscard]] ASTRO_EXPORT std::vector<Geodetic> groundTrack(const Trajectory& sat,
+                                                             const Time&       start,
+                                                             const Time&       end,
+                                                             double            step,
+                                                             const Ellipsoid&  ell = Ellipsoid::wgs84());
 
 /// Earth central angle (rad) from the sub-satellite point to the edge of
 /// coverage for a satellite at `altitude` and a minimum elevation, spherical
 /// Earth of radius `radius`.
-[[nodiscard]] double
-coverageHalfAngle(double altitude, double minElevation = 0.0, double radius = constants::wgs84A) noexcept;
+[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT coverageHalfAngle(double altitude,
+                                                                 double minElevation = 0.0,
+                                                                 double radius       = constants::wgs84A) noexcept;
 
 /// Slant range (m) to the edge of coverage.
-[[nodiscard]] double
-maxSlantRange(double altitude, double minElevation = 0.0, double radius = constants::wgs84A) noexcept;
+[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT maxSlantRange(double altitude,
+                                                             double minElevation = 0.0,
+                                                             double radius       = constants::wgs84A) noexcept;
 
 /// Coverage footprint boundary: `n` points at central angle `halfAngle` around
 /// a sub-satellite point (spherical geometry; lat/lon in rad, h = 0). Point i lies
@@ -63,11 +67,14 @@ maxSlantRange(double altitude, double minElevation = 0.0, double radius = consta
 /// `halfAngle` from it, placed as for a point just short of the pole on the
 /// meridian `lon`: longitude lon + pi - azimuth at the north pole, lon + azimuth at
 /// the south pole.
-[[nodiscard]] std::vector<Geodetic> coverageFootprint(double lat, double lon, double halfAngle, int n = 72);
+[[nodiscard]] ASTRO_EXPORT std::vector<Geodetic>
+                           coverageFootprint(double lat, double lon, double halfAngle, int n = 72);
 
 /// True if the straight segment between two positions does not intersect the
 /// ellipsoid (optionally inflated by `margin` meters, e.g. for the atmosphere).
-[[nodiscard]] bool
-lineOfSight(const Vec3& a, const Vec3& b, const Ellipsoid& ell = Ellipsoid::wgs84(), double margin = 0.0) noexcept;
+[[nodiscard]] ASTRO_EXPORT bool ASTRO_EXPORT lineOfSight(const Vec3&      a,
+                                                         const Vec3&      b,
+                                                         const Ellipsoid& ell    = Ellipsoid::wgs84(),
+                                                         double           margin = 0.0) noexcept;
 
 } // namespace astro

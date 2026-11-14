@@ -21,6 +21,7 @@
 #include <limits>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/geodesy/geodetic.h"
 
 /// \file
@@ -29,22 +30,26 @@
 namespace astro {
 
 /// Rotation matrix taking ECEF vector components to ENU at (lat, lon).
-[[nodiscard]] Mat3 ecefToEnuMatrix(double lat, double lon) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 ecefToEnuMatrix(double lat, double lon) noexcept;
 /// Rotation matrix taking ECEF vector components to NED at (lat, lon).
-[[nodiscard]] Mat3 ecefToNedMatrix(double lat, double lon) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 ecefToNedMatrix(double lat, double lon) noexcept;
 
 /// ECEF position to ENU relative to a geodetic origin.
-[[nodiscard]] Vec3
-ecefToEnu(const Vec3& ecef, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT ecefToEnu(const Vec3&      ecef,
+                                                       const Geodetic&  origin,
+                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// ENU position relative to a geodetic origin to ECEF (m).
-[[nodiscard]] Vec3
-enuToEcef(const Vec3& enu, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT enuToEcef(const Vec3&      enu,
+                                                       const Geodetic&  origin,
+                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// ECEF position to NED relative to a geodetic origin (m).
-[[nodiscard]] Vec3
-ecefToNed(const Vec3& ecef, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT ecefToNed(const Vec3&      ecef,
+                                                       const Geodetic&  origin,
+                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// NED position relative to a geodetic origin to ECEF (m).
-[[nodiscard]] Vec3
-nedToEcef(const Vec3& ned, const Geodetic& origin, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT nedToEcef(const Vec3&      ned,
+                                                       const Geodetic&  origin,
+                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Topocentric look angles from an observer to a target, relative to the observer's geodetic
 /// horizon (geometric: no refraction or light time, unless the function that returns them says so).
@@ -59,21 +64,23 @@ struct LookAngles {
 };
 
 /// Azimuth, elevation and range of an ENU vector `enu` (m); the range rate is NaN.
-[[nodiscard]] LookAngles enuToLookAngles(const Vec3& enu) noexcept;
+[[nodiscard]] ASTRO_EXPORT LookAngles enuToLookAngles(const Vec3& enu) noexcept;
 /// ENU vector (m) from the azimuth, elevation and range of `look`; its range rate is not used.
-[[nodiscard]] Vec3 lookAnglesToEnu(const LookAngles& look) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 lookAnglesToEnu(const LookAngles& look) noexcept;
 /// Look angles from an observer to an ECEF target position `target` (m); the range rate is NaN.
-[[nodiscard]] LookAngles
-ecefToLookAngles(const Vec3& target, const Geodetic& observer, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT LookAngles ASTRO_EXPORT ecefToLookAngles(const Vec3&      target,
+                                                                    const Geodetic&  observer,
+                                                                    const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// Look angles, with the range rate, from an observer to a target whose state `target` is given in
 /// the ITRS (ECEF; m, m/s). For a target exactly at the observer (zero range) the direction and the
 /// range rate do not exist: the range rate is NaN.
-[[nodiscard]] LookAngles ecefToLookAngles(const StateVector& target,
-                                          const Geodetic&    observer,
-                                          const Ellipsoid&   ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT LookAngles ecefToLookAngles(const StateVector& target,
+                                                       const Geodetic&    observer,
+                                                       const Ellipsoid&   ell = Ellipsoid::wgs84()) noexcept;
 /// ECEF position (m) of a target seen at the azimuth, elevation and range of `look` from an
 /// observer; its range rate is not used.
-[[nodiscard]] Vec3
-lookAnglesToEcef(const LookAngles& look, const Geodetic& observer, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT lookAnglesToEcef(const LookAngles& look,
+                                                              const Geodetic&   observer,
+                                                              const Ellipsoid&  ell = Ellipsoid::wgs84()) noexcept;
 
 } // namespace astro

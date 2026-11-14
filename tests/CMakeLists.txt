@@ -39,3 +39,19 @@ target_compile_definitions(astro_tests PRIVATE ASTRO_TEST_DATA_DIR="${CMAKE_CURR
 target_compile_options(astro_tests PRIVATE ${ASTRO_WARNING_FLAGS})
 
 gtest_discover_tests(astro_tests DISCOVERY_TIMEOUT 60)
+
+# Every public header compiles on its own: one generated source file per header, which includes only
+# that header, built as an object library (part of the normal build, so a header that misses an
+# include fails the build).
+set(ASTRO_HEADER_CHECK_SOURCES)
+foreach(header IN LISTS ASTRO_HEADERS ITEMS ${PROJECT_BINARY_DIR}/include/astro/version.h
+        ${PROJECT_BINARY_DIR}/include/astro/export.h)
+    string(REGEX REPLACE "^.*/include/(astro/.*)$" "\\1" relative ${header}) # astro/core/vec.h
+    string(MAKE_C_IDENTIFIER ${relative} name)
+    set(source ${CMAKE_CURRENT_BINARY_DIR}/header_check/${name}.cpp)
+    file(CONFIGURE OUTPUT ${source} CONTENT "#include \"${relative}\"\n" @ONLY)
+    list(APPEND ASTRO_HEADER_CHECK_SOURCES ${source})
+endforeach()
+add_library(astro_header_check OBJECT ${ASTRO_HEADER_CHECK_SOURCES})
+target_link_libraries(astro_header_check PRIVATE astro::astro)
+target_compile_options(astro_header_check PRIVATE ${ASTRO_WARNING_FLAGS})

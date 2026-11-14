@@ -29,6 +29,7 @@
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 #include "astro/ephemeris/ephemeris.h"
+#include "astro/export.h"
 #include "astro/frames/eop.h"
 #include "astro/frames/transform.h"
 #include "astro/orbit/central_body.h"
@@ -55,7 +56,7 @@ enum class TrajectoryModel {
 BOOST_DESCRIBE_ENUM(TrajectoryModel, TwoBody, SecularJ2, SecularJ2J4)
 
 /// Writes "TrajectoryModel::<enumerator>", or "TrajectoryModel::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, TrajectoryModel value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, TrajectoryModel value);
 
 /// The motion of one object: its state at any time, and the frame that state is in.
 ///
@@ -67,7 +68,7 @@ std::ostream& operator<<(std::ostream& os, TrajectoryModel value);
 /// number. The constructors are not explicit, so `{epoch, elements, Frame::GCRS}` and
 /// `{Frame::ITRS, function}` can be passed directly. Instances are immutable and safe to share
 /// between threads, provided a wrapped function is.
-class Trajectory {
+class ASTRO_EXPORT Trajectory {
 public:
     /// A state (m, m/s) at any time.
     using StateFunction = std::function<StateVector(const Time& t)>;
@@ -146,7 +147,7 @@ private:
 /// NumericalPropagator or EstimateTracker::predict). The covariance is in the frame of the
 /// trajectory. Instances are immutable and safe to share between threads, provided wrapped
 /// functions are.
-class UncertainTrajectory {
+class ASTRO_EXPORT UncertainTrajectory {
 public:
     /// A state (m, m/s) and its covariance (m^2, m^2/s, m^2/s^2) at any time.
     using StateCovarianceFunction = std::function<StateCovariance(const Time& t)>;
@@ -190,7 +191,7 @@ private:
 /// The trajectory keeps references to `sgp4` and `eop`: both must outlive it (and its copies).
 /// Its state() throws astro::Error for a time at which `eop` has no data or which is before 1960
 /// (see FrameTransformer), and as Sgp4::propagate does.
-[[nodiscard]] Trajectory sgp4Trajectory(const Sgp4& sgp4, const EopProvider& eop, Frame frame);
+[[nodiscard]] ASTRO_EXPORT Trajectory sgp4Trajectory(const Sgp4& sgp4, const EopProvider& eop, Frame frame);
 
 /// The geocentric trajectory of `target` from an ephemeris (Ephemeris::state relative to
 /// Body::Earth), in Frame::GCRS: geocentric ephemeris axes are the ICRF's, which are the GCRS's.
@@ -200,6 +201,6 @@ private:
 ///
 /// The trajectory keeps a reference to `eph`: it must outlive it (and its copies). Its state()
 /// throws astro::Error as Ephemeris::state does.
-[[nodiscard]] Trajectory bodyTrajectory(const Ephemeris& eph, Body target);
+[[nodiscard]] ASTRO_EXPORT Trajectory bodyTrajectory(const Ephemeris& eph, Body target);
 
 } // namespace astro

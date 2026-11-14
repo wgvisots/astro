@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/frames/eop.h"
 #include "astro/frames/transform.h"
 #include "astro/time/time.h"
@@ -44,7 +45,7 @@ namespace astro {
 /// agrees with FrameTransformer to a few 1e-11 rad (0.2 mm at the Earth's surface; see the tests).
 /// The nodes cost one FrameTransformer each: about 125 us with IAU 2006/2000A, 6 us with 2000B.
 /// Build one series per window and share it: it is immutable and thread-safe.
-class ItrsRotationSeries {
+class ASTRO_EXPORT ItrsRotationSeries {
 public:
     /// Rotations for start + dt, 0 <= dt <= duration (seconds, as for Time::operator+).
     /// Throws astro::Error if duration is negative or not finite, nodeSpacing is not positive, or

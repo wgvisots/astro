@@ -47,14 +47,16 @@ struct CentralBody {
     /// The zonal coefficient Jn: J[n], or 0 for a degree beyond the list.
     [[nodiscard]] double zonal(std::size_t n) const noexcept { return n < J.size() ? J[n] : 0.0; }
 
-    /// The Earth with EGM2008 J2, J3 and J4: the value of a default-constructed CentralBody. One
-    /// shared object, so that a default argument `= CentralBody::earth()` costs nothing per call (a
-    /// default of `{}` would build a new body, and its vector of coefficients, every time).
+    /// The Earth with EGM2008 J2, J3 and J4: the value of a default-constructed CentralBody. A
+    /// static object, so that a default argument `= CentralBody::earth()` costs nothing per call (a
+    /// default of `{}` would build a new body, and its vector of coefficients, every time). With a
+    /// shared libastro, the library and the program each hold a copy: compare bodies by value, not
+    /// by address.
     [[nodiscard]] static const CentralBody& earth() noexcept {
         static const CentralBody body;
         return body;
     }
-    /// The Earth with EGM2008 J2 and J4, without J3. One shared object, as for earth().
+    /// The Earth with EGM2008 J2 and J4, without J3. A static object, as for earth().
     [[nodiscard]] static const CentralBody& earthJ2J4() noexcept {
         static const CentralBody body{
             constants::gmEarth,

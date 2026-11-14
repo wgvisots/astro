@@ -24,6 +24,7 @@
 
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/frames/eop.h"
 #include "astro/frames/rotation_series.h"
 #include "astro/frames/transform.h"
@@ -40,7 +41,7 @@
 namespace astro {
 
 /// An error ellipse in the local horizontal plane.
-struct ErrorEllipse {
+struct ASTRO_EXPORT ErrorEllipse {
     double semiMajor{0.0}; ///< semi-major axis (m)
     double semiMinor{0.0}; ///< semi-minor axis (m)
     /// Rotation of the semi-major axis, clockwise from north, in [0, pi) (rad); 0 for a circle.
@@ -53,12 +54,14 @@ struct ErrorEllipse {
 
 /// The 1-sigma ellipse of an east/north covariance (m^2). A 1-sigma ellipse contains 39.3 % of a
 /// 2-D Gaussian; use ErrorEllipse::scaled for other probabilities.
-[[nodiscard]] ErrorEllipse errorEllipse(double eastVariance, double northVariance, double eastNorthCovariance) noexcept;
+[[nodiscard]] ASTRO_EXPORT ErrorEllipse errorEllipse(double eastVariance,
+                                                     double northVariance,
+                                                     double eastNorthCovariance) noexcept;
 
 /// Factor k by which a 1-sigma ellipse is scaled to contain `probability` of a 2-D Gaussian:
 /// k = sqrt(-2 ln(1 - p)), e.g. 1.1774 for 50 %, 2.4477 for 95 %. Throws astro::Error for a
 /// probability outside (0, 1).
-[[nodiscard]] double ellipseScale(double probability);
+[[nodiscard]] ASTRO_EXPORT double ellipseScale(double probability);
 
 /// Uncertainty of an impact, from the covariance of the initial state.
 struct ImpactUncertainty {
@@ -135,11 +138,11 @@ struct ImpactOptions {
 /// orientation data in use (`eop`, or options.rotations when given) do not cover the window from
 /// `epoch` to `epoch` + options.maxFlightTime; and as NumericalPropagator::propagateToEvent does
 /// (the integration can fail).
-[[nodiscard]] std::optional<Impact> predictImpact(const Time&          epoch,
-                                                  const StateVector&   state,
-                                                  Frame                frame,
-                                                  const EopProvider&   eop,
-                                                  const ImpactOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT std::optional<Impact> predictImpact(const Time&          epoch,
+                                                               const StateVector&   state,
+                                                               Frame                frame,
+                                                               const EopProvider&   eop,
+                                                               const ImpactOptions& options = {});
 
 /// As above, with the 6x6 covariance of `state` (position then velocity, in `frame`; m^2, m^2/s,
 /// m^2/s^2). The covariance is propagated to the nominal impact time (with process noise from
@@ -147,11 +150,11 @@ struct ImpactOptions {
 /// along the ground-relative velocity until it reaches the surface again. The result is linear,
 /// which holds while the errors are small next to the trajectory's curvature (see the accuracy
 /// page for a Monte Carlo comparison). Throws astro::Error as the overload above does.
-[[nodiscard]] std::optional<Impact> predictImpact(const Time&          epoch,
-                                                  const StateVector&   state,
-                                                  const Mat6&          covariance,
-                                                  Frame                frame,
-                                                  const EopProvider&   eop,
-                                                  const ImpactOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT std::optional<Impact> predictImpact(const Time&          epoch,
+                                                               const StateVector&   state,
+                                                               const Mat6&          covariance,
+                                                               Frame                frame,
+                                                               const EopProvider&   eop,
+                                                               const ImpactOptions& options = {});
 
 } // namespace astro

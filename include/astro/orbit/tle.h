@@ -22,6 +22,7 @@
 #include <string_view>
 #include <vector>
 
+#include "astro/export.h"
 #include "astro/time/time.h"
 
 /// \file
@@ -30,7 +31,7 @@ namespace astro {
 
 /// NORAD two-line element set. Angles in radians; mean motion in revolutions/day
 /// as in the TLE; derivatives as printed (n-dot/2 in rev/day^2, n-ddot/6 in rev/day^3).
-struct Tle {
+struct ASTRO_EXPORT Tle {
     std::string name;                ///< satellite name (title line, leading "0 " removed); may be empty
     int         satnum{0};           ///< catalog number (Alpha-5 decoded, e.g. "A0001" -> 100001)
     char        classification{'U'}; ///< 'U' unclassified, 'C' classified, 'S' secret
@@ -118,13 +119,13 @@ struct Tle {
 };
 
 /// TLE line checksum (sum of digits, '-' counts as 1, modulo 10) over columns 1-68.
-[[nodiscard]] int tleChecksum(std::string_view line) noexcept;
+[[nodiscard]] ASTRO_EXPORT int tleChecksum(std::string_view line) noexcept;
 /// Decode an Alpha-5 / numeric 5-character catalog number: five digits, or a capital letter other than
 /// I and O followed by four digits ("A0001" is 100001, "Z9999" is 339999). Throws astro::Error for
 /// anything else: another length, blanks, a sign, a lower-case letter.
-[[nodiscard]] int decodeAlpha5(std::string_view s);
+[[nodiscard]] ASTRO_EXPORT int decodeAlpha5(std::string_view s);
 /// Encode a catalog number as 5 characters: zero-padded digits below 100000, Alpha-5 (a letter,
 /// skipping I and O, plus 4 digits) up to 339999. Throws astro::Error below 0 and above 339999.
-[[nodiscard]] std::string encodeAlpha5(int satnum);
+[[nodiscard]] ASTRO_EXPORT std::string encodeAlpha5(int satnum);
 
 } // namespace astro

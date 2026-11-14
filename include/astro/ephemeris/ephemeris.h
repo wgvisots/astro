@@ -24,6 +24,7 @@
 #include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/time/time.h"
 
 /// \file
@@ -75,10 +76,10 @@ BOOST_DESCRIBE_ENUM(Body,
                     Mars)
 
 /// Writes "Body::<enumerator>", or "Body::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, Body value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, Body value);
 
 /// Enumerator name of `b` (e.g. "Moon"), or "INVALID_VALUE" for any other value, as operator<< writes it.
-[[nodiscard]] std::string_view toString(Body b) noexcept;
+[[nodiscard]] ASTRO_EXPORT std::string_view toString(Body b) noexcept;
 /// NAIF integer ID of `b`.
 [[nodiscard]] constexpr int naifId(Body b) noexcept {
     return static_cast<int>(b);
@@ -89,7 +90,7 @@ std::ostream& operator<<(std::ostream& os, Body value);
 /// States are returned in the ICRF/GCRS axes (for a geocentric `center`, this
 /// is the GCRS), in meters and meters/second, geometric (no light time or
 /// aberration).
-class Ephemeris {
+class ASTRO_EXPORT Ephemeris {
 public:
     virtual ~Ephemeris() = default;
     /// State of `target` relative to `center` at time t (any scale; converted to TDB).

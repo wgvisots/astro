@@ -24,6 +24,7 @@
 
 #include <boost/describe/enum.hpp>
 
+#include "astro/export.h"
 #include "astro/orbit/central_body.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/state12.h"
@@ -47,7 +48,7 @@ enum class SecularOrder {
 BOOST_DESCRIBE_ENUM(SecularOrder, J2, J2SquaredJ4)
 
 /// Writes "SecularOrder::<enumerator>", or "SecularOrder::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, SecularOrder value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, SecularOrder value);
 
 /// Secular rates (rad/s) of the mean elements.
 struct SecularRates {
@@ -57,28 +58,28 @@ struct SecularRates {
 };
 
 /// Rates for mean semi-major axis a, eccentricity e and inclination i.
-[[nodiscard]] SecularRates secularRates(double             a,
-                                        double             e,
-                                        double             i,
-                                        const CentralBody& body  = CentralBody::earth(),
-                                        SecularOrder       order = SecularOrder::J2SquaredJ4) noexcept;
+[[nodiscard]] ASTRO_EXPORT SecularRates secularRates(double             a,
+                                                     double             e,
+                                                     double             i,
+                                                     const CentralBody& body  = CentralBody::earth(),
+                                                     SecularOrder       order = SecularOrder::J2SquaredJ4) noexcept;
 
 /// Propagate mean elements by dt seconds with the secular rates (a, e, i constant).
 /// The true anomaly is advanced through the mean anomaly. Throws astro::Error unless the orbit is
 /// elliptic (a > 0, 0 <= e < 1), as SecularPropagator does.
-[[nodiscard]] KeplerianElements propagateSecular(const KeplerianElements& mean,
-                                                 double                   dt,
-                                                 const CentralBody&       body  = CentralBody::earth(),
-                                                 SecularOrder             order = SecularOrder::J2SquaredJ4);
+[[nodiscard]] ASTRO_EXPORT KeplerianElements propagateSecular(const KeplerianElements& mean,
+                                                              double                   dt,
+                                                              const CentralBody&       body = CentralBody::earth(),
+                                                              SecularOrder order = SecularOrder::J2SquaredJ4);
 
 /// propagateSecular for an inertial state whose z axis is the Earth's pole. The osculating
 /// elements of s0 are treated as mean elements (no short-period correction), so expect errors at the
 /// short-period level (kilometres in LEO); use NumericalPropagator::j2j4 when that matters.
 /// Throws astro::Error unless s0 is on an elliptic orbit, as SecularPropagator does.
-[[nodiscard]] StateVector propagateSecular(const StateVector& s0,
-                                           double             dt,
-                                           const CentralBody& body  = CentralBody::earth(),
-                                           SecularOrder       order = SecularOrder::J2SquaredJ4);
+[[nodiscard]] ASTRO_EXPORT StateVector propagateSecular(const StateVector& s0,
+                                                        double             dt,
+                                                        const CentralBody& body  = CentralBody::earth(),
+                                                        SecularOrder       order = SecularOrder::J2SquaredJ4);
 
 /// propagateSecular for a 12-component state (position, velocity, acceleration, jerk), with the
 /// same mean-element caveat. The force model for acceleration, jerk and residuals is the point mass
@@ -90,11 +91,11 @@ struct SecularRates {
 ///    NumericalPropagator::j2j4 with HigherOrderMode::UnmodeledForce.
 ///
 /// Throws astro::Error unless s0 is on an elliptic orbit, as SecularPropagator does.
-[[nodiscard]] Propagation12 propagateSecular(const StateVector12& s0,
-                                             double               dt,
-                                             const CentralBody&   body  = CentralBody::earth(),
-                                             SecularOrder         order = SecularOrder::J2SquaredJ4,
-                                             HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
+[[nodiscard]] ASTRO_EXPORT Propagation12 propagateSecular(const StateVector12& s0,
+                                                          double               dt,
+                                                          const CentralBody&   body  = CentralBody::earth(),
+                                                          SecularOrder         order = SecularOrder::J2SquaredJ4,
+                                                          HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
 
 /// Secular J2/J4 propagation of one orbit to many times.
 ///
@@ -114,7 +115,7 @@ struct SecularRates {
 /// the node and perigee drift and the J2/J4 part of the mean-anomaly rate (1e-3 relative: 5-20 m/s
 /// in LEO, depending on the inclination). SecularPropagatorCorrected returns that derivative instead; see the propagation guide
 /// for when each fits.
-class SecularPropagator {
+class ASTRO_EXPORT SecularPropagator {
 public:
     /// From mean elements (elliptic: e < 1). Throws astro::Error unless a > 0 and 0 <= e < 1.
     explicit SecularPropagator(const KeplerianElements& mean,
@@ -283,7 +284,7 @@ private:
 /// against the corrected velocity, so propagate12(0) reproduces the input jerk.
 ///
 /// It is a SecularPropagator (pass it wherever one is accepted) and costs ~2 % more per output.
-class SecularPropagatorCorrected : public SecularPropagator {
+class ASTRO_EXPORT SecularPropagatorCorrected : public SecularPropagator {
 public:
     /// From mean elements (elliptic: e < 1). Throws astro::Error unless a > 0 and 0 <= e < 1.
     explicit SecularPropagatorCorrected(const KeplerianElements& mean,
@@ -306,14 +307,14 @@ public:
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;
 /// nodal rate 360 deg per tropical year). Throws astro::Error unless the orbit is elliptic
 /// (a > 0, 0 <= e < 1), or if no solution exists.
-[[nodiscard]] double
+[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT
 sunSynchronousInclination(double a, double e = 0.0, const CentralBody& body = CentralBody::earth());
 
 /// Mean semi-major axis of a repeat-ground-track orbit that completes `revs`
 /// revolutions in `days` nodal days, for given e and i (J2, iterative). Throws astro::Error if
 /// revs or days is not positive, unless 0 <= e < 1, and if the iteration does not converge (to
 /// 1e-13 of a): there is then no such orbit in the J2 model, e.g. 2 revolutions a day at e = 0.99.
-[[nodiscard]] double
+[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT
 repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, const CentralBody& body = CentralBody::earth());
 
 } // namespace astro

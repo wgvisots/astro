@@ -23,6 +23,7 @@
 #include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 
 /// \file
 /// Options and results shared by the propagators that take a 12-component state
@@ -48,7 +49,7 @@ enum class HigherOrderMode {
 BOOST_DESCRIBE_ENUM(HigherOrderMode, ModelOnly, UnmodeledForce)
 
 /// Writes "HigherOrderMode::<enumerator>", or "HigherOrderMode::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, HigherOrderMode value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, HigherOrderMode value);
 
 /// Result of propagating a StateVector12.
 struct Propagation12 {

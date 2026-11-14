@@ -25,6 +25,8 @@
 
 #include <boost/describe/enum.hpp>
 
+#include "astro/export.h"
+
 /// \file
 /// Earth orientation parameters (UT1 - UTC, polar motion, celestial pole offsets): providers and IERS file readers.
 namespace astro {
@@ -40,7 +42,7 @@ struct EopValues {
 };
 
 /// Source of Earth orientation parameters, evaluated at a UTC epoch.
-class EopProvider {
+class ASTRO_EXPORT EopProvider {
 public:
     virtual ~EopProvider() = default;
     /// EOP at the given MJD (UTC). May throw astro::Error if out of range.
@@ -49,7 +51,7 @@ public:
 
 /// Returns the same values for every epoch (e.g. from a bulletin, or all zero
 /// for an approximate UT1 = UTC, no polar motion transformation).
-class ConstantEop final : public EopProvider {
+class ASTRO_EXPORT ConstantEop final : public EopProvider {
 public:
     /// All parameters zero (UT1 = UTC, no polar motion, no pole offsets).
     constexpr ConstantEop() noexcept = default;
@@ -77,14 +79,14 @@ enum class EopInterpolation {
 BOOST_DESCRIBE_ENUM(EopInterpolation, Linear, Lagrange4)
 
 /// Writes "EopInterpolation::<enumerator>", or "EopInterpolation::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, EopInterpolation value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, EopInterpolation value);
 
 /// Tabulated Earth orientation parameters with interpolation.
 ///
 /// UT1-UTC is interpolated as UT1-TAI (using the current leap-second table)
 /// so leap-second steps do not corrupt the interpolation. Sub-daily ocean-tide
 /// and libration corrections (IERS 2010 Ch. 5/8) are not applied.
-class EopTable final : public EopProvider {
+class ASTRO_EXPORT EopTable final : public EopProvider {
 public:
     /// From records in any order (sorted here). Throws astro::Error if there
     /// are fewer than two records, if an epoch or a value is not finite, or if two records

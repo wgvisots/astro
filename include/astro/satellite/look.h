@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/geodesy/geodetic.h"
 #include "astro/geodesy/local.h"
 #include "astro/orbit/trajectory.h"
@@ -33,11 +34,11 @@ namespace astro {
 
 /// Received-frequency shift (Hz) for transmit frequency `f` and range rate:
 /// first order, -f * rangeRate / c.
-[[nodiscard]] double dopplerShift(double frequencyHz, double rangeRate) noexcept;
+[[nodiscard]] ASTRO_EXPORT double dopplerShift(double frequencyHz, double rangeRate) noexcept;
 /// Exact relativistic shift for purely radial motion: f (sqrt((1-b)/(1+b)) - 1), b = rangeRate / c.
 /// At a range rate of +c the result is -f, at -c it is infinite, and beyond the speed of light
 /// it is NaN.
-[[nodiscard]] double dopplerShiftRelativistic(double frequencyHz, double rangeRate) noexcept;
+[[nodiscard]] ASTRO_EXPORT double dopplerShiftRelativistic(double frequencyHz, double rangeRate) noexcept;
 
 /// A visibility pass of a satellite over a site.
 struct Pass {
@@ -67,12 +68,12 @@ struct Pass {
 /// is NaN, if `step` is not positive and finite, or if the window holds more than
 /// 2e9 steps. Also throws if `end - start` does (one of the two in UT1, or a UTC
 /// time before 1960; see Time). An exception thrown by `sat` passes through.
-[[nodiscard]] std::vector<Pass> findPasses(const Trajectory& sat,
-                                           const Geodetic&   site,
-                                           const Time&       start,
-                                           const Time&       end,
-                                           double            minElevation = 0.0,
-                                           double            step         = 60.0,
-                                           const Ellipsoid&  ell          = Ellipsoid::wgs84());
+[[nodiscard]] ASTRO_EXPORT std::vector<Pass> findPasses(const Trajectory& sat,
+                                                        const Geodetic&   site,
+                                                        const Time&       start,
+                                                        const Time&       end,
+                                                        double            minElevation = 0.0,
+                                                        double            step         = 60.0,
+                                                        const Ellipsoid&  ell          = Ellipsoid::wgs84());
 
 } // namespace astro

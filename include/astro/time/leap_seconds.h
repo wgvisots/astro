@@ -24,6 +24,8 @@
 #include <string_view>
 #include <vector>
 
+#include "astro/export.h"
+
 /// \file
 /// The UTC leap-second table: built in, or loaded from IERS / IANA files.
 namespace astro {
@@ -48,7 +50,7 @@ struct LeapSecondEntry {
 ///  - IETF/NIST `leap-seconds.list`
 ///  - USNO `tai-utc.dat`
 /// and installed globally with setLeapSecondTable().
-class LeapSecondTable {
+class ASTRO_EXPORT LeapSecondTable {
 public:
     /// The built-in table.
     LeapSecondTable();
@@ -96,8 +98,8 @@ private:
 };
 
 /// The table used by all UTC conversions (thread-safe snapshot).
-[[nodiscard]] std::shared_ptr<const LeapSecondTable> leapSecondTable();
+[[nodiscard]] ASTRO_EXPORT std::shared_ptr<const LeapSecondTable> leapSecondTable();
 /// Replace the global table used by UTC conversions (thread-safe).
-void setLeapSecondTable(LeapSecondTable table);
+ASTRO_EXPORT void setLeapSecondTable(LeapSecondTable table);
 
 } // namespace astro

@@ -19,6 +19,7 @@
 #pragma once
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/geodesy/ellipsoid.h"
 
 /// \file
@@ -33,7 +34,7 @@ struct Geodetic {
 };
 
 /// Geodetic (lat, lon, h) to Earth-centered Earth-fixed Cartesian (m).
-[[nodiscard]] Vec3 geodeticToEcef(const Geodetic& g, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 geodeticToEcef(const Geodetic& g, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// ECEF (m) to geodetic. Closed form (Vermeille 2002, with the half-angle longitude of
 /// Vermeille 2004) for all points outside the ellipsoid's evolute (i.e. everywhere farther
@@ -41,19 +42,21 @@ struct Geodetic {
 /// the ellipsoid pass through a point, a bracketed root search picks the nearest foot point.
 /// Longitude in [-pi, pi]: on the antimeridian it is +pi for y >= 0 and -pi for y < 0 (a
 /// negative zero included). On the polar axis the longitude is 0.
-[[nodiscard]] Geodetic ecefToGeodetic(const Vec3& r, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Geodetic ecefToGeodetic(const Vec3& r, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Geocentric latitude of a point on the ellipsoid surface with the given geodetic latitude.
-[[nodiscard]] double geodeticToGeocentricLatitude(double           geodeticLat,
-                                                  const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT double geodeticToGeocentricLatitude(double           geodeticLat,
+                                                               const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// Geodetic latitude of a surface point with the given geocentric latitude.
-[[nodiscard]] double geocentricToGeodeticLatitude(double           geocentricLat,
-                                                  const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT double geocentricToGeodeticLatitude(double           geocentricLat,
+                                                               const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// Reduced (parametric) latitude beta: tan(beta) = (1 - f) tan(phi).
-[[nodiscard]] double geodeticToReducedLatitude(double geodeticLat, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT double geodeticToReducedLatitude(double           geodeticLat,
+                                                            const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// Geodetic latitude from the reduced (parametric) latitude; inverse of
 /// geodeticToReducedLatitude().
-[[nodiscard]] double reducedToGeodeticLatitude(double reducedLat, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT double reducedToGeodeticLatitude(double           reducedLat,
+                                                            const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Spherical (geocentric) coordinates of a vector: latitude, longitude, radius.
 struct Spherical {
@@ -62,8 +65,8 @@ struct Spherical {
     double r{0.0};   ///< radius (units of the vector)
 };
 /// Spherical coordinates of a vector; longitude is 0 on the z axis.
-[[nodiscard]] Spherical cartesianToSpherical(const Vec3& v) noexcept;
+[[nodiscard]] ASTRO_EXPORT Spherical cartesianToSpherical(const Vec3& v) noexcept;
 /// Cartesian vector from spherical coordinates.
-[[nodiscard]] Vec3 sphericalToCartesian(const Spherical& s) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 sphericalToCartesian(const Spherical& s) noexcept;
 
 } // namespace astro
