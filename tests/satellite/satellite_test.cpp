@@ -422,59 +422,124 @@ TEST(Ground, GroundTrackBadWindowOrStepThrows) {
     EXPECT_EQ(groundTrack(geo, t0, t0, 600.0).size(), 1u);
 }
 
-TEST(OrbitalFrames, DefinitionsAndRelativeMotion) {
+namespace {
+
+/// A state whose orbital frames are written out by hand: at (7000 km, 0, 0), moving 1 km/s outward
+/// and 7 km/s along the horizontal direction (0, cos i, sin i), inclination i = 30 deg. Its angular
+/// momentum is along (0, -sin i, cos i).
+struct HandState {
+    double      c = std::sqrt(3.0) / 2.0, s = 0.5, k = 1.0 / std::sqrt(50.0); // cos i, sin i, 1 / |v| in km/s
+    StateVector state{
+        {7000 * km, 0.0,       0.0      },
+        {1 * km,    7 * km* c, 7 * km* s}
+    };
+    Vec3 radial{1.0, 0.0, 0.0};
+    Vec3 horizontal{0.0, c, s};           // in the orbit plane, perpendicular to r, prograde
+    Vec3 normal{0.0, -s, c};              // along r x v
+    Vec3 velocity{k, 7 * k* c, 7 * k* s}; // v / |v|
+    Vec3 coNormal{7 * k, -k* c, -k* s};   // velocity x normal
+};
+
+} // namespace
+
+TEST(OrbitalFrames, MatricesOfAnInclinedStateAreKnownByHand) {
+    // Each row of each matrix written out from the definitions in orbital_frames.h for HandState.
+    const HandState h;
+    // 1e-15: rounding in unit vectors.
+    expectMatNear(ricMatrix(h.state), Mat3::fromRows(h.radial, h.horizontal, h.normal), 1e-15, "RIC");
+    expectMatNear(lvlhMatrix(h.state), Mat3::fromRows(h.horizontal, -h.normal, -h.radial), 1e-15, "LVLH");
+    expectMatNear(vncMatrix(h.state), Mat3::fromRows(h.velocity, h.normal, h.coNormal), 1e-15, "VNC");
+    expectMatNear(ntwMatrix(h.state), Mat3::fromRows(h.coNormal, h.velocity, h.normal), 1e-15, "NTW");
+}
+
+TEST(OrbitalFrames, MatricesAreRightHandedRotations) {
     const StateVector s = elementsToState({7000 * km, 0.1, 0.8, 0.3, 0.5, 1.0});
     for (const Mat3& m : {ricMatrix(s), lvlhMatrix(s), vncMatrix(s), ntwMatrix(s)}) {
         expectOrthonormal(m, 1e-14);
     }
-    expectVecNear(ricMatrix(s) * s.r, {norm(s.r), 0, 0}, 1e-6);
-    expectVecNear(lvlhMatrix(s) * s.r, {0, 0, -norm(s.r)}, 1e-6);
-    expectVecNear(vncMatrix(s) * s.v, {norm(s.v), 0, 0}, 1e-9);
-    expectVecNear(ntwMatrix(s) * s.v, {0, norm(s.v), 0}, 1e-9);
-    // RIC and LVLH differ by a fixed permutation/sign change.
-    const Mat3 P = lvlhMatrix(s) * ricMatrix(s).transpose();
-    expectMatNear(P, Mat3{0, 1, 0, 0, 0, -1, -1, 0, 0}, 1e-14);
-    // A deputy slightly ahead in the same circular orbit: pure in-track offset, ~zero relative velocity.
-    const double      r      = 7000 * km;
-    const StateVector chief  = elementsToState({r, 0.0, 0.5, 0.0, 0.0, 0.0});
-    const StateVector deputy = elementsToState({r, 0.0, 0.5, 0.0, 0.0, 1e-4});
-    const StateVector rel    = relativeStateRic(chief, deputy);
-    EXPECT_NEAR(rel.r.y, r * 1e-4, 1.0);
-    EXPECT_NEAR(rel.r.x, 0.0, 0.1);
-    EXPECT_NEAR(norm(rel.v), 0.0, 1e-3);
-    const StateVector back = deputyFromRelativeRic(chief, rel);
-    expectVecNear(back.r, deputy.r, 1e-6);
-    expectVecNear(back.v, deputy.v, 1e-9);
 }
 
-TEST(OrbitalFrames, CovarianceRotation) {
-    Mat6         P{};
-    const double sig[6] = {100.0, 50.0, 10.0, 0.1, 0.05, 0.01};
-    for (std::size_t i = 0; i < 6; ++i) {
-        P[i][i] = sig[i] * sig[i];
-    }
-    P[0][1] = P[1][0]     = 0.3 * 100.0 * 50.0;
-    const StateVector s   = elementsToState({7000 * km, 0.01, 1.0, 0.2, 0.3, 0.4});
-    const Mat3        R   = ricMatrix(s);
-    const Mat6        Q   = rotateCovariance(P, R);
-    double            trP = 0, trQ = 0, trPv = 0, trQv = 0;
+TEST(OrbitalFrames, RelativeStateOfADeputyOnTheSameCircularOrbit) {
+    // Chief and deputy on one circular orbit (radius r, inclination 30 deg), the deputy du ahead. In the
+    // chief's rotating RIC frame the deputy sits still at (r (cos du - 1), r sin du, 0): its velocity
+    // relative to the rotating frame is zero.
+    const double      r = 7000 * km, v = std::sqrt(constants::gmEarth / r), du = 1e-4;
+    const double      c = std::sqrt(3.0) / 2.0, s = 0.5;
+    const StateVector chief{
+        {r,   0.0,   0.0  },
+        {0.0, v * c, v * s}
+    };
+    const StateVector deputy{
+        {r * std::cos(du),  r * std::sin(du) * c, r * std::sin(du) * s},
+        {-v * std::sin(du), v * std::cos(du) * c, v * std::cos(du) * s}
+    };
+    const StateVector rel = relativeStateRic(chief, deputy);
+    // Positions of 7e6 m carry 1e-9 m of rounding (measured 3.6e-10 m); velocities of 7.5e3 m/s carry
+    // 1e-12 m/s (measured 9e-13 m/s). Tolerances 2e-9 m and 3e-12 m/s.
+    expectVecNear(rel.r, {r * (std::cos(du) - 1.0), r * std::sin(du), 0.0}, 2e-9, "position"); // x is -0.035 m
+    expectVecNear(rel.v, {0.0, 0.0, 0.0}, 3e-12, "velocity");
+    expectVecNear(deputyFromRelativeRic(chief, rel).r, deputy.r, 2e-9, "back r");
+    expectVecNear(deputyFromRelativeRic(chief, rel).v, deputy.v, 3e-12, "back v");
+
+    // A deputy given an extra 0.1 m/s along the orbit normal moves at 0.1 m/s along cross-track.
+    StateVector pushed = deputy;
+    pushed.v           = deputy.v + 0.1 * Vec3{0.0, -s, c};
+    expectVecNear(relativeStateRic(chief, pushed).v, {0.0, 0.0, 0.1}, 3e-12, "cross-track velocity");
+    expectVecNear(deputyFromRelativeRic(chief,
+                                        {
+                                            rel.r,
+                                            {0.0, 0.0, 0.1}
+    })
+                      .v,
+                  pushed.v,
+                  3e-12,
+                  "back pushed v");
+}
+
+TEST(OrbitalFrames, CovarianceRotatedIntoRicIsKnownByHand) {
+    // The RIC matrix of HandState is a rotation by i about x: rows (1, 0, 0), (0, c, s), (0, -s, c).
+    // A covariance with a position block [[A, D, 0], [D, B, 0], [0, 0, C]], a velocity block
+    // diag(a, b, cc) and two position-velocity terms k = cov(y, vy) and m = cov(x, vz) becomes, by
+    // R P R^T worked out by hand, the matrix below. A transposed rotation flips the sign of every term
+    // in s; the m terms make the position-velocity block unsymmetric, so that its transpose differs.
+    const HandState h;
+    const double    c = h.c, s = h.s;
+    const double    A = 1.0e4, B = 2.5e3, C = 1.0e2, D = 1.5e3, a = 1e-2, b = 2.5e-3, cc = 1e-4, k = 0.3, m = -0.2;
+    Mat6            P{};
+    P[0][0] = A;
+    P[1][1] = B;
+    P[2][2] = C;
+    P[0][1] = P[1][0] = D;
+    P[3][3]           = a;
+    P[4][4]           = b;
+    P[5][5]           = cc;
+    P[1][4] = P[4][1] = k;
+    P[0][5] = P[5][0] = m;
+    Mat6 expected{};
+    // clang-format off
+    const double rr[3][3] = {{A,      D * c,                  -D * s                },
+                             {D * c,  c * c * B + s * s * C,  c * s * (C - B)       },
+                             {-D * s, c * s * (C - B),        s * s * B + c * c * C }};
+    const double vv[3][3] = {{a,      0.0,                    0.0                   },
+                             {0.0,    c * c * b + s * s * cc, c * s * (cc - b)      },
+                             {0.0,    c * s * (cc - b),       s * s * b + c * c * cc}};
+    const double rv[3][3] = {{0.0,    m * s,                  m * c                 },
+                             {0.0,    k * c * c,              -k * c * s            },
+                             {0.0,    -k * c * s,             k * s * s             }};
+    // clang-format on
     for (std::size_t i = 0; i < 3; ++i) {
-        trP  += P[i][i];
-        trQ  += Q[i][i];
-        trPv += P[i + 3][i + 3];
-        trQv += Q[i + 3][i + 3];
-    }
-    EXPECT_NEAR(trQ, trP, 1e-8);
-    EXPECT_NEAR(trQv, trPv, 1e-12);
-    for (std::size_t i = 0; i < 6; ++i) {
-        for (std::size_t j = 0; j < 6; ++j) {
-            EXPECT_NEAR(Q[i][j], Q[j][i], 1e-9);
+        for (std::size_t j = 0; j < 3; ++j) {
+            expected[i][j]         = rr[i][j];
+            expected[i + 3][j + 3] = vv[i][j];
+            expected[i][j + 3]     = rv[i][j];
+            expected[i + 3][j]     = rv[j][i];
         }
     }
-    const Mat6 back = rotateCovariance(Q, R.transpose());
+    const Mat6 Q = rotateCovariance(P, ricMatrix(h.state));
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            EXPECT_NEAR(back[i][j], P[i][j], 1e-8);
+            // Rounding: a few units in the last place of the largest term, 1e4 m^2.
+            EXPECT_NEAR(Q[i][j], expected[i][j], 1e-11) << i << ", " << j;
         }
     }
 }
