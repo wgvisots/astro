@@ -112,7 +112,8 @@ using Mat6 = std::array<std::array<double, 6>, 6>;
 
 /// Rotate a symmetric 6x6 position/velocity covariance by a (static) 3x3 frame rotation:
 /// P' = diag(R, R) P diag(R, R)^T. Only the upper-right velocity block of P is read (P must be
-/// symmetric).
+/// symmetric). The result is symmetric to rounding, not exactly: the two diagonal blocks are plain
+/// matrix products R P_ii R^T (the off-diagonal blocks are exact transposes of each other).
 [[nodiscard]] inline Mat6 rotateCovariance(const Mat6& P, const Mat3& R) noexcept {
     // Block by block: P'_ij = R P_ij R^T (the lower-left block is the transpose of the upper-right).
     const Mat3 rr = R * block(P, 0, 0) * R.transpose();
@@ -134,6 +135,8 @@ using Mat6 = std::array<std::array<double, 6>, 6>;
 /// symmetric positive-definite S (its leading n x n block). Uses a Cholesky factorization of S
 /// scaled to unit diagonal, so mixed units (m^2 and m^2/s^2) do not hurt the conditioning.
 /// nullopt if S is not positive definite or the distance is not finite (d holds NaN or inf).
+/// Only the lower triangle of S is read. A matrix that is positive definite but within rounding
+/// of singular (a correlation of 1 - 1e-15, say) can be reported as not positive definite.
 [[nodiscard]] inline std::optional<double>
 mahalanobis2(const std::array<double, 6>& d, const Mat6& S, std::size_t n = 6) noexcept {
     if (n == 0 || n > 6) {

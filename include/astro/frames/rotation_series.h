@@ -48,7 +48,9 @@ class ItrsRotationSeries {
 public:
     /// Rotations for start + dt, 0 <= dt <= duration (seconds, as for Time::operator+).
     /// Throws astro::Error if duration is negative or not finite, nodeSpacing is not positive, or
-    /// the EOP do not cover the window. Also throws if the window starts before 1960, as
+    /// the EOP do not cover the window (a window shorter than 1 s is treated as 1 s long for
+    /// this, so the EOP must reach one second past its start). Also throws if the window starts
+    /// before 1960, as
     /// FrameTransformer does.
     ItrsRotationSeries(const Time&         start,
                        double              duration,

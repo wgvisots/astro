@@ -290,7 +290,8 @@ public:
     /// over 4 h at 10 s: about 1e-8 relative at the default tolerance and 1e-6 at relTol = 1e-9
     /// for near-circular orbits, ten times that for a 1000 x 20000 km orbit.
     ///
-    /// Q(t) is the process noise from white, isotropic acceleration noise with power spectral
+    /// Q(t) is the process noise from white, isotropic acceleration noise (the continuous
+    /// white-noise acceleration model; Bar-Shalom, Li & Kirubarajan 2001) with power spectral
     /// density accelerationNoisePsd (m^2/s^3), standing in for forces the model leaves out (drag,
     /// solar pressure, higher harmonics). 0 gives the purely deterministic propagation. Q is the
     /// noise accumulated between the epoch and t, so it adds uncertainty in both directions:

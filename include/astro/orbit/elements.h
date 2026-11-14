@@ -67,7 +67,8 @@ struct KeplerianElements {
 [[nodiscard]] KeplerianElements
 elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp, double M);
 
-/// Modified equinoctial-style (prograde) equinoctial elements:
+/// Equinoctial elements of Broucke & Cefola (1972), prograde form (not the "modified equinoctial"
+/// set of Walker et al., which replaces a by the semi-latus rectum):
 ///   h = e sin(raan + argp), k = e cos(raan + argp),
 ///   p = tan(i/2) sin(raan), q = tan(i/2) cos(raan), lambda = mean longitude.
 /// Non-singular for circular and equatorial orbits (singular at i = 180 deg).

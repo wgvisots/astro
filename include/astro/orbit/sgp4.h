@@ -102,7 +102,10 @@ public:
     /// Throws Sgp4Error on propagation failure: for any code of the class description, 6 (decayed)
     /// and 7 (`minutesSinceEpoch` is not finite) included.
     [[nodiscard]] StateVector propagate(double minutesSinceEpoch) const;
-    /// TEME state at a time (any scale). Throws Sgp4Error as propagate(minutesSinceEpoch) does, and
+    /// TEME state at a time (any scale). The minutes since the epoch are the elapsed time, leap
+    /// seconds included; software that subtracts Julian dates instead differs by one second (7.7 km
+    /// in low Earth orbit) across a leap second. Throws Sgp4Error as
+    /// propagate(minutesSinceEpoch) does, and
     /// astro::Error if t cannot be subtracted from the epoch (a UT1 time, or a UTC time before 1960;
     /// see Time).
     [[nodiscard]] StateVector propagate(const Time& t) const;
