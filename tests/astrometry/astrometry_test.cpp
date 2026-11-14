@@ -190,8 +190,9 @@ TEST(Apparent, ObservedPlaceMatchesErfaAtco13) {
         const bool        refr  = v("refraction") != 0.0;
         const Aer         a     = starObserved(star, t, site, eop, eph, refr ? &atm : nullptr);
         const double      elRef = constants::halfPi - v("zob");
-        // Unrefracted: sub-mas agreement. Refracted: same model, but very low elevations are sensitive.
-        const double tol = refr ? (elRef > deg2rad(10.0) ? mas2rad(1.0) : arcsec2rad(1.0)) : mas2rad(1.0);
+        // The same model as ERFA's, refracted or not and at every elevation in the file: measured
+        // 0.032 mas at most (0.027 mas below 10 deg, refracted). Tolerance 0.1 mas.
+        const double tol = mas2rad(0.1);
         EXPECT_NEAR(a.el, elRef, tol) << t.iso8601() << " el=" << rad2deg(elRef);
         if (elRef < deg2rad(89.0)) {
             EXPECT_NEAR(wrapPi(a.az - v("aob")) * std::cos(elRef), 0.0, tol) << t.iso8601();
@@ -260,13 +261,17 @@ TEST(RiseSet, MoonRiseSetAndPhase) {
     }
     EXPECT_GE(rises, 2);
     EXPECT_GE(sets, 2);
-    // Full moon 2024-01-25 17:54 UTC; new moon 2024-02-09 22:59 UTC.
+    // Full moon 2024-01-25 17:54 UTC; new moon 2024-02-09 22:59 UTC (the US Naval Observatory's
+    // phases of the Moon, to the minute). The age (Moon minus Sun in ecliptic longitude) moves 0.0085
+    // deg per minute, so the rounding to the minute is 0.0042 deg; the almanac's apparent longitudes
+    // differ from these geometric ones by the Sun's aberration, 20.5" (0.0057 deg). Measured 0.0058
+    // and 0.0075 deg; tolerance 0.02 deg.
     const MoonPhase full = moonPhase(Time::fromIso8601("2024-01-25T17:54:00Z"), eph);
     EXPECT_GT(full.illuminatedFraction, 0.99);
-    EXPECT_NEAR(full.age, constants::pi, deg2rad(0.5));
+    EXPECT_NEAR(full.age, constants::pi, deg2rad(0.02));
     const MoonPhase nm = moonPhase(Time::fromIso8601("2024-02-09T22:59:00Z"), eph);
     EXPECT_LT(nm.illuminatedFraction, 0.01);
-    EXPECT_NEAR(wrapPi(nm.age), 0.0, deg2rad(0.5));
+    EXPECT_NEAR(wrapPi(nm.age), 0.0, deg2rad(0.02));
     const MoonPhase wax = moonPhase(Time::fromIso8601("2024-02-14T00:00:00Z"), eph);
     EXPECT_TRUE(wax.waxing);
 }
@@ -453,4 +458,271 @@ TEST(Sidereal, LocalSiderealTimeAndHourAngle) {
     EXPECT_NEAR(wrapPi(localMeanSiderealTime(t, eop, deg2rad(15.0)) - lmst0), deg2rad(15.0), 1e-12);
     EXPECT_NEAR(hourAngle(deg2rad(10.0), deg2rad(350.0)), deg2rad(20.0), 1e-12);
     EXPECT_LT(std::abs(localApparentSiderealTime(t, eop, 0.0) - lmst0), arcsec2rad(1.2 * 15.0));
+}
+
+TEST(Spherical, GalacticMatrixIsTheHipparcosOne) {
+    // The Hipparcos and Tycho Catalogues (ESA 1997), vol. 1, sec. 1.5.3, eq. 1.5.11: the matrix from
+    // ICRS to galactic coordinates, printed to 10 decimals.
+    // clang-format off
+    const Mat3 published{-0.0548755604, -0.8734370902, -0.4838350155,
+                         +0.4941094279, -0.4448296300, +0.7469822445,
+                         -0.8676661490, -0.1980763734, +0.4559837762};
+    // clang-format on
+    test::expectMatNear(icrsToGalacticMatrix(), published, 0.5e-10);
+}
+
+TEST(Spherical, EclipticMatrixIsARotationAboutTheEquinox) {
+    // The ecliptic and the equator share the x axis (the equinox); the matrix turns y and z by eps
+    // about it: rows (1, 0, 0), (0, cos eps, sin eps), (0, -sin eps, cos eps).
+    const double eps = 84381.406 * constants::arcsecToRad; // IAU 2006 obliquity at J2000
+    const double c = std::cos(eps), s = std::sin(eps);
+    test::expectMatNear(equatorialToEclipticMatrix(eps), Mat3{1, 0, 0, 0, c, s, 0, -s, c}, 1e-16);
+}
+
+TEST(Apparent, LightDeflectionByTheSunIsTwiceTheNewtonianAngle) {
+    // A ray from a distant source passing a mass M, seen from a distance d of it at an angle theta from
+    // it, is bent away from it by (2 G M / (c^2 d)) cot(theta / 2) (to first post-Newtonian order;
+    // 4 G M / (c^2 b) for impact parameter b = d theta when theta is small: 1.75" at the Sun's limb).
+    const double au = constants::au;
+    const double k  = 2.0 * constants::gmSun / (constants::c * constants::c * au); // rad, at 1 au
+    const Vec3   e{1.0, 0.0, 0.0};                                                 // from the Sun to the observer
+    for (double thetaDeg : {0.2666, 1.0, 10.0, 45.0, 90.0, 150.0}) {
+        SCOPED_TRACE(testing::Message() << "theta = " << thetaDeg << " deg");
+        const double theta = deg2rad(thetaDeg);
+        // The source direction, theta from the direction to the Sun (-e).
+        const Vec3   p{-std::cos(theta), std::sin(theta), 0.0};
+        const Vec3   bent     = lightDeflection(p, p, e, 1.0);
+        const double expected = k / std::tan(0.5 * theta);
+        // Measured 3e-11 of the deflection (2.6e-16 rad at the limb); tolerance 1e-10 of it, plus rounding.
+        EXPECT_NEAR(angleBetween(p, bent), expected, 1e-10 * expected + 1e-15);
+        // Away from the Sun. The correction is added at right angles to p, not normalised (as in ERFA's
+        // ld): the length is that of the hypotenuse.
+        EXPECT_GT(dot(normalized(bent), e), dot(p, e));
+        EXPECT_NEAR(norm(bent), std::hypot(1.0, expected), 1e-15);
+    }
+    // At the limb (959.63" from the centre) the deflection is 1.75".
+    EXPECT_NEAR(rad2arcsec(k / std::tan(0.5 * arcsec2rad(959.63))), 1.751, 0.001);
+    // Twice the mass, twice the bending; twice the distance, half.
+    const Vec3 p{-std::cos(0.1), std::sin(0.1), 0.0};
+    EXPECT_NEAR(angleBetween(p, lightDeflection(p, p, e, 1.0, 2.0)),
+                2.0 * k / std::tan(0.05),
+                1e-9 * k / std::tan(0.05));
+    EXPECT_NEAR(angleBetween(p, lightDeflection(p, p, e, 2.0)), 0.5 * k / std::tan(0.05), 1e-9 * k / std::tan(0.05));
+}
+
+namespace {
+
+/// Direction seen by an observer moving at velocity beta (units of c) of light arriving from direction
+/// p (unit vector), by the Lorentz transformation:
+///     p' = (p / gamma + (1 + p.beta / (1 + 1 / gamma)) beta) / (1 + p.beta).
+Vec3 lorentzAberration(const Vec3& p, const Vec3& beta) {
+    const double invGamma = std::sqrt(1.0 - dot(beta, beta));
+    const double pb       = dot(p, beta);
+    return normalized((invGamma * p + (1.0 + pb / (1.0 + invGamma)) * beta) / (1.0 + pb));
+}
+
+} // namespace
+
+TEST(Apparent, AberrationIsTheLorentzTransformationOfDirection) {
+    // ERFA's ab adds to the Lorentz transformation a term (Schwarzschild radius of the Sun / distance)
+    // times beta, 2e-8 x 1e-4 = 2e-12 rad at 1 au: the tolerance is 5e-12 rad.
+    const Vec3 beta = Vec3{-2.9e4, 5.1e3, 2.2e3} / constants::c; // an Earth-like orbital velocity
+    for (const Vec3& dir : {
+             Vec3{1,   0,    0    },
+             Vec3{0,   1,    0    },
+             Vec3{0.3, -0.4, 0.866},
+             Vec3{-1,  0.2,  0.1  }
+    }) {
+        const Vec3 p   = normalized(dir);
+        const Vec3 got = aberration(p, beta, 1.0);
+        SCOPED_TRACE(testing::Message() << "direction " << p.x << ", " << p.y << ", " << p.z);
+        EXPECT_LT(angleBetween(got, lorentzAberration(p, beta)), 5e-12);
+        // Toward the velocity, by about |beta| sin(angle): up to 20.5".
+        EXPECT_LE(rad2arcsec(angleBetween(got, p)), 20.6);
+    }
+    // At right angles to the velocity the Lorentz shift is asin(|beta|) (|beta| = 1e-4), plus ERFA's
+    // 2e-12 rad term (measured 2.1e-12).
+    const Vec3 perpendicular = normalized(cross(beta, Vec3{0, 0, 1}));
+    EXPECT_NEAR(angleBetween(aberration(perpendicular, beta, 1.0), perpendicular), norm(beta), 1e-11);
+}
+
+TEST(Apparent, StarSpaceMotionIsLinearInMetres) {
+    // A star at distance au / parallax moves in a straight line at its space velocity: the proper
+    // motion times the distance across the line of sight, the radial velocity along it. After the
+    // interval from the catalog epoch (here J2016.0, the epoch of Gaia DR3) to t, in Julian years.
+    CatalogStar star;
+    star.ra             = deg2rad(269.452);
+    star.dec            = deg2rad(4.693);
+    star.pmRaCosDec     = arcsec2rad(-0.802);
+    star.pmDec          = arcsec2rad(10.362);
+    star.parallax       = arcsec2rad(0.547);
+    star.radialVelocity = -110.5e3;
+    star.epochJdTdb     = 2457389.0;                                    // J2016.0
+    const Time   t      = Time::fromJd(2460676.5, 0.0, TimeScale::TDB); // 2025-01-01
+    const double years  = (2460676.5 - star.epochJdTdb) / 365.25;
+    const double dist   = constants::au / star.parallax;
+    const Vec3   u      = unitVectorFromRaDec(star.ra, star.dec);
+    const Vec3   east{-std::sin(star.ra), std::cos(star.ra), 0.0};
+    const Vec3   north  = cross(u, east);
+    const double year   = 365.25 * 86400.0;
+    const Vec3   v      = dist * (star.pmRaCosDec * east + star.pmDec * north) / year + star.radialVelocity * u;
+    const Vec3   expect = dist * u + v * years * year;
+    const Vec3   got    = starBarycentricPosition(star, t);
+    // Rounding in coordinates of 5.6e16 m (measured: no difference at all); tolerance 1e-14 of the
+    // distance.
+    EXPECT_LT(norm(got - expect), 1e-14 * dist);
+    EXPECT_GT(norm(got - dist * u), 1e-5 * dist); // it has moved
+
+    // Without a parallax the result is a unit vector: the same direction with the proper motion alone.
+    star.parallax       = 0.0;
+    const Vec3 noPx     = starBarycentricPosition(star, t);
+    const Vec3 expected = normalized(u + (star.pmRaCosDec * east + star.pmDec * north) * years);
+    EXPECT_NEAR(norm(noPx), 1.0, 1e-15);
+    EXPECT_LT(angleBetween(noPx, expected), 1e-14); // rounding (measured: none)
+}
+
+TEST(Apparent, ObserverEphemerisIsTheGeocentreOffsetByTheObserver) {
+    // From an SPK the barycentric state is the Earth's relative to the solar-system barycenter and the
+    // heliocentric position the Earth's relative to the Sun, each plus the offset. Without the
+    // barycenter (LowPrecisionEphemeris) the heliocentric state stands in for it.
+    const SpkEphemeris          spk(dataPath("de440s_2024q1_le.bsp"));
+    const LowPrecisionEphemeris lp;
+    const Time                  t = Time::fromIso8601("2024-02-10T06:00:00Z");
+    const StateVector           offset{
+                  {4.0e6, -3.0e6, 2.0e6 },
+                  {200.0, 300.0,  -100.0}
+    };
+    const ObserverEphemeris o     = observerEphemeris(t, spk, offset);
+    const StateVector       earth = spk.state(Body::Earth, Body::SolarSystemBarycenter, t);
+    test::expectVecNear(o.barycentric.r, earth.r + offset.r, 1e-4, "barycentric r"); // 1.5e11 m
+    test::expectVecNear(o.barycentric.v, earth.v + offset.v, 1e-9, "barycentric v");
+    test::expectVecNear(o.heliocentric, spk.position(Body::Earth, Body::Sun, t) + offset.r, 1e-4, "heliocentric");
+    const ObserverEphemeris l = observerEphemeris(t, lp);
+    const StateVector       h = lp.state(Body::Earth, Body::Sun, t);
+    test::expectVecNear(l.barycentric.r, h.r, 1e-4, "low precision r");
+    test::expectVecNear(l.barycentric.v, h.v, 1e-9, "low precision v");
+}
+
+TEST(Apparent, StarApparentGcrsIsSpaceMotionThenDeflectionThenAberration) {
+    // The pipeline of apparent.h written out with the truths of the tests above: the star's
+    // barycentric position at t, seen from the geocentre (parallax), bent by the Sun (deflection
+    // formula), shifted by the Earth's barycentric velocity (Lorentz transformation), as RA, Dec.
+    // Barnard's star from its J2016.0 Gaia epoch, 57 deg from the Sun.
+    const SpkEphemeris spk(dataPath("de440s_2024q1_le.bsp"));
+    CatalogStar        star;
+    star.ra             = deg2rad(269.452);
+    star.dec            = deg2rad(4.693);
+    star.pmRaCosDec     = arcsec2rad(-0.802);
+    star.pmDec          = arcsec2rad(10.362);
+    star.parallax       = arcsec2rad(0.547);
+    star.radialVelocity = -110.5e3;
+    star.epochJdTdb     = 2457389.0;
+    const Time t        = Time::fromIso8601("2024-02-10T06:00:00Z");
+
+    const StateVector earth = spk.state(Body::Earth, Body::SolarSystemBarycenter, t);
+    const Vec3        sun   = spk.position(Body::Sun, Body::SolarSystemBarycenter, t);
+    const Vec3        p     = normalized(starBarycentricPosition(star, t) - earth.r); // natural direction
+    const Vec3        e     = normalized(earth.r - sun);                              // Sun to observer
+    const double      theta = std::acos(dot(p, -e));
+    const double      k     = 2.0 * constants::gmSun / (constants::c * constants::c * norm(earth.r - sun));
+    // Bent by k cot(theta / 2) away from the Sun, in the plane of p and the Sun.
+    const Vec3  away     = normalized(e - dot(e, p) * p);
+    const Vec3  deflect  = normalized(p + k / std::tan(0.5 * theta) * away);
+    const Vec3  apparent = lorentzAberration(deflect, earth.v / constants::c);
+    const RaDec expected = raDecFromVector(apparent);
+    const RaDec got      = starApparentGcrs(star, t, spk);
+    // Left out here: ERFA's gravitational term in the aberration (2e-12 rad; see
+    // AberrationIsTheLorentzTransformationOfDirection), and the finite distance of the star in the
+    // deflection (its parallax times the deflection, 3e-6 x 9 mas). Measured 1.3e-12 rad; tolerance
+    // 5e-12 rad (1 uas).
+    EXPECT_NEAR(wrapPi(got.ra - expected.ra) * std::cos(expected.dec), 0.0, 5e-12);
+    EXPECT_NEAR(got.dec - expected.dec, 0.0, 5e-12);
+    EXPECT_NEAR(rad2deg(theta), 56.5, 0.1);
+}
+
+TEST(RiseSet, TwilightEventsSitOnTheConventionalSunElevations) {
+    // Civil, nautical and astronomical twilight begin and end when the Sun's centre is 6, 12 and 18
+    // deg below the horizon (geometric). At Greenwich on 2024-03-20 each happens once in the morning
+    // and once in the evening, in order around sunrise and sunset.
+    EXPECT_EQ(twilightElevation(Twilight::Civil), deg2rad(-6.0));
+    EXPECT_EQ(twilightElevation(Twilight::Nautical), deg2rad(-12.0));
+    EXPECT_EQ(twilightElevation(Twilight::Astronomical), deg2rad(-18.0));
+    const LowPrecisionEphemeris eph;
+    const ConstantEop           eop;
+    const Geodetic              site{deg2rad(51.4769), deg2rad(-0.0005), 0.0};
+    const Time                  start = Time::fromIso8601("2024-03-20T00:00:00Z");
+    const auto                  sun   = sunRiseSet(site, start, start + 86400.0, eop, eph);
+    ASSERT_EQ(sun.size(), 3u);
+    Time dawnBefore = sun[0].time, duskAfter = sun[2].time;
+    for (Twilight tw : {Twilight::Civil, Twilight::Nautical, Twilight::Astronomical}) {
+        SCOPED_TRACE(testing::Message() << tw);
+        const auto ev = twilight(tw, site, start, start + 86400.0, eop, eph);
+        ASSERT_EQ(ev.size(), 2u);
+        EXPECT_EQ(ev[0].type, SkyEventType::Rise);
+        EXPECT_EQ(ev[1].type, SkyEventType::Set);
+        for (const SkyEvent& e : ev) {
+            // Refined to 1 ms, in which the Sun's elevation changes by 3e-7 rad at most.
+            EXPECT_NEAR(bodyElevation(Body::Sun, e.time, site, eop, eph), twilightElevation(tw), 1e-6);
+        }
+        // Each deeper twilight begins earlier and ends later.
+        EXPECT_LT(ev[0].time, dawnBefore);
+        EXPECT_GT(ev[1].time, duskAfter);
+        dawnBefore = ev[0].time;
+        duskAfter  = ev[1].time;
+    }
+}
+
+TEST(RiseSet, MoonRiseAndSetAreWhenTheRefractedUpperLimbTouchesTheHorizon) {
+    // Documented: the upper limb with 34' of refraction, topocentric. At each rise and set the geometric
+    // elevation of the centre plus the Moon's angular semidiameter (from its mean radius, 1737.4 km,
+    // and its topocentric distance) plus 34' is zero. Transits are local maxima of the elevation.
+    const SpkEphemeris eph(dataPath("de440s_2024q1_le.bsp"));
+    const ConstantEop  eop;
+    const Geodetic     site{deg2rad(40.0), deg2rad(-105.0), 1600.0};
+    const Time         start = Time::fromIso8601("2024-02-01T00:00:00Z");
+    const auto         ev    = moonRiseSet(site, start, start + 3.0 * 86400.0, eop, eph);
+    int                rises = 0, sets = 0, transits = 0;
+    for (const SkyEvent& e : ev) {
+        SCOPED_TRACE(testing::Message() << e.type << " at " << e.time.iso8601());
+        const double el = bodyElevation(Body::Moon, e.time, site, eop, eph);
+        if (e.type == SkyEventType::Transit) {
+            ++transits;
+            EXPECT_GT(el, bodyElevation(Body::Moon, e.time - 60.0, site, eop, eph));
+            EXPECT_GT(el, bodyElevation(Body::Moon, e.time + 60.0, site, eop, eph));
+            continue;
+        }
+        rises += e.type == SkyEventType::Rise;
+        sets  += e.type == SkyEventType::Set;
+        const double range =
+            topocentricFromGcrs(eph.position(Body::Moon, Body::Earth, e.time), FrameTransformer(e.time, eop), site)
+                .range;
+        const double limb = el + std::asin(1737.4e3 / range) + deg2rad(34.0 / 60.0);
+        // Refined to 1 ms, in which the Moon's elevation changes by 2e-7 rad at most.
+        EXPECT_NEAR(limb, 0.0, 1e-6);
+    }
+    // Three days hold three rises, three sets and three transits, give or take one at the ends.
+    EXPECT_GE(rises, 2);
+    EXPECT_GE(sets, 2);
+    EXPECT_GE(transits, 2);
+}
+
+TEST(Apparent, RefractedBodyElevationIsTheUnrefractedOneRefracted) {
+    // bodyObserved with an atmosphere applies the refraction of refraction.h (checked against ERFA's
+    // refco in Refraction.ConstantsMatchErfa) to the unrefracted observed elevation, and leaves the
+    // azimuth and the range alone.
+    const SpkEphemeris eph(dataPath("de440s_2024q1_le.bsp"));
+    const ConstantEop  eop;
+    const Geodetic     site{deg2rad(40.0), deg2rad(-105.0), 1600.0};
+    const Atmosphere   atm{830.0, 5.0, 0.3, 0.574};
+    for (double hours : {16.0, 19.0, 22.5}) { // the Sun at several elevations above the horizon
+        const Time t   = Time::fromIso8601("2024-02-10T00:00:00Z") + hours * 3600.0;
+        const Aer  raw = bodyObserved(Body::Sun, t, site, eop, eph);
+        const Aer  ref = bodyObserved(Body::Sun, t, site, eop, eph, &atm);
+        SCOPED_TRACE(testing::Message() << "elevation " << rad2deg(raw.el) << " deg");
+        ASSERT_GT(raw.el, deg2rad(3.0));
+        EXPECT_NEAR(ref.el, refractTrueToObserved(raw.el, refractionConstants(atm)), 1e-12);
+        EXPECT_GT(ref.el - raw.el, arcsec2rad(10.0)); // refraction raises the body
+        EXPECT_NEAR(wrapPi(ref.az - raw.az), 0.0, 1e-12);
+        EXPECT_NEAR(ref.range, raw.range, 1e-3);
+    }
 }
