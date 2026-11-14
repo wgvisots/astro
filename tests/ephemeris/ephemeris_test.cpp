@@ -23,6 +23,7 @@
 #include <iterator>
 #include <random>
 #include <string>
+#include <utility>
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
@@ -298,8 +299,43 @@ TEST(LowPrecision, SunAndMoonAgainstDe440) {
         EXPECT_NEAR(norm(moon) / norm(moonRef), 1.0, 2e-3) << jd;
         // Ephemeris interface + numerical velocity.
         const StateVector m = lp.state(Body::Moon, Body::Earth, t);
-        EXPECT_LT(norm(m.v - spk.state(Body::Moon, Body::Earth, t).v), 30.0);
+        // The low-precision Moon is good to 0.1 deg; its velocity, by numerical differentiation of
+        // that series, to 2.15 m/s here (measured). Tolerance 4 m/s.
+        EXPECT_LT(norm(m.v - spk.state(Body::Moon, Body::Earth, t).v), 4.0);
         test::expectVecNear(lp.position(Body::Earth, Body::Sun, t), -sun, 1e-2);
     }
     EXPECT_THROW((void)lp.state(Body::Mars, Body::Earth, tdb(2460311.0)), Error);
+}
+
+TEST(Ephemeris, NaifIdsAreTheNaifIntegerCodes) {
+    // NAIF "NAIF Integer ID codes" Required Reading: barycenters 0-10 (0 the solar system's, 10 the
+    // Sun), planets n99, the Moon 301.
+    EXPECT_EQ(naifId(Body::SolarSystemBarycenter), 0);
+    EXPECT_EQ(naifId(Body::MercuryBarycenter), 1);
+    EXPECT_EQ(naifId(Body::EarthMoonBarycenter), 3);
+    EXPECT_EQ(naifId(Body::MarsBarycenter), 4);
+    EXPECT_EQ(naifId(Body::PlutoBarycenter), 9);
+    EXPECT_EQ(naifId(Body::Sun), 10);
+    EXPECT_EQ(naifId(Body::Mercury), 199);
+    EXPECT_EQ(naifId(Body::Venus), 299);
+    EXPECT_EQ(naifId(Body::Moon), 301);
+    EXPECT_EQ(naifId(Body::Earth), 399);
+    EXPECT_EQ(naifId(Body::Mars), 499);
+}
+
+TEST(Spk, MissingFileThrows) {
+    EXPECT_THROW(SpkEphemeris(dataPath("no_such_kernel.bsp")), Error);
+}
+
+TEST(Spk, MovedToEphemerisStillReadsAKernel) {
+    // A moved-to SpkEphemeris, by construction and by assignment, still reads its kernel (the
+    // reference states from jplephem).
+    SpkEphemeris       first(dataPath("de440s_2024q1_le.bsp"));
+    const SpkEphemeris constructed(std::move(first));
+    const int          n = expectReferenceStates(constructed, [](int, int) { return true; });
+    EXPECT_GE(n, 100);
+    SpkEphemeris assigned(dataPath("de440s_2024q1_be.bsp"));
+    SpkEphemeris source(dataPath("de440s_2024q1_le.bsp"));
+    assigned = std::move(source);
+    EXPECT_EQ(expectReferenceStates(assigned, [](int, int) { return true; }), n);
 }
