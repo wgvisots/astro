@@ -96,6 +96,115 @@ TEST(PrecessionNutation, MatchesErfa) {
     }
 }
 
+TEST(FrameTransformer, WithEarthOrientationDataMatchesErfa) {
+    // ERFA's GCRS -> ITRS matrix with polar motion, UT1 and the pole offsets dX, dY (tests/data/
+    // frames.csv), against a FrameTransformer given the same values through an EopProvider: this checks
+    // how the transformer applies each parameter, and its accessors. Epochs from 1960 on (UTC needed).
+    const auto csv  = readCsv(dataPath("frames.csv"));
+    int        rows = 0;
+    for (const auto& r : csv.rows) {
+        auto       v = [&](const char* n) { return std::stod(r[csv.col(n)]); };
+        const Time t(JulianDate{v("tt1"), v("tt2")}, TimeScale::TT);
+        if (t.mjd() < 36934.0 + 1.0) {
+            continue; // before 1960, where UTC (and with it this route) does not exist
+        }
+        ++rows;
+        SCOPED_TRACE(testing::Message() << "MJD " << t.mjd());
+        // UT1 - UTC from ERFA's UT1 (Julian date tt1 + ut12) and the library's UTC.
+        const double           dut1 = JulianDate{v("tt1"), v("ut12")}.secondsSince(t.to(TimeScale::UTC).jd());
+        const EopValues        e{.xp = v("xp"), .yp = v("yp"), .dut1 = dut1, .lod = 0.0, .dX = v("dx"), .dY = v("dy")};
+        const FrameTransformer ft(t, ConstantEop(e));
+        // 1 uas: the tolerance of the same matrix built from the parts in PrecessionNutation.MatchesErfa.
+        expectMatNear(ft.gcrsTo(Frame::ITRS), matFrom(csv, r, "c2t"), 1.0 * kUas, "c2t");
+        // The CIP includes the offsets; s is that of the model's CIP (0.05 uas as in MatchesErfa).
+        EXPECT_NEAR(ft.cip().x, v("x") + v("dx"), 0.5 * kUas);
+        EXPECT_NEAR(ft.cip().y, v("y") + v("dy"), 0.5 * kUas);
+        EXPECT_NEAR(ft.cioLocator(), v("s"), 0.05 * kUas);
+        // Earth rotation from UT1: 1e-12 rad as in MatchesErfa, plus the rounding of dut1 through two
+        // Julian dates (1e-11 s, 7e-16 rad).
+        EXPECT_NEAR(ft.earthRotationAngle(), v("era"), 2e-12);
+        EXPECT_NEAR(wrapPi(ft.gmst82() - v("gmst82")), 0.0, 2e-12);
+        EXPECT_NEAR(wrapPi(ft.gmst() - v("gmst06")), 0.0, 2e-12);
+        EXPECT_EQ(ft.eop().xp, e.xp);
+        EXPECT_EQ(ft.eop().dX, e.dX);
+        EXPECT_EQ(ft.tt().scale(), TimeScale::TT);
+        EXPECT_NEAR(ft.tt().jd().secondsSince(t.jd()), 0.0, 1e-9);
+        EXPECT_NEAR(ft.ut1().jd().secondsSince(JulianDate{v("tt1"), v("ut12")}), 0.0, 1e-9);
+
+        // Without the pole offsets: the CIP is the model's, and the offsets read back as zero.
+        const FrameTransformer noOffsets(t, ConstantEop(e), {.applyPoleOffsets = false});
+        EXPECT_NEAR(noOffsets.cip().x, v("x"), 0.5 * kUas);
+        EXPECT_NEAR(noOffsets.cip().y, v("y"), 0.5 * kUas);
+        EXPECT_EQ(noOffsets.eop().dX, 0.0);
+        EXPECT_EQ(noOffsets.eop().dY, 0.0);
+        // ERFA's GAST (gst06a) has no pole offsets either (with them it moves by up to 0.5 mas here).
+        EXPECT_NEAR(wrapPi(noOffsets.gast() - v("gst06a")), 0.0, 5.0 * kUas); // as in MatchesErfa
+    }
+    EXPECT_GE(rows, 30);
+}
+
+TEST(FrameTransformer, AngularVelocityIsAlongTheCipAtTheRateOfTheEarthRotationAngle) {
+    // The Earth turns about the CIP at d(ERA)/dt = 2 pi 1.00273781191135448 rad per UT1 day (IERS
+    // Conventions 2010 eq. 5.15), shortened by the excess length of day: omega (1 - LOD / 86400). In
+    // TIRS and PEF the CIP is z; in ITRS it is (xp, -yp, 1) to first order in the polar motion.
+    const Time             t  = Time::fromIso8601("2021-07-04T12:34:56Z");
+    const double           xp = arcsec2rad(0.2), yp = arcsec2rad(0.4), lod = 0.0015;
+    const ConstantEop      eop(EopValues{.xp = xp, .yp = yp, .dut1 = -0.15, .lod = lod});
+    const double           omega = constants::twoPi * 1.00273781191135448 / 86400.0 * (1.0 - lod / 86400.0);
+    const FrameTransformer ft(t, eop);
+    // Rounding: a few units in the last place of 7.3e-5 rad/s (1.4e-20; measured 1.4e-20).
+    expectVecNear(ft.angularVelocity(Frame::TIRS), {0.0, 0.0, omega}, 5e-20, "TIRS");
+    expectVecNear(ft.angularVelocity(Frame::PEF), {0.0, 0.0, omega}, 5e-20, "PEF");
+    // Second order in the polar motion: (xp^2 + yp^2) / 2 = 2.3e-12 of omega, 1.7e-16 rad/s.
+    expectVecNear(ft.angularVelocity(Frame::ITRS), {omega * xp, -omega * yp, omega}, 5e-16, "ITRS");
+    // The celestial frames do not rotate.
+    for (Frame f : {Frame::GCRS, Frame::J2000, Frame::MOD, Frame::TOD, Frame::TEME, Frame::CIRS}) {
+        EXPECT_EQ(ft.angularVelocity(f), Vec3{}) << f;
+    }
+    // So a point fixed in the ITRS moves at omega times its distance from the CIP, eastward.
+    const StateVector fixed{
+        {6378137.0, 0, 0},
+        {}
+    };
+    const StateVector tirs = ft.transform(fixed, Frame::ITRS, Frame::TIRS);
+    expectVecNear(tirs.v, {0.0, 0.0, 0.0}, 1e-12, "fixed in TIRS"); // it rotates with the frame
+    const StateVector gcrs = ft.transform(fixed, Frame::ITRS, Frame::GCRS);
+    const Vec3        axis = ft.gcrsTo(Frame::TIRS).row(2); // the CIP, in GCRS
+    expectVecNear(gcrs.v, omega * cross(axis, gcrs.r), 1e-9, "inertial velocity");
+}
+
+TEST(FrameTransformer, EarthFixedFramesAreTirsPefAndItrs) {
+    for (Frame f : {Frame::TIRS, Frame::PEF, Frame::ITRS}) {
+        EXPECT_TRUE(isEarthFixed(f)) << f;
+    }
+    for (Frame f : {Frame::GCRS, Frame::J2000, Frame::MOD, Frame::TOD, Frame::TEME, Frame::CIRS}) {
+        EXPECT_FALSE(isEarthFixed(f)) << f;
+    }
+}
+
+TEST(FrameTransformer, EpochWithoutEarthOrientationDataOrBefore1960Throws) {
+    // A table covering ten days in 2023, asked for an epoch a year later, and an epoch before 1960
+    // (no UTC): the constructor and the one-off conversions throw.
+    std::vector<EopRecord> records;
+    for (int d = 0; d < 10; ++d) {
+        records.push_back({60000.0 + d, {}});
+    }
+    const EopTable    table(records);
+    const Time        inside = Time::fromMjd(60004.5, TimeScale::UTC);
+    const Time        later  = Time::fromMjd(60400.0, TimeScale::UTC);
+    const Time        early  = Time::fromCalendar(TimeScale::TT, 1955, 1, 1, 0);
+    const StateVector s{
+        {7000e3, 0,     0},
+        {0,      7.5e3, 0}
+    };
+    EXPECT_NO_THROW(FrameTransformer(inside, table));
+    EXPECT_THROW(FrameTransformer(later, table), Error);
+    EXPECT_THROW((void)gcrsToItrs(s, later, table), Error);
+    EXPECT_THROW((void)temeToItrs(s, later, table), Error);
+    EXPECT_THROW(FrameTransformer(early, ConstantEop{}), Error);
+    EXPECT_THROW((void)gcrsToItrsMatrix(early, ConstantEop{}), Error);
+}
+
 TEST(PrecessionNutation, PoleOffsetsToNutationRoundTrip) {
     const double   t  = 0.2;
     const double   dX = 0.3 * constants::masToRad, dY = -0.2 * constants::masToRad;
