@@ -17,6 +17,7 @@
  **********************************************************************/
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -93,6 +94,93 @@ TEST(PrecessionNutation, MatchesErfa) {
                        * celestialToIntermediateMatrix(xyc, cioLocatorS06(t, xy));
         expectMatNear(c2t, matFrom(csv, r, "c2t"), 1.0 * kUas, "c2t");
         expectOrthonormal(c2t);
+    }
+}
+
+TEST(PrecessionNutation, BuildingBlocksMatchErfa) {
+    // The parts not covered by MatchesErfa, each against ERFA's values in frames.csv:
+    // - the Fukushima-Williams angles through fwToMatrix give ERFA's bias-precession matrix, and their
+    //   obliquity is ERFA's obl06;
+    // - nutationMatrix(obliquity, nutation) times that matrix is ERFA's NPB matrix (as ERFA's pn06
+    //   composes it);
+    // - the equation of the origins from ERFA's NPB matrix and s is ERA - GST (ERFA: gst06a = era - eo).
+    const auto csv = readCsv(dataPath("frames.csv"));
+    for (const auto& r : csv.rows) {
+        auto                    v  = [&](const char* n) { return std::stod(r[csv.col(n)]); };
+        const double            t  = JulianDate{v("tt1"), v("tt2")}.centuriesSinceJ2000();
+        const FukushimaWilliams fw = fukushimaWilliams06(t);
+        SCOPED_TRACE(testing::Message() << "t = " << t);
+        // The tolerances of the same quantities in MatchesErfa.
+        expectMatNear(fwToMatrix(fw.gammaBar, fw.phiBar, fw.psiBar, fw.epsA), matFrom(csv, r, "rbp"), 1e-14, "fw");
+        EXPECT_NEAR(fw.epsA, v("obl06"), 1e-15);
+        const Mat3 n = nutationMatrix(v("obl06"), {v("dpsi06a"), v("deps06a")});
+        expectMatNear(n * matFrom(csv, r, "rbp"), matFrom(csv, r, "npb"), 1e-14, "nutation matrix");
+        // Rounding in elements of the matrix (1e-16) and in angles near 2 pi: measured 3.7e-14.
+        EXPECT_NEAR(wrapPi(equationOfOrigins(matFrom(csv, r, "npb"), v("s")) - (v("era") - v("gst06a"))), 0.0, 1e-13);
+    }
+}
+
+TEST(PrecessionNutation, FwToMatrixIsTheProductOfItsFourRotations) {
+    // IERS Conventions (2010) eq. 5.40: R1(-eps) R3(-psi) R1(phi) R3(gamma), with the rotations
+    // written out (Rk(a) turns the axes by +a about axis k).
+    const double g = 0.3, p = 0.4, s = -0.2, e = 0.41;
+    const auto   r1 = [](double a) { return Mat3{1, 0, 0, 0, std::cos(a), std::sin(a), 0, -std::sin(a), std::cos(a)}; };
+    const auto   r3 = [](double a) { return Mat3{std::cos(a), std::sin(a), 0, -std::sin(a), std::cos(a), 0, 0, 0, 1}; };
+    expectMatNear(fwToMatrix(g, p, s, e), r1(-e) * r3(-s) * r1(p) * r3(g), 1e-15);
+}
+
+TEST(PrecessionNutation, FundamentalArgumentsArePublishedPolynomials) {
+    // IERS Conventions (2010) eq. 5.43 (Delaunay arguments; constant terms in degrees, the others in
+    // arcseconds) and 5.44 (planetary mean longitudes and general precession, radians), at J2000 and
+    // two other epochs.
+    const double as = constants::arcsecToRad;
+    for (double t : {0.0, 0.27, -0.83}) {
+        SCOPED_TRACE(testing::Message() << "t = " << t);
+        const double t2 = t * t, t3 = t2 * t, t4 = t3 * t;
+        // clang-format off
+        const double expected[14] = {
+            (134.96340251 * 3600.0 + 1717915923.2178 * t + 31.8792 * t2 + 0.051635 * t3 - 0.00024470 * t4) * as, // l
+            (357.52910918 * 3600.0 +  129596581.0481 * t -  0.5532 * t2 + 0.000136 * t3 - 0.00001149 * t4) * as, // l'
+            ( 93.27209062 * 3600.0 + 1739527262.8478 * t - 12.7512 * t2 - 0.001037 * t3 + 0.00000417 * t4) * as, // F
+            (297.85019547 * 3600.0 + 1602961601.2090 * t -  6.3706 * t2 + 0.006593 * t3 - 0.00003169 * t4) * as, // D
+            (125.04455501 * 3600.0 -    6962890.5431 * t +  7.4722 * t2 + 0.007702 * t3 - 0.00005939 * t4) * as, // Om
+            4.402608842 + 2608.7903141574 * t, // Mercury
+            3.176146697 + 1021.3285546211 * t, // Venus
+            1.753470314 +  628.3075849991 * t, // Earth
+            6.203480913 +  334.0612426700 * t, // Mars
+            0.599546497 +   52.9690962641 * t, // Jupiter
+            0.874016757 +   21.3299104960 * t, // Saturn
+            5.481293872 +    7.4781598567 * t, // Uranus
+            5.311886287 +    3.8133035638 * t, // Neptune
+            0.02438175 * t + 0.00000538691 * t2, // general precession in longitude
+        };
+        // clang-format on
+        const std::array<double, 14> f = fundamentalArguments(t);
+        for (std::size_t k = 0; k < 14; ++k) {
+            // The Delaunay arguments are evaluated in arcseconds, up to 1.4e9" here: 2.4e-7" (1.2e-12
+            // rad) of rounding (measured 1.5e-12).
+            EXPECT_NEAR(wrapPi(f[k] - expected[k]), 0.0, 5e-12) << "argument " << k;
+        }
+    }
+}
+
+TEST(PrecessionNutation, CipOfEitherModelMatchesErfa) {
+    // cipXY(t, model) against ERFA: for 2000A, ERFA's X, Y; for 2000B, the z row of the NPB matrix that
+    // ERFA's 2000B nutation (nut00b) gives with ERFA's bias-precession matrix and obliquity, composed as
+    // in BuildingBlocksMatchErfa.
+    const auto csv = readCsv(dataPath("frames.csv"));
+    for (const auto& r : csv.rows) {
+        auto         v = [&](const char* n) { return std::stod(r[csv.col(n)]); };
+        const double t = JulianDate{v("tt1"), v("tt2")}.centuriesSinceJ2000();
+        SCOPED_TRACE(testing::Message() << "t = " << t);
+        const CipXY a = cipXY(t, PrecessionNutationModel::IAU2006_2000A);
+        EXPECT_NEAR(a.x, v("x"), 0.5 * kUas); // as for cipXY06 in MatchesErfa
+        EXPECT_NEAR(a.y, v("y"), 0.5 * kUas);
+        const Mat3  npbB = nutationMatrix(v("obl06"), {v("dpsi00b"), v("deps00b")}) * matFrom(csv, r, "rbp");
+        const CipXY b    = cipXY(t, PrecessionNutationModel::IAU2006_2000B);
+        // Rounding of matrix elements.
+        EXPECT_NEAR(b.x, npbB(2, 0), 1e-14);
+        EXPECT_NEAR(b.y, npbB(2, 1), 1e-14);
     }
 }
 
