@@ -287,7 +287,18 @@ TEST(Angle, Sexagesimal) {
     EXPECT_EQ(formatDms(deg2rad(10.0)), "+10:00:00.00");
     // Rounding carries: 59.9999 s rounds up to the next minute.
     EXPECT_EQ(formatDms(dmsToRad(10, 59, 59.9999), 2), "+11:00:00.00");
-    EXPECT_EQ(formatHms(hmsToRad(23, 59, 59.9996), 3), "24:00:00.000");
+}
+
+// formatHms does not wrap the angle into one day, as angle.h says: wrapping is the caller's choice
+// (wrapTwoPi). So a rounding carry at the end of the day gives 24 hours, a full turn prints as 24 hours, and
+// more than a turn prints as more than 24 hours. Truth: the hours, minutes and seconds the angles were built
+// from, worked out by hand.
+TEST(Angle, FormatHmsDoesNotWrapIntoOneDay) {
+    EXPECT_EQ(formatHms(hmsToRad(23, 59, 59.9996), 3), "24:00:00.000"); // 59.9996 s rounds up, and carries
+    EXPECT_EQ(formatHms(hmsToRad(23, 59, 59.9994), 3), "23:59:59.999"); // and here it does not
+    EXPECT_EQ(formatHms(twoPi), "24:00:00.000");
+    EXPECT_EQ(formatHms(twoPi + hmsToRad(1, 30, 0.0)), "25:30:00.000");
+    EXPECT_EQ(formatHms(-hmsToRad(1, 30, 0.0)), "-01:30:00.000");
 }
 
 TEST(RootFind, BrentAndBisect) {
