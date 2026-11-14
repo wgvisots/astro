@@ -21,6 +21,9 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <string>
+
+#include "astro/version.h"
 
 using namespace astro;
 
@@ -74,4 +77,13 @@ TEST(Constants, AngleUnitsAgainstPi) {
     EXPECT_LE(rel(constants::arcsecToRad, piL / 648000), 2.3e-16);
     EXPECT_LE(rel(constants::masToRad, piL / 648000000), 3.4e-16);
     EXPECT_LE(rel(constants::uasToRad, piL / 648000000000), 3.4e-16);
+}
+
+TEST(Version, MacrosAndStringAgree) {
+    // The pieces, the combined number and the text all come from CMake's project version.
+    EXPECT_EQ(ASTRO_VERSION, ASTRO_VERSION_MAJOR * 10000 + ASTRO_VERSION_MINOR * 100 + ASTRO_VERSION_PATCH);
+    const std::string expected = std::to_string(ASTRO_VERSION_MAJOR) + "." + std::to_string(ASTRO_VERSION_MINOR) + "."
+                               + std::to_string(ASTRO_VERSION_PATCH);
+    EXPECT_EQ(std::string(ASTRO_VERSION_STRING), expected);
+    EXPECT_EQ(std::string(astro::versionString), expected);
 }

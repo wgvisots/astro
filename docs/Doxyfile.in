@@ -7,15 +7,15 @@ PROJECT_BRIEF          = "Time scales, geodesy, reference frames, ephemerides an
 OUTPUT_DIRECTORY       = @ASTRO_DOCS_OUTPUT@
 CREATE_SUBDIRS         = NO
 
-INPUT                  = @PROJECT_SOURCE_DIR@/docs @PROJECT_SOURCE_DIR@/include
+INPUT                  = @PROJECT_SOURCE_DIR@/docs @PROJECT_SOURCE_DIR@/include @PROJECT_BINARY_DIR@/include
 FILE_PATTERNS          = *.h *.md *.dox
 RECURSIVE              = YES
 EXCLUDE_SYMBOLS        = astro::detail astro::detail::* astro::*::detail
 EXAMPLE_PATH           = @PROJECT_SOURCE_DIR@/examples
 USE_MDFILE_AS_MAINPAGE = @PROJECT_SOURCE_DIR@/docs/index.md
 FULL_PATH_NAMES        = YES
-STRIP_FROM_PATH        = @PROJECT_SOURCE_DIR@/include @PROJECT_SOURCE_DIR@
-STRIP_FROM_INC_PATH    = @PROJECT_SOURCE_DIR@/include
+STRIP_FROM_PATH        = @PROJECT_SOURCE_DIR@/include @PROJECT_BINARY_DIR@/include @PROJECT_SOURCE_DIR@
+STRIP_FROM_INC_PATH    = @PROJECT_SOURCE_DIR@/include @PROJECT_BINARY_DIR@/include
 
 MARKDOWN_SUPPORT       = YES
 TOC_INCLUDE_HEADINGS   = 3
