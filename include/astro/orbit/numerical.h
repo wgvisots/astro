@@ -78,7 +78,7 @@ public:
 class GravityField final : public ForceModel {
 public:
     /// The point mass and every zonal term of `body` (an empty body.J: point mass only).
-    explicit GravityField(const CentralBody& body = {}, const Mat3& toBodyFrame = Mat3::identity());
+    explicit GravityField(const CentralBody& body = CentralBody::earth(), const Mat3& toBodyFrame = Mat3::identity());
     /// Point-mass plus zonal acceleration (m/s^2) in the propagation frame; t and v are unused.
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
     /// Exact (point mass and zonal terms).

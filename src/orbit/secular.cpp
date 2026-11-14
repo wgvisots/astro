@@ -29,18 +29,22 @@
 
 namespace astro {
 
-SecularRates secularRates(double a, double e, double i, const CentralBody& body, SecularOrder order) noexcept {
-    const double n    = std::sqrt(body.mu / (a * a * a));
+namespace {
+
+// secularRates on the four constants it uses.
+SecularRates
+ratesOf(double a, double e, double i, double mu, double re, double j2, double j4, SecularOrder order) noexcept {
+    const double n    = std::sqrt(mu / (a * a * a));
     const double eta2 = 1.0 - e * e;
     const double eta  = std::sqrt(eta2);
     const double th   = std::cos(i);
     const double th2 = th * th, th4 = th2 * th2;
-    const double ra = body.re / a;
+    const double ra = re / a;
     // Brouwer's small parameters.
-    const double g2  = 0.5 * body.zonal(2) * ra * ra;              // gamma2
-    const double g2p = g2 / (eta2 * eta2);                         // gamma2'
-    const double g4  = -0.375 * body.zonal(4) * ra * ra * ra * ra; // gamma4
-    const double g4p = g4 / (eta2 * eta2 * eta2 * eta2);           // gamma4'
+    const double g2  = 0.5 * j2 * ra * ra;               // gamma2
+    const double g2p = g2 / (eta2 * eta2);               // gamma2'
+    const double g4  = -0.375 * j4 * ra * ra * ra * ra;  // gamma4
+    const double g4p = g4 / (eta2 * eta2 * eta2 * eta2); // gamma4'
 
     SecularRates r;
     r.meanAnomalyDot = n * (1.0 + 1.5 * g2p * eta * (-1.0 + 3.0 * th2));
@@ -64,6 +68,12 @@ SecularRates secularRates(double a, double e, double i, const CentralBody& body,
                       + 5.0 / 4.0 * g4p * (5.0 - 3.0 * eta2) * th * (3.0 - 7.0 * th2));
     }
     return r;
+}
+
+} // namespace
+
+SecularRates secularRates(double a, double e, double i, const CentralBody& body, SecularOrder order) noexcept {
+    return ratesOf(a, e, i, body.mu, body.re, body.zonal(2), body.zonal(4), order);
 }
 
 KeplerianElements
@@ -173,7 +183,10 @@ inline double reduceAngle(double x) noexcept {
 
 SecularPropagator::SecularPropagator(const KeplerianElements& mean, const CentralBody& body, SecularOrder order)
     : mean_(mean)
-    , body_(body)
+    , mu_(body.mu)
+    , re_(body.re)
+    , j2_(body.zonal(2))
+    , j4_(body.zonal(4))
     , order_(order) {
     init();
 }
@@ -201,7 +214,10 @@ SecularPropagator::SecularPropagator(RateVelocity,
                                      const CentralBody&       body,
                                      SecularOrder             order)
     : mean_(mean)
-    , body_(body)
+    , mu_(body.mu)
+    , re_(body.re)
+    , j2_(body.zonal(2))
+    , j4_(body.zonal(4))
     , order_(order)
     , rateVelocity_(true) {
     init();
@@ -259,27 +275,30 @@ void SecularPropagator::init() {
     if (!(mean_.e >= 0.0 && mean_.e < 1.0) || !(mean_.a > 0.0)) {
         throw Error("SecularPropagator: requires an elliptic orbit (a > 0, 0 <= e < 1)");
     }
-    rates_     = secularRates(mean_.a, mean_.e, mean_.i, body_, order_);
-    J_         = order_ == SecularOrder::J2 ? std::vector<double>{0.0, 0.0, body_.zonal(2)}
-                                            : std::vector<double>{0.0, 0.0, body_.zonal(2), 0.0, body_.zonal(4)};
+    rates_ = ratesOf(mean_.a, mean_.e, mean_.i, mu_, re_, j2_, j4_, order_);
+    J_ = order_ == SecularOrder::J2 ? std::vector<double>{0.0, 0.0, j2_} : std::vector<double>{0.0, 0.0, j2_, 0.0, j4_};
     M0_        = mean_.meanAnomaly();
     b_         = mean_.a * std::sqrt(1.0 - mean_.e * mean_.e);
-    sqrtMuA_   = std::sqrt(body_.mu * mean_.a);
+    sqrtMuA_   = std::sqrt(mu_ * mean_.a);
     bOverA_    = b_ / mean_.a;
     cosI_      = std::cos(mean_.i);
     sinI_      = std::sin(mean_.i);
-    mDotOverN_ = rates_.meanAnomalyDot / std::sqrt(body_.mu / (mean_.a * mean_.a * mean_.a));
+    mDotOverN_ = rates_.meanAnomalyDot / std::sqrt(mu_ / (mean_.a * mean_.a * mean_.a));
 }
 
 void SecularPropagator::fieldDerivatives(const Vec3& r, const Vec3& v, Vec3& a, Vec3& j) const noexcept {
     detail::GravityPartials p;
-    detail::gravity<true>(r, J_.data(), J_.size(), body_.mu, body_.re, true, nullptr, &p);
+    detail::gravity<true>(r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
     a = p.acceleration;
     j = p.jerk(v);
 }
 
 KeplerianElements SecularPropagator::elements(double dt) const {
-    return propagateSecular(mean_, dt, body_, order_);
+    KeplerianElements out = mean_;
+    out.raan              = wrapTwoPi(mean_.raan + rates_.raanDot * dt);
+    out.argp              = wrapTwoPi(mean_.argp + rates_.argpDot * dt);
+    out.nu                = wrapTwoPi(meanToTrueAnomaly(mean_.meanAnomaly() + rates_.meanAnomalyDot * dt, mean_.e));
+    return out;
 }
 
 StateVector SecularPropagator::state(const Angles& x) const noexcept {
@@ -415,7 +434,7 @@ constexpr double kStencilWeight[4] = {8.0, -8.0, -1.0, 1.0};
 StateVector SecularPropagator::epochState() const {
     // Mean elements are converted on demand, so that constructions which never ask (every
     // propagateSecular call) do not pay for it.
-    return fromState_ ? input_.rv() : elementsToState(mean_, body_.mu);
+    return fromState_ ? input_.rv() : elementsToState(mean_, mu_);
 }
 
 SecularPropagator SecularPropagator::rebuilt(const StateVector& s) const {
@@ -423,11 +442,11 @@ SecularPropagator SecularPropagator::rebuilt(const StateVector& s) const {
     x.r             = s.r;
     x.v             = s.v;
     if (fromState12_) {
-        return rateVelocity_ ? SecularPropagator(RateVelocity{}, x, body_, order_, mode_)
-                             : SecularPropagator(x, body_, order_, mode_);
+        return rateVelocity_ ? SecularPropagator(RateVelocity{}, x, body(), order_, mode_)
+                             : SecularPropagator(x, body(), order_, mode_);
     }
-    return rateVelocity_ ? SecularPropagator(RateVelocity{}, x.rv(), body_, order_)
-                         : SecularPropagator(x.rv(), body_, order_);
+    return rateVelocity_ ? SecularPropagator(RateVelocity{}, x.rv(), body(), order_)
+                         : SecularPropagator(x.rv(), body(), order_);
 }
 
 void SecularPropagator::trajectoryGrid(double start, double step, std::span<StateVector> out) const {

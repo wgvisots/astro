@@ -47,15 +47,21 @@ struct CentralBody {
     /// The zonal coefficient Jn: J[n], or 0 for a degree beyond the list.
     [[nodiscard]] double zonal(std::size_t n) const noexcept { return n < J.size() ? J[n] : 0.0; }
 
-    /// The Earth with EGM2008 J2, J3 and J4 (the default).
-    [[nodiscard]] static CentralBody earth() { return {}; }
-    /// The Earth with EGM2008 J2 and J4, without J3.
-    [[nodiscard]] static CentralBody earthJ2J4() {
-        return {
+    /// The Earth with EGM2008 J2, J3 and J4: the value of a default-constructed CentralBody. One
+    /// shared object, so that a default argument `= CentralBody::earth()` costs nothing per call (a
+    /// default of `{}` would build a new body, and its vector of coefficients, every time).
+    [[nodiscard]] static const CentralBody& earth() noexcept {
+        static const CentralBody body;
+        return body;
+    }
+    /// The Earth with EGM2008 J2 and J4, without J3. One shared object, as for earth().
+    [[nodiscard]] static const CentralBody& earthJ2J4() noexcept {
+        static const CentralBody body{
             constants::gmEarth,
             constants::earthRadiusEgm2008,
             {0.0, 0.0, constants::J2, 0.0, constants::J4}
         };
+        return body;
     }
     /// A point mass of gravitational parameter `mu` (m^3/s^2): no zonal harmonics (re keeps the
     /// Earth's value, which then plays no part).

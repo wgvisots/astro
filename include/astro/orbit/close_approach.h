@@ -76,19 +76,19 @@ public:
     Trajectory(const Time&        epoch,
                const StateVector& state,
                TrajectoryModel    model = TrajectoryModel::TwoBody,
-               const CentralBody& body  = {});
+               const CentralBody& body  = CentralBody::earth());
     /// Propagate Keplerian elements from `epoch`: osculating for TwoBody, mean for the secular
     /// models. Throws astro::Error as elementsToState or SecularPropagator do.
     Trajectory(const Time&              epoch,
                const KeplerianElements& elements,
                TrajectoryModel          model = TrajectoryModel::TwoBody,
-               const CentralBody&       body  = {});
+               const CentralBody&       body  = CentralBody::earth());
     /// Propagate equinoctial elements from `epoch` (converted with equinoctialToKeplerian, which
     /// throws astro::Error unless they describe an ellipse).
     Trajectory(const Time&                epoch,
                const EquinoctialElements& elements,
                TrajectoryModel            model = TrajectoryModel::TwoBody,
-               const CentralBody&         body  = {});
+               const CentralBody&         body  = CentralBody::earth());
     /// Any trajectory. Throws astro::Error if `stateAt` is empty.
     Trajectory(StateFunction stateAt);
     /// Any callable taking a Time and returning a StateVector, so that a lambda can be passed
@@ -275,7 +275,7 @@ public:
                         const StateVector& state,
                         const Mat6&        covariance,
                         TrajectoryModel    model = TrajectoryModel::TwoBody,
-                        const CentralBody& body  = {});
+                        const CentralBody& body  = CentralBody::earth());
     /// Any trajectory, with a function giving its state and covariance at any time. The search
     /// samples `trajectory`; `stateCovarianceAt` is called once per approach, for its covariance.
     /// Throws astro::Error if `stateCovarianceAt` is empty.
