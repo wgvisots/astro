@@ -52,6 +52,14 @@ double maxPositionDifference(const std::vector<StateVector>& a, const std::vecto
     return m;
 }
 
+double maxVelocityDifference(const std::vector<StateVector>& a, const std::vector<StateVector>& b) {
+    double m = 0.0;
+    for (std::size_t k = 0; k < a.size(); ++k) {
+        m = std::max(m, norm(a[k].v - b[k].v));
+    }
+    return m;
+}
+
 /// State of the mean elements `el` (mean anomaly M0 at the epoch) dt seconds later, with the angles
 /// advanced at Brouwer's first-order J2 rates: written out independently of the library, in
 /// extended precision.
@@ -305,8 +313,12 @@ TEST(NumericalGrid, MatchesStoppingAtEachOutput) {
         for (int k = 0; k < count; ++k) {
             dts.push_back(start + step * k);
         }
-        const auto grid = prop.propagateGrid(start, step, static_cast<std::size_t>(count));
-        EXPECT_LT(maxPositionDifference(grid, prop.propagate(dts)), 1e-5) << "step " << step;
+        const auto grid  = prop.propagateGrid(start, step, static_cast<std::size_t>(count));
+        const auto stops = prop.propagate(dts);
+        // Measured: 8e-7 m and 9e-10 m/s (the Hermite interpolant of the grid against integration
+        // stopped at every output).
+        EXPECT_LT(maxPositionDifference(grid, stops), 4e-6) << "step " << step;
+        EXPECT_LT(maxVelocityDifference(grid, stops), 4e-9) << "step " << step;
         EXPECT_EQ(grid.front(), prop.propagate(start));
     }
     // The grid never takes more steps than the error control asks for, whatever the output spacing.

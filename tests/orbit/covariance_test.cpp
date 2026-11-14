@@ -20,6 +20,7 @@
 
 #include <array>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -100,23 +101,64 @@ TEST(Mat6, Helpers) {
     EXPECT_EQ(block(a, 1, 0)(2, 1), a[5][1]);
 }
 
-TEST(Gravity, GradientsAreExactAndSymmetric) {
+TEST(Gravity, PointMassAndJ2GradientsMatchTheirClosedForms) {
+    // Point mass: mu / |r|^3 (3 rhat rhat^T - I). J2: with a_i = k x_i (5 z^2 / r^7 - c_i / r^5),
+    // k = (3/2) J2 mu Re^2 and c = (1, 1, 3), differentiating term by term gives
+    //   da_i/dx_j = k [(5 z^2 / r^7 - c_i / r^5) delta_ij
+    //                  + x_i (10 z delta_jz / r^7 - 35 z^2 x_j / r^9 + 5 c_i x_j / r^7)].
+    // Both in extended precision. Allowed: 16 rounding errors of the largest entry (measured 3.6).
+    using L      = long double;
+    const L mu   = constants::gmEarth;
+    const L k    = 1.5L * constants::J2 * mu * constants::earthRadiusEgm2008 * constants::earthRadiusEgm2008;
+    const L c[3] = {1.0L, 1.0L, 3.0L};
+    for (const Vec3 r : {
+             Vec3{7000 * km,  0,          0         },
+             Vec3{3000 * km,  -2000 * km, 6000 * km },
+             Vec3{1,          -2,         7100 * km },
+             Vec3{-4100 * km, 5200 * km,  -2500 * km}
+    }) {
+        const L x[3] = {r.x, r.y, r.z};
+        const L rm = std::sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]), z = x[2];
+        Mat3    Gp, Gz;
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                const L d = i == j ? 1.0L : 0.0L, dz = j == 2 ? 1.0L : 0.0L;
+                Gp(i, j) = static_cast<double>(mu / (rm * rm * rm) * (3.0L * x[i] * x[j] / (rm * rm) - d));
+                Gz(i, j) = static_cast<double>(
+                    k
+                    * ((5.0L * z * z / std::pow(rm, 7) - c[i] / std::pow(rm, 5)) * d
+                       + x[i]
+                             * (10.0L * z * dz / std::pow(rm, 7) - 35.0L * z * z * x[j] / std::pow(rm, 9)
+                                + 5.0L * c[i] * x[j] / std::pow(rm, 7))));
+            }
+        }
+        const double eps = std::numeric_limits<double>::epsilon();
+        EXPECT_LT(maxRelDiff(pointMassGradient(r), Gp), 16.0 * eps) << r.x << " " << r.y << " " << r.z;
+        EXPECT_LT(maxRelDiff(zonalGradient(r, {0.0, 0.0, constants::J2}), Gz), 16.0 * eps)
+            << r.x << " " << r.y << " " << r.z;
+    }
+}
+
+TEST(Gravity, ZonalGradientIsTheDerivativeOfTheAccelerationAndSymmetric) {
+    // J2 to J6 against a fourth-order central difference of zonalAcceleration (itself checked against
+    // the gradient of the potential in orbit_test.cpp) with steps of 1 km: truncation (h / r)^4 ~
+    // 1e-15 and rounding eps |a| / (h |G|) ~ 1e-12 of the largest entry. Measured 1.6e-12.
+    const std::vector<double> J{0.0, 0.0, constants::J2, constants::J3, constants::J4, -2.3e-7, 5.4e-7};
+    const auto                zonal = [&](const Vec3& x) { return zonalAcceleration(x, J); };
     for (const Vec3 r : {
              Vec3{7000 * km, 0,          0        },
              Vec3{3000 * km, -2000 * km, 6000 * km},
              Vec3{1,         -2,         7100 * km}
     }) {
-        const Mat3 Gp = pointMassGradient(r);
-        EXPECT_LT(maxRelDiff(Gp, numericalGradient([](const Vec3& x) { return pointMassAcceleration(x); }, r, 1.0)),
-                  1e-8);
-        const std::vector<double> J{0.0, 0.0, constants::J2, constants::J3, constants::J4, -2.3e-7, 5.4e-7};
-        const Mat3                Gz = zonalGradient(r, J);
-        EXPECT_LT(maxRelDiff(Gz, numericalGradient([&](const Vec3& x) { return zonalAcceleration(x, J); }, r, 1.0)),
-                  1e-7);
-        EXPECT_LT(maxRelDiff(Gz, Gz.transpose()), 1e-13);
+        const double h  = 1000.0;
+        const Mat3   G1 = numericalGradient(zonal, r, h), G2 = numericalGradient(zonal, r, 2.0 * h);
+        const Mat3   fd = (G1 * 4.0 - G2) * (1.0 / 3.0); // Richardson: removes the h^2 term
+        const Mat3   Gz = zonalGradient(r, J);
+        EXPECT_LT(maxRelDiff(Gz, fd), 1e-11) << r.x << " " << r.y << " " << r.z;
+        EXPECT_LT(maxRelDiff(Gz, Gz.transpose()), 1e-15);
         // The jerk is the gradient applied to the velocity.
         const Vec3 v{1.2 * km, 6.8 * km, 2.1 * km};
-        astro::test::expectVecNear(Gz * v, zonalJerk(r, v, J), 1e-12 * norm(zonalJerk(r, v, J)));
+        astro::test::expectVecNear(Gz * v, zonalJerk(r, v, J), 1e-14 * norm(zonalJerk(r, v, J)));
     }
 }
 
