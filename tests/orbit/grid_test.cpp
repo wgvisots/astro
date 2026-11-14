@@ -218,6 +218,17 @@ TEST(SecularPropagator, GridMatchesDirectEvaluation) {
     }
 }
 
+TEST(SecularPropagator, GridWithAZeroStepRepeatsTheStartState) {
+    // dt = start + k * 0 for every k: each output is the state at `start` (the incremental angle
+    // updates must not drift when the step is zero).
+    const SecularPropagator prop(KeplerianElements{7200 * km, 0.05, deg2rad(51.6), 0.4, 1.3, 0.2});
+    const StateVector       at = prop.propagate(1234.5);
+    for (const StateVector& s : prop.propagateGrid(1234.5, 0.0, 50)) {
+        EXPECT_LT(norm(s.r - at.r), 1e-13 * norm(at.r));
+        EXPECT_LT(norm(s.v - at.v), 1e-13 * norm(at.v));
+    }
+}
+
 TEST(SecularPropagator, GridSolvesKeplerNearPerigee) {
     // Regression: on very eccentric orbits the grid's starting guess for E (previous E plus the
     // mean-anomaly step) is far from the root near perigee, where the unguarded Chebyshev
