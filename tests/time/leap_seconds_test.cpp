@@ -18,7 +18,11 @@
 
 #include "astro/time/leap_seconds.h"
 
+#include <cmath>
+#include <cstdio>
+#include <fstream>
 #include <string>
+#include <vector>
 
 #include "astro/core/error.h"
 #include "test_util.h"
@@ -204,6 +208,18 @@ void expectParseError(const std::string& content, const std::string& what) {
     }
 }
 
+// `call` must throw astro::Error, and the message must contain `what`.
+template <typename Call>
+void expectError(Call&& call, const std::string& what) {
+    try {
+        call();
+        ADD_FAILURE() << "no error; expected one saying \"" << what << "\"";
+    } catch (const Error& e) {
+        EXPECT_NE(std::string(e.what()).find(what), std::string::npos)
+            << "expected \"" << what << "\" in the message, which was: " << e.what();
+    }
+}
+
 } // namespace
 
 TEST(LeapSecondFile, AllThreeFormatsGiveTheBuiltInTable) {
@@ -320,6 +336,100 @@ TEST(LeapSecondFile, MalformedDataLineThrowsAndNamesTheLine) {
     expectParseError(kUsnoHead + " 2071 JAN  1 =JD 2457754.5  TAI-UTC=  37.0       S + (MJD - 41317.) X 0.0      S\n",
                      "line 3"); // the JD is another date
     expectParseError(kUsnoHead + " 2017 JAN  1 =JD 2457754.5  TAI-UTC=  37.0       S\n", "line 3"); // no rate term
+}
+
+// load() reads the file and parses it as parse() does; a file that cannot be opened is an error that names it.
+TEST(LeapSecondFile, LoadReadsTheFileAndNamesOneItCannotOpen) {
+    const std::string path = testing::TempDir() + "astro_leap_seconds_test.list";
+    {
+        std::ofstream out(path, std::ios::binary);
+        out << kLeapSecondsList;
+    }
+    const LeapSecondTable loaded = LeapSecondTable::load(path);
+    const LeapSecondTable parsed = LeapSecondTable::parse(kLeapSecondsList);
+    std::remove(path.c_str());
+    ASSERT_EQ(loaded.entries().size(), parsed.entries().size());
+    for (std::size_t i = 0; i < loaded.entries().size(); ++i) {
+        EXPECT_EQ(loaded.entries()[i].year, parsed.entries()[i].year) << i;
+        EXPECT_EQ(loaded.entries()[i].month, parsed.entries()[i].month) << i;
+        EXPECT_EQ(loaded.entries()[i].offset, parsed.entries()[i].offset) << i;
+    }
+    EXPECT_EQ(loaded.expiresMjd(), parsed.expiresMjd());
+    EXPECT_EQ(loaded.taiMinusUtc(2024, 1, 1), 37.0);
+
+    const std::string missing = testing::TempDir() + "astro_no_such_leap_second_file.dat";
+    expectError([&] { (void)LeapSecondTable::load(missing); }, "cannot open " + missing);
+}
+
+// The MJD overload against the published values: 37 s from MJD 57754 (2017-01-01), 36 s just before, 10 s at
+// MJD 41317 (1972-01-01), and the drift formulas of tai-utc.dat and ERFA's dat before 1972. 1960-01-01 is
+// MJD 36934: 2000-01-01 is MJD 51544, and the 40 years between hold 10 leap days, 14610 days in all.
+TEST(LeapSecondTable, TaiMinusUtcOfAnMjd) {
+    const LeapSecondTable t = LeapSecondTable::builtin();
+    EXPECT_EQ(t.taiMinusUtc(57754.0), 37.0);
+    EXPECT_EQ(t.taiMinusUtc(57753.99999), 36.0);
+    EXPECT_EQ(t.taiMinusUtc(41317.0), 10.0);
+    EXPECT_DOUBLE_EQ(t.taiMinusUtc(41316.5), 4.2131700 + (41316.5 - 39126.0) * 0.002592);
+    EXPECT_DOUBLE_EQ(t.taiMinusUtc(38820.5), 3.6401300 + (38820.5 - 38761.0) * 0.001296);
+    EXPECT_DOUBLE_EQ(t.taiMinusUtc(36934.0), 1.4178180 + (36934.0 - 37300.0) * 0.001296);
+    // UTC is undefined before 1960, and the MJD must be finite and below 1e9 days in size.
+    expectError([&] { (void)t.taiMinusUtc(36933.5); }, "1960");
+    for (double bad : {std::nan(""), HUGE_VAL, -HUGE_VAL, 1.0e9, -1.0e9}) {
+        expectError([&] { (void)t.taiMinusUtc(bad); }, "out of range");
+    }
+    // A table that starts later is undefined before its first month, in both overloads.
+    const LeapSecondTable late({
+        {1972, 1, 10.0}
+    });
+    expectError([&] { (void)late.taiMinusUtc(1971, 12, 31); }, "1972");
+    expectError([&] { (void)late.taiMinusUtc(41316.5); }, "1972");
+    EXPECT_EQ(late.taiMinusUtc(41317.0), 10.0);
+}
+
+// leap_seconds.h: the constructor sorts the entries, and throws for an empty table, a year outside 1960-9999,
+// a month outside 1-12, a value that is not finite, or an expiry date that is not finite.
+TEST(LeapSecondTable, ConstructorSortsAndRejectsInvalidEntries) {
+    const LeapSecondTable sorted({
+        {2017, 1, 37.0},
+        {1972, 7, 11.0},
+        {1972, 1, 10.0}
+    });
+    ASSERT_EQ(sorted.entries().size(), 3u);
+    EXPECT_EQ(sorted.entries()[0].offset, 10.0);
+    EXPECT_EQ(sorted.entries()[1].offset, 11.0);
+    EXPECT_EQ(sorted.entries()[2].offset, 37.0);
+    EXPECT_EQ(sorted.taiMinusUtc(1990, 1, 1), 11.0);
+
+    const double nan = std::nan("");
+    expectError([] { (void)LeapSecondTable(std::vector<LeapSecondEntry>{}); }, "empty");
+    // clang-format off
+    for (const LeapSecondEntry& bad : {LeapSecondEntry{1959,  12, 0.0},
+                                       LeapSecondEntry{10000,  1, 0.0},
+                                       LeapSecondEntry{1972,   0, 10.0},
+                                       LeapSecondEntry{1972,  13, 10.0},
+                                       LeapSecondEntry{1972,   1, nan},
+                                       LeapSecondEntry{1972,   1, HUGE_VAL},
+                                       LeapSecondEntry{1965,   1, 3.5, nan, 0.001296},
+                                       LeapSecondEntry{1965,   1, 3.5, 38761.0, -HUGE_VAL}}) {
+        // clang-format on
+        expectError(
+            [&] {
+                (void)LeapSecondTable({
+                    {1960, 1, 1.4},
+                    bad
+                });
+            },
+            "invalid entry");
+    }
+    expectError(
+        [] {
+            (void)LeapSecondTable(
+                {
+                    {1972, 1, 10.0}
+            },
+                std::nan(""));
+        },
+        "expiration");
 }
 
 TEST(LeapSecondFile, ExpiryDateIsTheOneInTheFile) {
