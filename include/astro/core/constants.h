@@ -93,10 +93,11 @@ inline constexpr double earthMoonMassRatio = 81.3005682214972154;
 inline constexpr double gmEarth = 3.986004418e14;
 /// Nominal mean angular velocity of the Earth, rad/s (IERS 2010 / WGS84).
 inline constexpr double earthRotationRate = 7.292115e-5;
-/// Earth equatorial radius used by EGM2008, m.
+/// Nominal Earth rotation rate implied by the definition of the Earth Rotation Angle (ERA): radians
+/// per second of UT1.
+inline constexpr double earthRotationRateEra = 7.292115146706979e-5;
+/// Earth equatorial radius used by EGM2008, m. (The IERS 2010 conventional radius is iers2010A.)
 inline constexpr double earthRadiusEgm2008 = 6378136.3;
-/// Earth equatorial radius, IERS 2010 conventional, m.
-inline constexpr double earthRadiusIers2010 = 6378136.6;
 /// Unnormalized zonal harmonics from EGM2008 (tide-free), Jn = -sqrt(2n+1) * Cbar_n0.
 inline constexpr double J2 = 1.0826261738522227e-3;
 inline constexpr double J3 = -2.5324105185677225e-6; ///< Unnormalized zonal harmonic J3 (EGM2008, tide-free).
@@ -120,5 +121,11 @@ inline constexpr double iers2010F    = 1.0 / iers2010InvF; ///< IERS 2010 conven
 inline constexpr double sunRadius = 6.957e8;
 /// IAU mean lunar radius, m.
 inline constexpr double moonRadius = 1.7374e6;
+
+// ------------------------------------------------------------ orbits and the sky
+/// Critical inclination (rad) where the J2 apsidal rotation vanishes: acos(1/sqrt(5)).
+inline constexpr double criticalInclination = 1.1071487177940904;
+/// Standard horizon for sunrise/sunset: upper limb with 34' refraction (-0.8333 deg), rad.
+inline constexpr double sunriseElevation = -0.8333 * degToRad;
 
 } // namespace astro::constants

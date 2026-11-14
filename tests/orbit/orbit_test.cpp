@@ -367,8 +367,8 @@ TEST(Secular, MissionDesignHelpers) {
 
 TEST(Secular, CriticalInclinationIsWhereTheJ2ApsidalRateVanishes) {
     // acos(1 / sqrt(5)) = atan(2): the root of 5 cos^2 i - 1 = 0.
-    EXPECT_NEAR(kCriticalInclination, std::atan(2.0), 2.0 * std::numeric_limits<double>::epsilon());
-    const SecularRates r = secularRates(7000 * km, 0.1, kCriticalInclination, {}, SecularOrder::J2);
+    EXPECT_NEAR(constants::criticalInclination, std::atan(2.0), 2.0 * std::numeric_limits<double>::epsilon());
+    const SecularRates r = secularRates(7000 * km, 0.1, constants::criticalInclination, {}, SecularOrder::J2);
     EXPECT_LT(std::abs(r.argpDot), 1e-15 * r.meanAnomalyDot);
 }
 
@@ -384,7 +384,7 @@ TEST(Secular, RatesMatchBrouwersFormulasForEccentricOrbits) {
             if (a * (1.0 - e) < 6400 * km) {
                 continue;
             }
-            for (double i : {0.0, 0.3, kCriticalInclination, 1.5, 2.5, constants::pi}) {
+            for (double i : {0.0, 0.3, constants::criticalInclination, 1.5, 2.5, constants::pi}) {
                 for (SecularOrder order : {SecularOrder::J2, SecularOrder::J2SquaredJ4}) {
                     const SecularRates ref   = brouwerRates(a, e, i, body, order == SecularOrder::J2SquaredJ4);
                     const SecularRates first = brouwerRates(a, e, i, body, false);

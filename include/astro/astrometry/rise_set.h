@@ -75,9 +75,6 @@ struct SkyEvent {
                                                         double                                    threshold,
                                                         double                                    step = 600.0);
 
-/// Standard horizon for sunrise/sunset: upper limb with 34' refraction (-0.8333 deg).
-inline constexpr double kSunriseElevation = -0.8333 * constants::degToRad;
-
 /// Twilight definitions, by the Sun's elevation.
 enum class Twilight {
     Civil,       ///< Sun 6 deg below the horizon
@@ -109,7 +106,7 @@ bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider&
                                                const Time&        end,
                                                const EopProvider& eop,
                                                const Ephemeris&   eph,
-                                               double             horizon = kSunriseElevation);
+                                               double             horizon = constants::sunriseElevation);
 /// Twilight begin (Rise) / end (Set) events. Throws astro::Error as
 /// sunRiseSet() does.
 [[nodiscard]] std::vector<SkyEvent> twilight(Twilight           tw,

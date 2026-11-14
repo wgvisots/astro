@@ -205,7 +205,7 @@ near-equatorial 22 -> 896 km) and improved only for the eccentric 1000 x 20000 k
 (219 -> 154 km); see [Accuracy](../accuracy.md#analytic-j2j4-secular).
 
 Mission-design helpers: `secularRates`, `sunSynchronousInclination`, `repeatGroundTrackSemiMajorAxis`,
-`kCriticalInclination`.
+`constants::criticalInclination`.
 
 ## 12-component states: position, velocity, acceleration, jerk
 

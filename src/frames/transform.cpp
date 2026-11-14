@@ -81,7 +81,7 @@ FrameTransformer::FrameTransformer(const Time& t, const EopProvider& eop, const 
     era_                = astro::earthRotationAngle(ut1_.jd());
     const Mat3 rEra     = R3(era_);
     polar_              = polarMotionMatrix(eop_.xp, eop_.yp, tioLocatorSp(T));
-    omega_              = kEarthRotationRateEra * (1.0 - eop_.lod / constants::secondsPerDay);
+    omega_              = constants::earthRotationRateEra * (1.0 - eop_.lod / constants::secondsPerDay);
 
     // Equinox-based chain, with the pole offsets mapped to nutation corrections.
     const Nutation          dd = poleOffsetsToNutation(T, eop_.dX, eop_.dY);

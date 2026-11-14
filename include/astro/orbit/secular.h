@@ -316,7 +316,4 @@ sunSynchronousInclination(double a, double e = 0.0, const CentralBody& body = Ce
 [[nodiscard]] double
 repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, const CentralBody& body = CentralBody::earth());
 
-/// Critical inclination (rad) where the J2 apsidal rotation vanishes: acos(1/sqrt(5)).
-inline constexpr double kCriticalInclination = 1.1071487177940904;
-
 } // namespace astro

@@ -416,7 +416,7 @@ TEST(FrameTransformer, ConsistencyAndRoundTrips) {
         {}
     };
     const StateVector inertial = ft.transform(fixed, Frame::ITRS, Frame::GCRS);
-    EXPECT_NEAR(norm(inertial.v), kEarthRotationRateEra * 6378137.0, 0.01);
+    EXPECT_NEAR(norm(inertial.v), constants::earthRotationRateEra * 6378137.0, 0.01);
     // The CIO and equinox routes agree (TIRS vs PEF) to well under a milliarcsecond.
     const Mat3 d = ft.gcrsTo(Frame::TIRS) * ft.gcrsTo(Frame::PEF).transpose();
     EXPECT_LT(std::abs(d(0, 1)), 0.1 * constants::masToRad);

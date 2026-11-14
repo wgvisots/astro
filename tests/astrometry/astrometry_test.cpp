@@ -237,7 +237,7 @@ TEST(RiseSet, LondonSolstice) {
     EXPECT_NEAR(ev[2].time - Time::fromIso8601("2024-06-21T20:21:00Z"), 0.0, 90.0);
     EXPECT_NEAR(ev[1].time - Time::fromIso8601("2024-06-21T12:02:00Z"), 0.0, 90.0); // local noon
     // The refined events sit on the threshold.
-    EXPECT_NEAR(bodyElevation(Body::Sun, ev[0].time, site, eop, eph), kSunriseElevation, 1e-6);
+    EXPECT_NEAR(bodyElevation(Body::Sun, ev[0].time, site, eop, eph), constants::sunriseElevation, 1e-6);
     // Astronomical twilight does not end at 51.5 N in midsummer.
     EXPECT_TRUE(twilight(Twilight::Astronomical, site, start, start + 86400.0, eop, eph).empty());
     EXPECT_EQ(twilight(Twilight::Civil, site, start, start + 86400.0, eop, eph).size(), 2u);

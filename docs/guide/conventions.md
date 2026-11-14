@@ -13,6 +13,18 @@ const double lat = degToRad(38.8895);
 std::cout << formatDms(lat) << '\n';
 ```
 
+## Names
+
+Names follow one pattern, so that a reader who has learned one part of the library can guess the rest:
+
+- **Conversions are named `xToY`**, source first: `degToRad`, `geodeticToEcef`, `vectorToRaDec`,
+  `matrixToCipXY`. A static factory is named `from...` (`Time::fromMjd`, `Quat::fromMatrix`), and
+  text is read by a `parse...` function (`parseHms`, `parseTimeScale`).
+- **Constants live in `astro::constants` and are `camelCase`**: `constants::gmEarth`,
+  `constants::earthRotationRateEra`, `constants::criticalInclination`, `constants::sunriseElevation`.
+  The angle factors (`constants::degToRad`, a number) share their names with the functions that
+  apply them (`astro::degToRad(x)`). Standard symbols keep their usual form (`c`, `J2`, `LG`, `TDB0`).
+
 ## Rotations
 
 Rotation matrices are passive (frame) rotations, as in the Explanatory Supplement

@@ -26,9 +26,6 @@
 /// Earth rotation angle, sidereal time and polar motion. Angles in radians [0, 2pi).
 namespace astro {
 
-/// Nominal Earth rotation rate implied by the ERA definition: radians per second of UT1.
-inline constexpr double kEarthRotationRateEra = 7.292115146706979e-5;
-
 /// Earth Rotation Angle (IAU 2000), from UT1 as a two-part Julian Date.
 [[nodiscard]] double earthRotationAngle(const JulianDate& ut1) noexcept;
 
