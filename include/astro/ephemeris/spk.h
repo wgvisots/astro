@@ -77,7 +77,8 @@ public:
     /// State by NAIF id at an ephemeris time (TDB seconds past J2000); meters, m/s, ICRF axes.
     /// Throws astro::Error if a body on the way from `target` to `center` is not in the kernel or
     /// has no segment covering `et`, or if that segment is of an unsupported type or not in the
-    /// J2000 frame. Also throws if a record cannot be read from the file or is corrupt.
+    /// J2000 frame. Also throws if a record cannot be read from the file or is corrupt (time
+    /// tags or coefficients that are not finite): a state that is returned is always finite.
     [[nodiscard]] StateVector stateById(int target, int center, double et) const;
 
     /// Summaries of all segments, in file order.

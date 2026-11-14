@@ -25,6 +25,8 @@
 #include <limits>
 #include <memory>
 #include <random>
+#include <stdexcept>
+#include <tuple>
 #include <vector>
 
 #include "astro/core/angle.h"
@@ -226,4 +228,67 @@ TEST(ConjunctionAssessment, Errors) {
     EXPECT_THROW((void)assessConjunctions(a, b, c.epoch, c.epoch + 60.0, 0.0, 1.0), Error);
     EXPECT_THROW((void)assessConjunction(a, b, c.epoch, c.epoch + 60.0, -1.0), Error);
     EXPECT_THROW((void)assessConjunction(a, b, c.epoch + 60.0, c.epoch, 20.0), Error); // window backwards
+}
+
+TEST(ConjunctionAssessment, ApproachAtAnEndOfTheWindowIsFlaggedAndAssessedThere) {
+    // A window that closes 100 s before the designed approach (or opens 100 s after it): the
+    // closest distance in it is at that end, flagged atBoundary. The states, distance and
+    // covariances are those at the end, from the two-body propagation written in terms of
+    // propagateKepler (checked against an extended-precision reference elsewhere), and the
+    // probability is the straight-line encounter through them. That projects the 750 km of relative
+    // motion out of the encounter plane, so it stays close to the true probability (within 10 %;
+    // the covariances are those 100 s away).
+    const Crossing60            c;
+    const Mat6                  P1 = diagonalCovariance(10.0, 0.005), P2 = diagonalCovariance(30.0, 0.02);
+    const UncertainTrajectory   first{c.epoch, c.first, P1}, second{c.epoch, c.second, P2};
+    const ConjunctionAssessment inside = assessConjunction(first, second, c.tca - 600.0, c.tca + 600.0, 20.0);
+    EXPECT_FALSE(inside.approach.atBoundary);
+    for (const auto& [start, end, edge] : {
+             std::tuple{c.tca - 600.0, c.tca - 100.0, c.tca - 100.0},
+             std::tuple{c.tca + 100.0, c.tca + 600.0, c.tca + 100.0}
+    }) {
+        const ConjunctionAssessment a = assessConjunction(first, second, start, end, 20.0);
+        EXPECT_TRUE(a.approach.atBoundary);
+        EXPECT_EQ(a.approach.time - edge, 0.0);
+        const double      dt = edge - c.epoch;
+        const StateVector s1 = propagateKepler(c.first, dt), s2 = propagateKepler(c.second, dt);
+        EXPECT_LT(norm(a.approach.first.r - s1.r), 1e-6);
+        EXPECT_LT(norm(a.approach.second.r - s2.r), 1e-6);
+        EXPECT_NEAR(a.approach.distance, norm(s1.r - s2.r), 1e-6);
+        EXPECT_GT(a.approach.distance, 500 * km); // 100 s at the 7.5 km/s relative speed
+        expectMatNear(a.firstCovariance, propagateKeplerWithCovariance(c.first, P1, dt).covariance, 1e-12, "first");
+        expectMatNear(a.secondCovariance, propagateKeplerWithCovariance(c.second, P2, dt).covariance, 1e-12, "second");
+        EXPECT_EQ(a.collision.probability,
+                  collisionProbability(a.approach, a.firstCovariance, a.secondCovariance, 20.0).probability);
+        EXPECT_NEAR(a.collision.probability / inside.collision.probability, 1.0, 0.1);
+    }
+}
+
+TEST(ConjunctionAssessment, CovarianceFunctionThatIsNotFiniteIsAnError) {
+    // A covariance from a user function is not checked when the trajectory is built, but the
+    // probability refuses a position covariance that is not finite; the velocity block is not used.
+    // An exception thrown by the function passes through.
+    const Crossing60          c;
+    const Mat6                P = diagonalCovariance(10.0, 0.005);
+    const UncertainTrajectory first{c.epoch, c.first, P};
+    const auto                withCovariance = [&](double value, std::size_t i, std::size_t j) {
+        return UncertainTrajectory(Trajectory{c.epoch, c.second}, [=, epoch = c.epoch, s = c.second](const Time& t) {
+            StateCovariance out  = propagateKeplerWithCovariance(s, P, t - epoch);
+            out.covariance[i][j] = value;
+            out.covariance[j][i] = value;
+            return out;
+        });
+    };
+    const double nan = std::numeric_limits<double>::quiet_NaN(), inf = std::numeric_limits<double>::infinity();
+    const Time   start = c.tca - 600.0, end = c.tca + 600.0;
+    EXPECT_THROW((void)assessConjunction(first, withCovariance(nan, 0, 1), start, end, 20.0), Error);
+    EXPECT_THROW((void)assessConjunction(first, withCovariance(inf, 2, 2), start, end, 20.0), Error);
+    EXPECT_THROW((void)assessConjunctions(first, withCovariance(nan, 1, 1), start, end, 20.0), Error);
+    const ConjunctionAssessment clean    = assessConjunction(first, {c.epoch, c.second, P}, start, end, 20.0);
+    const ConjunctionAssessment velocity = assessConjunction(first, withCovariance(nan, 4, 4), start, end, 20.0);
+    EXPECT_EQ(velocity.collision.probability, clean.collision.probability);
+    const UncertainTrajectory throwing(Trajectory{c.epoch, c.second}, [](const Time&) -> StateCovariance {
+        throw std::runtime_error("no covariance");
+    });
+    EXPECT_THROW((void)assessConjunction(first, throwing, start, end, 20.0), std::runtime_error);
 }

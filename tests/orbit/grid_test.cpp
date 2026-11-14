@@ -18,9 +18,12 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <span>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "astro/core/angle.h"
@@ -49,6 +52,46 @@ double maxPositionDifference(const std::vector<StateVector>& a, const std::vecto
     return m;
 }
 
+double maxVelocityDifference(const std::vector<StateVector>& a, const std::vector<StateVector>& b) {
+    double m = 0.0;
+    for (std::size_t k = 0; k < a.size(); ++k) {
+        m = std::max(m, norm(a[k].v - b[k].v));
+    }
+    return m;
+}
+
+/// State of the mean elements `el` (mean anomaly M0 at the epoch) dt seconds later, with the angles
+/// advanced at Brouwer's first-order J2 rates: written out independently of the library, in
+/// extended precision.
+StateVector meanElementState(const KeplerianElements& el, double M0, double dt, const ZonalParameters& zp) {
+    using L   = long double;
+    const L a = el.a, e = el.e, mu = zp.mu;
+    const L n   = std::sqrt(mu / (a * a * a));
+    const L eta = std::sqrt(1.0L - e * e);
+    const L k   = 0.75L * n * zp.J2 * (zp.re / (a * eta * eta)) * (zp.re / (a * eta * eta));
+    const L ci = std::cos(static_cast<L>(el.i)), si = std::sin(static_cast<L>(el.i));
+    const L raan = el.raan + -2.0L * k * ci * dt;
+    const L argp = el.argp + k * (5.0L * ci * ci - 1.0L) * dt;
+    const L M    = M0 + (n + k * eta * (3.0L * ci * ci - 1.0L)) * dt;
+    L       E    = M + e * std::sin(M);
+    for (int it = 0; it < 50; ++it) {
+        E -= (E - e * std::sin(E) - M) / (1.0L - e * std::cos(E));
+    }
+    // Perifocal position and velocity, then the rotation by argp, i and raan.
+    const L     x = a * (std::cos(E) - e), y = a * eta * std::sin(E);
+    const L     rdot = std::sqrt(mu * a) / (a * (1.0L - e * std::cos(E)));
+    const L     vx = -rdot * std::sin(E), vy = rdot * eta * std::cos(E);
+    const L     cO = std::cos(raan), sO = std::sin(raan), cw = std::cos(argp), sw = std::sin(argp);
+    const L     P[3] = {cO * cw - sO * sw * ci, sO * cw + cO * sw * ci, sw * si};
+    const L     Q[3] = {-cO * sw - sO * cw * ci, -sO * sw + cO * cw * ci, cw * si};
+    StateVector s;
+    for (std::size_t j = 0; j < 3; ++j) {
+        s.r[j] = static_cast<double>(x * P[j] + y * Q[j]);
+        s.v[j] = static_cast<double>(vx * P[j] + vy * Q[j]);
+    }
+    return s;
+}
+
 } // namespace
 
 TEST(Gravity, ZonalJerkIsDirectionalDerivative) {
@@ -71,20 +114,79 @@ TEST(Gravity, ZonalJerkIsDirectionalDerivative) {
     }
 }
 
-TEST(SecularPropagator, MatchesFreeFunctions) {
-    const KeplerianElements el{7100 * km, 0.02, deg2rad(63.0), 1.0, 2.0, 3.0};
-    const StateVector       s0 = elementsToState(el);
-    const SecularPropagator prop(s0);
-    for (double dt : {0.0, 100.0, -5000.0, 86400.0, 30 * 86400.0}) {
-        const StateVector s = propagateSecular(s0, dt);
-        EXPECT_EQ(prop.propagate(dt), s);
-        // Same orbit through the element form (true anomaly and elementsToState), to rounding: the
-        // two forms reduce the mean anomaly and build the rotation differently (1e-12 relative).
-        const StateVector viaElements = elementsToState(propagateSecular(stateToElements(s0), dt));
-        EXPECT_LT(norm(s.r - viaElements.r), 1e-12 * norm(s.r)) << dt;
-        EXPECT_LT(norm(s.v - viaElements.v), 1e-12 * norm(s.v)) << dt;
+TEST(SecularPropagator, StatesAreTheTwoBodyStatesOfTheDriftingMeanElements) {
+    // The truth, written out here: the node, perigee and mean anomaly advance at the first-order J2
+    // rates of Brouwer (1959),
+    //   raanDot = -(3/2) n J2 (Re/p)^2 cos i,  argpDot = (3/4) n J2 (Re/p)^2 (5 cos^2 i - 1),
+    //   MDot    = n + (3/4) n J2 (Re/p)^2 sqrt(1 - e^2) (3 cos^2 i - 1),
+    // Kepler's equation is solved by Newton's method and the state is built from the perifocal
+    // vectors, all in extended precision. The velocity is the two-body velocity of the mean
+    // elements (secular.h). Checked through the class (from elements and from a state) and both
+    // free functions.
+    const ZonalParameters zp;
+    const double          eps = std::numeric_limits<double>::epsilon();
+    for (const KeplerianElements& el : {
+             KeplerianElements{7100 * km,  0.02,  deg2rad(63.0),  1.0, 2.0, 3.0},
+             KeplerianElements{26600 * km, 0.7,   deg2rad(63.4),  4.0, 4.7, 0.1},
+             KeplerianElements{7000 * km,  0.001, deg2rad(98.0),  0.2, 0.3, 5.0},
+             KeplerianElements{8000 * km,  0.1,   deg2rad(140.0), 5.5, 1.2, 2.0},
+    }) {
+        const StateVector       s0 = elementsToState(el);
+        const SecularPropagator fromElements(el, zp, SecularOrder::J2);
+        const SecularPropagator fromState(s0, zp, SecularOrder::J2);
+        const double            M0 = el.meanAnomaly();
+        for (double dt : {0.0, 100.0, -5000.0, 86400.0, 30 * 86400.0}) {
+            const StateVector truth = meanElementState(el, M0, dt, zp);
+            // Rounding of the mean anomaly n dt (up to 3000 rad after 30 days) and of the angles,
+            // times the size of the state, and 1 / (1 - e) for the Kepler solution near perigee.
+            // Measured: 7 eps in these units (from a state, which adds the element conversion).
+            const double      turns       = 1.0 + std::abs(meanMotion(el.a) * dt);
+            const double      tolR        = 16.0 * eps * turns * el.a / (1.0 - el.e);
+            const double      tolV        = 16.0 * eps * turns * norm(truth.v) / (1.0 - el.e);
+            const StateVector viaElements = elementsToState(propagateSecular(el, dt, zp, SecularOrder::J2));
+            for (const auto& [what, s] : {
+                     std::pair{"class from elements", fromElements.propagate(dt)},
+                     std::pair{"class from a state", fromState.propagate(dt)},
+                     std::pair{"free function on a state", propagateSecular(s0, dt, zp, SecularOrder::J2)},
+                     std::pair{"free function on elements", viaElements},
+            }) {
+                EXPECT_LT(norm(s.r - truth.r), tolR) << what << ", a = " << el.a << ", dt = " << dt;
+                EXPECT_LT(norm(s.v - truth.v), tolV) << what << ", a = " << el.a << ", dt = " << dt;
+            }
+        }
     }
     EXPECT_THROW(SecularPropagator(KeplerianElements{7000 * km, 1.2, 0.5, 0, 0, 0}), Error);
+}
+
+TEST(SecularPropagator, ElementsAreTheMeanElementsAtEachTime) {
+    // meanElements() is what the propagator was built from (or the osculating elements of the input
+    // state); elements(dt) has the same a, e and i and the angles drifted at the first-order J2
+    // rates, so the state it describes is the truth of the test above.
+    const ZonalParameters   zp;
+    const double            eps = std::numeric_limits<double>::epsilon();
+    const KeplerianElements el{7100 * km, 0.02, deg2rad(63.0), 1.0, 2.0, 3.0};
+    const SecularPropagator fromElements(el, zp, SecularOrder::J2);
+    const SecularPropagator fromState(elementsToState(el), zp, SecularOrder::J2);
+    EXPECT_EQ(fromElements.meanElements().a, el.a);
+    EXPECT_EQ(fromElements.meanElements().e, el.e);
+    EXPECT_EQ(fromElements.meanElements().nu, el.nu);
+    // From a state: the elements to rounding (stateToElements, accurate to a few eps).
+    const KeplerianElements m = fromState.meanElements();
+    EXPECT_NEAR(m.a, el.a, 16.0 * eps * el.a);
+    EXPECT_NEAR(m.e, el.e, 16.0 * eps);
+    EXPECT_NEAR(m.i, el.i, 16.0 * eps);
+    EXPECT_NEAR(m.raan, el.raan, 16.0 * eps);
+    EXPECT_NEAR(m.argp + m.nu, el.argp + el.nu, 16.0 * eps);
+    for (double dt : {0.0, -5000.0, 86400.0, 30 * 86400.0}) {
+        const KeplerianElements e1 = fromElements.elements(dt);
+        EXPECT_EQ(e1.a, el.a);
+        EXPECT_EQ(e1.e, el.e);
+        EXPECT_EQ(e1.i, el.i);
+        EXPECT_TRUE(e1.raan >= 0.0 && e1.raan < constants::twoPi && e1.argp >= 0.0 && e1.argp < constants::twoPi);
+        const StateVector truth = meanElementState(el, el.meanAnomaly(), dt, zp);
+        const double      turns = 1.0 + std::abs(meanMotion(el.a) * dt);
+        EXPECT_LT(norm(elementsToState(e1).r - truth.r), 16.0 * eps * turns * el.a / (1.0 - el.e)) << dt;
+    }
 }
 
 TEST(SecularPropagator, GridMatchesDirectEvaluation) {
@@ -113,6 +215,17 @@ TEST(SecularPropagator, GridMatchesDirectEvaluation) {
             EXPECT_LT(worstR, 1e-13) << "e = " << e << ", step " << step;
             EXPECT_LT(worstV, 1e-12) << "e = " << e << ", step " << step;
         }
+    }
+}
+
+TEST(SecularPropagator, GridWithAZeroStepRepeatsTheStartState) {
+    // dt = start + k * 0 for every k: each output is the state at `start` (the incremental angle
+    // updates must not drift when the step is zero).
+    const SecularPropagator prop(KeplerianElements{7200 * km, 0.05, deg2rad(51.6), 0.4, 1.3, 0.2});
+    const StateVector       at = prop.propagate(1234.5);
+    for (const StateVector& s : prop.propagateGrid(1234.5, 0.0, 50)) {
+        EXPECT_LT(norm(s.r - at.r), 1e-13 * norm(at.r));
+        EXPECT_LT(norm(s.v - at.v), 1e-13 * norm(at.v));
     }
 }
 
@@ -242,8 +355,12 @@ TEST(NumericalGrid, MatchesStoppingAtEachOutput) {
         for (int k = 0; k < count; ++k) {
             dts.push_back(start + step * k);
         }
-        const auto grid = prop.propagateGrid(start, step, static_cast<std::size_t>(count));
-        EXPECT_LT(maxPositionDifference(grid, prop.propagate(dts)), 1e-5) << "step " << step;
+        const auto grid  = prop.propagateGrid(start, step, static_cast<std::size_t>(count));
+        const auto stops = prop.propagate(dts);
+        // Measured: 8e-7 m and 9e-10 m/s (the Hermite interpolant of the grid against integration
+        // stopped at every output).
+        EXPECT_LT(maxPositionDifference(grid, stops), 4e-6) << "step " << step;
+        EXPECT_LT(maxVelocityDifference(grid, stops), 4e-9) << "step " << step;
         EXPECT_EQ(grid.front(), prop.propagate(start));
     }
     // The grid never takes more steps than the error control asks for, whatever the output spacing.

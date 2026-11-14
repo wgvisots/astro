@@ -109,7 +109,8 @@ struct Sexagesimal {
 ///   in either case.
 /// - Spaces and tabs may begin or end the text, follow the sign, and surround a separator or a unit mark.
 ///
-/// Throws astro::Error for anything else: an empty string or an empty field ("5::30"), a fourth
+/// Throws astro::Error for anything else: a value too large to be an angle (hundreds of digits),
+/// an empty string or an empty field ("5::30"), a fourth
 /// number, an exponent ("1e2"), "nan" or "inf", a sign that is not in front, a unit mark on the wrong
 /// number ("30m" alone) or of the wrong quantity ("12d", or an arc mark such as "12h30'"), and any
 /// other character (a line end included).

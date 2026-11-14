@@ -87,7 +87,7 @@ std::ostream& operator<<(std::ostream& os, EopInterpolation value);
 class EopTable final : public EopProvider {
 public:
     /// From records in any order (sorted here). Throws astro::Error if there
-    /// are fewer than two records, if an epoch is not finite, or if two records
+    /// are fewer than two records, if an epoch or a value is not finite, or if two records
     /// have the same epoch (the message names it): the interpolation needs
     /// distinct epochs. Also throws if an epoch is before 1960-01-01, where UTC
     /// is undefined.
@@ -99,9 +99,12 @@ public:
     /// astro::Error if the file cannot be opened, or as parseFinals2000A() does.
     [[nodiscard]] static EopTable loadFinals2000A(const std::string& path,
                                                   EopInterpolation   interp = EopInterpolation::Lagrange4);
-    /// As loadFinals2000A(), from file contents already in memory. Throws
-    /// astro::Error if no usable rows are found, or as the constructor does
-    /// (fewer than two rows, a repeated epoch).
+    /// As loadFinals2000A(), from file contents already in memory. A field
+    /// that is blank is a missing value; a field that holds anything but a
+    /// plain decimal number ("nan", an exponent, text after the digits) is an
+    /// error. Throws astro::Error naming the line and the field for such a
+    /// field, if no usable rows are found, or as the constructor does (fewer
+    /// than two rows, a repeated epoch).
     [[nodiscard]] static EopTable parseFinals2000A(std::string_view content,
                                                    EopInterpolation interp = EopInterpolation::Lagrange4);
     /// IERS EOP C04 series, either the classic "14" format
@@ -113,14 +116,19 @@ public:
     /// Throws astro::Error if the file cannot be opened, or as parseC04() does.
     [[nodiscard]] static EopTable loadC04(const std::string& path,
                                           EopInterpolation   interp = EopInterpolation::Lagrange4);
-    /// As loadC04(), from file contents already in memory. Throws astro::Error
-    /// if no usable rows are found, or as the constructor does (fewer than two
-    /// rows, a repeated epoch).
+    /// As loadC04(), from file contents already in memory. Lines that do not
+    /// begin with a four-digit year, or have fewer than ten columns, are taken
+    /// as header and skipped; '#' starts a comment line. On a data line every
+    /// number read must be a plain decimal number. Throws astro::Error naming
+    /// the line and the field otherwise, if no usable rows are found, or as
+    /// the constructor does (fewer than two rows, a repeated epoch).
     [[nodiscard]] static EopTable parseC04(std::string_view content,
                                            EopInterpolation interp = EopInterpolation::Lagrange4);
 
     /// Interpolated EOP. Throws astro::Error outside [firstMjd(), lastMjd()],
-    /// and for an `mjdUtc` that is not a number (NaN).
+    /// for an `mjdUtc` that is not a number (NaN), and if the interpolated
+    /// values are not finite (records almost at the same epoch, or absurdly
+    /// large values): what is returned is always finite.
     [[nodiscard]] EopValues at(double mjdUtc) const override;
 
     /// MJD (UTC) of the first / last record.

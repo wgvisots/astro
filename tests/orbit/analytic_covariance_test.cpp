@@ -297,3 +297,58 @@ TEST(SecularStm, GridMatchesSingleTimesAndConstructors) {
     EXPECT_LT(maxBlockRelDiff(from12.stm, fromState.stm), 1e-12);
     EXPECT_LT(maxBlockRelDiff(prop.propagateStm(4000.0).stm, fromState.stm), 1e-6);
 }
+
+TEST(SecularStm, UnmodeledForceAddsTheDerivativeOfTheResidualTerms) {
+    // With HigherOrderMode::UnmodeledForce the trajectory is the secular one plus
+    //   dr = da0 dt^2/2 + dj0 dt^3/6,  dv = da0 dt + dj0 dt^2/2,
+    // where da0 = a_in - a(r0) and dj0 = j_in - G(r0) v0 are the residuals against the model (point
+    // mass + J2 + J4, whose jerk along the motion is its gradient G times the velocity). propagateStm
+    // holds a_in and j_in fixed, so Phi is the ModelOnly Phi plus the derivative of (dr, dv), written
+    // out here:
+    //   d(dr)/dr0 = -G dt^2/2 - J dt^3/6,  d(dr)/dv0 = -G dt^3/6,
+    //   d(dv)/dr0 = -G dt     - J dt^2/2,  d(dv)/dv0 = -G dt^2/2,
+    // with J = d(G(r) v0)/dr at r0 (by a central difference of the exact gradient; it is a small
+    // term). Compared block by block, relative to the largest entry of each block of the added term.
+    // Measured 6e-10 (the secular parts of the two differences cancel).
+    const std::vector<double> J{0.0, 0.0, constants::J2, 0.0, constants::J4};
+    const StateVector         s0       = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    const auto                gradient = [&](const Vec3& r) { return pointMassGradient(r) + zonalGradient(r, J); };
+    const Mat3                G        = gradient(s0.r);
+    Mat3                      Jr;
+    for (std::size_t k = 0; k < 3; ++k) {
+        Vec3 d;
+        d[k]         = 1.0; // m
+        const Vec3 c = (gradient(s0.r + d) * s0.v - gradient(s0.r - d) * s0.v) * 0.5;
+        for (std::size_t i = 0; i < 3; ++i) {
+            Jr(i, k) = c[i];
+        }
+    }
+    StateVector12 s12(s0.r, s0.v, Vec3{}, Vec3{});
+    s12.a = pointMassAcceleration(s0.r) + zonalAcceleration(s0.r, J) + Vec3{2e-4, -1e-4, 3e-4};
+    s12.j = G * s0.v + Vec3{1e-6, 2e-6, -1e-6};
+    const SecularPropagator modelOnly(s12, {}, SecularOrder::J2SquaredJ4, HigherOrderMode::ModelOnly);
+    const SecularPropagator unmodeled(s12, {}, SecularOrder::J2SquaredJ4, HigherOrderMode::UnmodeledForce);
+    for (const double dt : {600.0, -3000.0}) {
+        const Mat6 added = [&] {
+            const Mat6 a = unmodeled.propagateStm(dt).stm, b = modelOnly.propagateStm(dt).stm;
+            Mat6       d{};
+            for (std::size_t i = 0; i < 6; ++i) {
+                for (std::size_t j = 0; j < 6; ++j) {
+                    d[i][j] = a[i][j] - b[i][j];
+                }
+            }
+            return d;
+        }();
+        const double t2 = dt * dt / 2.0, t3 = dt * dt * dt / 6.0;
+        Mat6         truth{};
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                truth[i][j]         = -G(i, j) * t2 - Jr(i, j) * t3;
+                truth[i][j + 3]     = -G(i, j) * t3;
+                truth[i + 3][j]     = -G(i, j) * dt - Jr(i, j) * t2;
+                truth[i + 3][j + 3] = -G(i, j) * t2;
+            }
+        }
+        EXPECT_LT(maxBlockRelDiff(added, truth), 1e-8) << "dt = " << dt;
+    }
+}

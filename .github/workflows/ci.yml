@@ -1,5 +1,6 @@
-# Build and test with GCC and Clang (warnings as errors), under ThreadSanitizer, check formatting,
-# and build the documentation (Doxygen warnings as errors; code in the docs must match the examples).
+# Build and test with GCC and Clang (warnings as errors); under the thread, address and
+# undefined-behaviour sanitizers; fuzz the parsers; measure line coverage; check formatting; and
+# build the documentation (Doxygen warnings as errors; code in the docs must match the examples).
 name: CI
 
 on:
@@ -71,6 +72,106 @@ jobs:
           -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
         setarch "$(uname -m)" -R cmake --build build -j 4
         setarch "$(uname -m)" -R ctest --test-dir build --output-on-failure
+
+  address-undefined-sanitizer:
+    name: AddressSanitizer + UBSan
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-dev libgtest-dev
+
+    # Memory errors and undefined behaviour stop the run. -O2 with debug information is the setting
+    # in which an out-of-object write in the secular covariance code once gave a wrong matrix while
+    # the release build happened to work. setarch -R: see the ThreadSanitizer job.
+    - name: Build and test
+      env:
+        ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+        UBSAN_OPTIONS: print_stacktrace=1
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+        setarch "$(uname -m)" -R cmake --build build -j 4
+        setarch "$(uname -m)" -R ctest --test-dir build --output-on-failure
+
+  fuzz:
+    name: Fuzz the parsers
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-dev clang
+
+    - name: Build the fuzz targets
+      env:
+        CXX: clang++
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DASTRO_BUILD_FUZZERS=ON \
+          -DASTRO_BUILD_TESTS=OFF -DASTRO_BUILD_EXAMPLES=OFF
+        cmake --build build -j 4
+
+    # One minute per parser: the seed corpus (which includes every input that has found a defect)
+    # and then new inputs. A crash, a sanitizer report or a broken property fails the job and the
+    # input is uploaded.
+    - name: Fuzz
+      run: |
+        status=0
+        for target in angle eop iso8601 leap_seconds spk tle; do
+          mkdir -p "found/$target"
+          echo "::group::$target"
+          build/fuzz/astro_fuzz_$target "found/$target" "fuzz/corpus/$target" -max_total_time=60 \
+            -max_len=65536 -timeout=10 -rss_limit_mb=2048 -print_final_stats=1 \
+            -artifact_prefix="found/$target-" || status=1
+          echo "::endgroup::"
+        done
+        exit $status
+
+    - name: Upload the inputs that failed
+      if: failure()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: fuzz-findings
+        path: |
+          found/*-crash-*
+          found/*-timeout-*
+          found/*-oom-*
+        if-no-files-found: ignore
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-dev libgtest-dev
+
+    - name: Build and test with coverage
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Debug -DASTRO_COVERAGE=ON
+        cmake --build build -j 4
+        ctest --test-dir build --output-on-failure
+
+    # Line coverage of the library by the tests, per module, in the job summary. The floor is a
+    # guard against a large untested addition, not a target: raise it as the suite grows.
+    - name: Report
+      run: |
+        python3 tools/coverage_report.py build --min 97 | tee coverage.md
+        cat coverage.md >> "$GITHUB_STEP_SUMMARY"
 
   format:
     name: clang-format

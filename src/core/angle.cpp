@@ -283,12 +283,21 @@ Sexagesimal radToDms(double rad, int decimals) noexcept {
     return decompose(rad * constants::radToDeg, decimals);
 }
 
+// A number with hundreds of digits is a number, but not an angle a double can hold: refuse it rather
+// than return infinity.
+static double finiteAngle(double radians, std::string_view text) {
+    if (!std::isfinite(radians)) {
+        failSexagesimal("sexagesimal value is too large", text);
+    }
+    return radians;
+}
+
 double parseHms(std::string_view text) {
-    return parseSexagesimal(text, Whole::Hours) * 15.0 * constants::degToRad;
+    return finiteAngle(parseSexagesimal(text, Whole::Hours) * (15.0 * constants::degToRad), text);
 }
 
 double parseDms(std::string_view text) {
-    return parseSexagesimal(text, Whole::Degrees) * constants::degToRad;
+    return finiteAngle(parseSexagesimal(text, Whole::Degrees) * constants::degToRad, text);
 }
 
 std::string formatHms(double rad, int decimals, char sep) {

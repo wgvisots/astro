@@ -18,8 +18,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <random>
+#include <vector>
 
 #include "astro/core/constants.h"
 #include "astro/core/error.h"
@@ -61,8 +63,25 @@ double maxAbsDiff(const Mat3& a, const Mat3& b) {
 
 } // namespace
 
-TEST(ItrsRotationSeries, MatchesFrameTransformer) {
-    // Exact at the nodes, and between them within a few 1e-11 rad (0.3 mm at the surface).
+TEST(ItrsRotationSeries, ExactAtTheNodes) {
+    // At the nodes (every nodeSpacing = 1 h from the start) the parts are those of a FrameTransformer at
+    // that time, so the matrices agree to rounding: measured 4.3e-15 (the Earth rotation angle is
+    // carried from node to node), tolerance 2e-14.
+    const DriftingEop        eop;
+    const ItrsRotationSeries series(kStart, 6 * 3600.0, eop);
+    double                   worst = 0.0;
+    for (int i = 0; i <= 6; ++i) {
+        const double dt = 3600.0 * i;
+        worst =
+            std::max(worst,
+                     maxAbsDiff(series.gcrsToItrsMatrix(dt), FrameTransformer(kStart + dt, eop).gcrsTo(Frame::ITRS)));
+    }
+    EXPECT_LT(worst, 2e-14);
+}
+
+TEST(ItrsRotationSeries, MatchesFrameTransformerBetweenTheNodes) {
+    // Between the nodes precession-nutation and polar motion are linear in time: within a few 1e-11
+    // rad of the transformer (the header's 0.2 mm at the surface), at random times.
     const DriftingEop                      eop;
     const ItrsRotationSeries               series(kStart, 6 * 3600.0, eop);
     std::mt19937_64                        rng(3);
@@ -73,14 +92,16 @@ TEST(ItrsRotationSeries, MatchesFrameTransformer) {
     };
     double worstM = 0.0, worstV = 0.0;
     for (int i = 0; i < 200; ++i) {
-        const double           dt = i < 7 ? 3600.0 * i : u(rng);
+        const double           dt = u(rng);
         const FrameTransformer ft(kStart + dt, eop);
         worstM                  = std::max(worstM, maxAbsDiff(series.gcrsToItrsMatrix(dt), ft.gcrsTo(Frame::ITRS)));
         const StateVector exact = ft.transform(s, Frame::GCRS, Frame::ITRS);
         worstV                  = std::max(worstV, norm(series.gcrsToItrs(dt, s).v - exact.v));
     }
-    EXPECT_LT(worstM, 5e-11); // 0.3 mm at the surface
-    EXPECT_LT(worstV, 5e-7);  // m/s: the matrix error times the 7 km/s speed
+    // Measured 2.8e-11 (0.18 mm at the surface) and 1.4e-7 m/s, the matrix error times the 7 km/s
+    // speed and the Earth-rotation term.
+    EXPECT_LT(worstM, 5e-11);
+    EXPECT_LT(worstV, 3e-7);
 }
 
 TEST(ItrsRotationSeries, RoundTripRateAndErrors) {
@@ -106,4 +127,16 @@ TEST(ItrsRotationSeries, RoundTripRateAndErrors) {
     // A zero-length window still works (one second wide).
     const ItrsRotationSeries point(kStart, 0.0, eop);
     EXPECT_LT(maxAbsDiff(point.gcrsToItrsMatrix(0.0), FrameTransformer(kStart, eop).gcrsTo(Frame::ITRS)), 1e-15);
+}
+
+TEST(ItrsRotationSeries, EopNotCoveringTheWindowOrAStartBefore1960Throws) {
+    // Documented: the EOP must cover the window, and the window must start in 1960 or later.
+    std::vector<EopRecord> records;
+    for (int d = 0; d < 3; ++d) {
+        records.push_back({kStart.mjd() + d, {}}); // three days from the start
+    }
+    const EopTable table(records);
+    EXPECT_NO_THROW(ItrsRotationSeries(kStart, 86400.0, table));
+    EXPECT_THROW(ItrsRotationSeries(kStart, 4 * 86400.0, table), Error);
+    EXPECT_THROW(ItrsRotationSeries(Time::fromCalendar(TimeScale::TT, 1955, 1, 1, 0), 3600.0, ConstantEop{}), Error);
 }
