@@ -26,9 +26,19 @@ cmake --install build --prefix /your/prefix
 | `ASTRO_BUILD_BENCHMARKS` | off | timing programs in `bench/` ([Performance](../performance.md)) |
 | `ASTRO_BUILD_STUDIES` | off | accuracy studies in `studies/` ([Accuracy](../accuracy.md)) |
 | `ASTRO_WARNINGS_AS_ERRORS` | off | `-Werror` (or `/WX`) |
+| `ASTRO_BUILD_FUZZERS` | off | libFuzzer targets for the parsers in `fuzz/` (Clang only) |
+| `ASTRO_COVERAGE` | off | line-coverage instrumentation (GCC); report with `tools/coverage_report.py` |
 
 `cmake --build build --target docs` builds the HTML documentation into `build/docs/html` when
 Doxygen is installed.
+
+### Packages
+
+`cpack -G DEB` or `cpack -G RPM`, run in a build directory, makes a Debian or RPM package of what
+`cmake --install` installs: the library, the headers, the CMake package files and the licence files,
+under `/usr`. It depends on the Boost headers (`libboost-dev`, `boost-devel`). The RPM generator
+needs `rpmbuild`. The vendor, maintainer and home page come from the cache variables
+`ASTRO_PACKAGE_VENDOR`, `ASTRO_PACKAGE_CONTACT` and `ASTRO_PACKAGE_HOMEPAGE`.
 
 ## Use it from your project
 

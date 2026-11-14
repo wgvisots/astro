@@ -117,6 +117,17 @@ write_basic_package_version_file(${PROJECT_BINARY_DIR}/astroConfigVersion.cmake
         COMPATIBILITY SameMajorVersion)
 install(FILES ${PROJECT_BINARY_DIR}/astroConfig.cmake ${PROJECT_BINARY_DIR}/astroConfigVersion.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/astro)
+install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
+
+# ---------------------------------------------------------------- packages
+# `cpack -G DEB` or `cpack -G RPM` in the build directory (see cmake/AstroPackaging.cmake). Only when
+# astro is the top-level project: a project that includes it packages itself.
+set(ASTRO_PACKAGE_VENDOR "W. Greg Visotski" CACHE STRING "Vendor named in the packages")
+set(ASTRO_PACKAGE_CONTACT "W. Greg Visotski" CACHE STRING "Maintainer named in the packages")
+set(ASTRO_PACKAGE_HOMEPAGE "https://github.com/wgvisots/astro" CACHE STRING "Home page named in the packages")
+if(PROJECT_IS_TOP_LEVEL)
+    include(cmake/AstroPackaging.cmake)
+endif()
 
 # ---------------------------------------------------------------- tests
 if(ASTRO_BUILD_TESTS OR ASTRO_BUILD_EXAMPLES)

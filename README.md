@@ -50,6 +50,15 @@ cmake --install build --prefix /your/prefix
 Consumers use `find_package(astro)` and link `astro::astro` (Boost is found as a transitive
 dependency). See [Getting started](docs/guide/getting-started.md) for the CMake options.
 
+To make a Debian or RPM package of the library, headers and CMake files instead (it installs under
+`/usr` and depends on the Boost headers):
+
+```sh
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DASTRO_BUILD_TESTS=OFF -DASTRO_BUILD_EXAMPLES=OFF
+cmake --build build -j
+cd build && cpack -G DEB     # astro_<version>_<arch>.deb; or -G RPM (needs rpmbuild)
+```
+
 ## A taste
 
 ```cpp
