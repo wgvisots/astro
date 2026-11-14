@@ -16,6 +16,7 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -190,7 +191,8 @@ TEST(FrameTransformer, ConsistencyAndRoundTrips) {
     EXPECT_LT(std::abs(d(0, 1)), 0.1 * constants::masToRad);
     // GAST - GMST is the equation of the equinoxes (< 1.2 s of time).
     EXPECT_LT(std::abs(wrapPi(ft.gast() - ft.gmst())), deg2rad(1.2 * 15.0 / 3600.0));
-    // UT1 is required.
+    // Without Earth-orientation data (ConstantEop{}: UT1 taken as UTC, no polar motion) the transformer
+    // is still built.
     EXPECT_NO_THROW(FrameTransformer(t, ConstantEop{}));
 }
 
@@ -356,6 +358,86 @@ TEST(EopTable, DuplicateEpochIsRejected) {
         for (double mjd : {59000.0, 59000.5, 59001.0, 59001.75, 59002.25, 59003.0}) {
             EXPECT_NEAR(rad2arcsec(table.at(mjd).xp), mjd - 58999.0, 1e-12) << mjd; // rounding only
         }
+    }
+}
+
+namespace {
+
+/// Daily EOP records from MJD 60000 to 60007 (2023, no leap second) whose values are polynomials of
+/// u = MJD - 60003.4: polar motion x, UT1-UTC, LOD, dX and dY cubic, polar motion y quartic.
+struct PolynomialEop {
+    static constexpr double c4 = 1e-3; ///< coefficient of u^4 in y, arcsec
+
+    static double u(double mjd) { return mjd - 60003.4; }
+    static double xp(double mjd) {
+        return arcsec2rad(0.1 + 0.01 * u(mjd) - 0.002 * std::pow(u(mjd), 2) + 3e-4 * std::pow(u(mjd), 3));
+    }
+    static double yp(double mjd) { return arcsec2rad(0.3 + 0.02 * u(mjd) + c4 * std::pow(u(mjd), 4)); }
+    static double dut1(double mjd) { return -0.1 + 1e-3 * u(mjd) - 2e-4 * std::pow(u(mjd), 3); }
+    static double lod(double mjd) { return 1e-3 + 1e-4 * std::pow(u(mjd), 2) - 1e-5 * std::pow(u(mjd), 3); }
+    static double dX(double mjd) { return mas2rad(0.2 - 0.03 * u(mjd) + 0.004 * std::pow(u(mjd), 3)); }
+    static double dY(double mjd) { return mas2rad(-0.1 + 0.01 * std::pow(u(mjd), 2) - 0.002 * std::pow(u(mjd), 3)); }
+
+    static std::vector<EopRecord> records() {
+        std::vector<EopRecord> out;
+        for (int d = 0; d <= 7; ++d) {
+            const double m = 60000.0 + d;
+            out.push_back({
+                m,
+                {xp(m), yp(m), dut1(m), lod(m), dX(m), dY(m)}
+            });
+        }
+        return out;
+    }
+};
+
+} // namespace
+
+TEST(EopTable, Lagrange4ReproducesACubicExactly) {
+    // Four-point Lagrange interpolation is exact for a polynomial of degree three: at nodes, in the
+    // first and last intervals (where the four points cannot straddle the epoch) and inside.
+    const EopTable table(PolynomialEop::records(), EopInterpolation::Lagrange4);
+    for (double mjd : {60000.0, 60000.3, 60001.5, 60003.7, 60005.0, 60006.8, 60007.0}) {
+        SCOPED_TRACE(testing::Message() << "MJD " << mjd);
+        const EopValues v = table.at(mjd);
+        // Rounding only: a few units in the last place of each value, summed with weights below 2 (and
+        // UT1-UTC passes through UT1-TAI, 37 s). Measured 1.1e-22 rad, 5.3e-15 s, 4.3e-19 s, 2.1e-25 rad.
+        EXPECT_NEAR(v.xp, PolynomialEop::xp(mjd), 1e-21);
+        EXPECT_NEAR(v.dut1, PolynomialEop::dut1(mjd), 5e-14);
+        EXPECT_NEAR(v.lod, PolynomialEop::lod(mjd), 5e-18);
+        EXPECT_NEAR(v.dX, PolynomialEop::dX(mjd), 2e-24);
+        EXPECT_NEAR(v.dY, PolynomialEop::dY(mjd), 2e-24);
+    }
+}
+
+TEST(EopTable, Lagrange4ErrorOnAQuarticIsTheNodePolynomial) {
+    // For f(u) = ... + c4 u^4 the interpolation error of a cubic through four nodes x_k is exactly
+    // f''''/4! prod(x - x_k) = c4 prod(x - x_k). The nodes are the two records on each side of the
+    // epoch, or the first (last) four records in the first (last) interval.
+    const EopTable table(PolynomialEop::records(), EopInterpolation::Lagrange4);
+    for (double mjd : {60000.3, 60001.5, 60003.7, 60004.2, 60006.8}) {
+        SCOPED_TRACE(testing::Message() << "MJD " << mjd);
+        const double lower          = std::clamp(std::floor(mjd) - 1.0, 60000.0, 60004.0); // first of the four nodes
+        double       nodePolynomial = 1.0;
+        for (int k = 0; k < 4; ++k) {
+            nodePolynomial *= mjd - (lower + k);
+        }
+        const double expected = PolynomialEop::yp(mjd) - arcsec2rad(PolynomialEop::c4 * nodePolynomial);
+        // The error itself is 1.7e-9 to 4.7e-9 rad (0.35 to 0.96 mas) at these epochs; rounding is
+        // 4.2e-22 rad (measured).
+        EXPECT_NEAR(table.at(mjd).yp, expected, 4e-21);
+        EXPECT_GT(std::abs(PolynomialEop::yp(mjd) - expected), 1e-9); // the error term is not negligible
+    }
+}
+
+TEST(EopTable, LinearInterpolationIsTheChord) {
+    const EopTable table(PolynomialEop::records(), EopInterpolation::Linear);
+    for (double mjd : {60000.3, 60003.7, 60006.8}) {
+        const double x0 = std::floor(mjd), t = mjd - x0;
+        EXPECT_NEAR(table.at(mjd).yp, (1.0 - t) * PolynomialEop::yp(x0) + t * PolynomialEop::yp(x0 + 1.0), 4e-21)
+            << mjd;
+        EXPECT_NEAR(table.at(mjd).dut1, (1.0 - t) * PolynomialEop::dut1(x0) + t * PolynomialEop::dut1(x0 + 1.0), 5e-14)
+            << mjd;
     }
 }
 
