@@ -132,13 +132,31 @@ TEST(EstimateTracker, NewEstimateOnAnOpenOrbitIsInfinitelyFarInElements) {
     EXPECT_FALSE(c.consistent);
     EXPECT_TRUE(std::isfinite(c.mahalanobis2));
     EXPECT_GT(c.mahalanobis2, 1e6);
-    // A prediction that is itself hyperbolic cannot be tested in elements at all.
-    const StateEstimate openPrior{
-        kEpoch,
-        {s0.r, 1.5 * s0.v},
-        diagonal(100.0, 1e-4)
-    };
-    EXPECT_THROW((void)checkConsistency(openPrior, next), Error);
+    // A prediction that is itself on an open orbit has no elements statistic: it is NaN, the other
+    // two statistics are unaffected, and nothing throws. With the (default) elements test the
+    // delivery counts as not consistent; with the position test a delivery that follows the
+    // hyperbola is accepted.
+    const StateVector   open{s0.r, 1.5 * s0.v};
+    const StateEstimate openPrior{kEpoch, open, diagonal(100.0, 1e-4)};
+    const StateEstimate onTheHyperbola{kEpoch + 60.0, truthAt(open, 60.0), diagonal(100.0, 1e-4)};
+    const auto          e = checkConsistency(openPrior, onTheHyperbola);
+    EXPECT_TRUE(e.valid);
+    EXPECT_TRUE(std::isnan(e.elementsMahalanobis2));
+    EXPECT_TRUE(std::isnan(e.elementsPValue));
+    EXPECT_TRUE(std::isnan(e.semiMajorAxisResidual));
+    EXPECT_LT(e.mahalanobis2, 1.0); // the new estimate is the prediction itself
+    EXPECT_GT(e.positionPValue, 0.9);
+    EXPECT_FALSE(e.consistent);
+    TrackerOptions byPosition;
+    byPosition.test = ConsistencyTest::Position;
+    EXPECT_TRUE(checkConsistency(openPrior, onTheHyperbola, byPosition).consistent);
+    // A tracker on such an object keeps taking deliveries.
+    EstimateTracker tracker(byPosition);
+    (void)tracker.update(openPrior);
+    const auto update = tracker.update(onTheHyperbola);
+    ASSERT_TRUE(update.has_value());
+    EXPECT_TRUE(update->consistent);
+    EXPECT_TRUE(update->replaced);
 }
 
 TEST(EstimateTracker, Mahalanobis) {
