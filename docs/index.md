@@ -10,6 +10,7 @@ dependency is header-only Boost (Describe).
 | If you want to... | Read |
 |---|---|
 | build it, link it, and run a first program | [Getting started](guide/getting-started.md) |
+| get, update and load the IERS and JPL data files, and know when they run out | [Data files](guide/data-files.md) |
 | convert between UTC, TAI, TT, TDB, UT1, GPS, Unix time | [Time scales](guide/time.md) |
 | go between latitude/longitude/height, ECEF and local ENU / az-el | [Geodesy](guide/geodesy.md) |
 | go between ECEF and ECI (ITRS, GCRS, TEME, TOD, ...) | [Reference frames](guide/frames.md) |
@@ -24,8 +25,10 @@ dependency is header-only Boost (Describe).
 
 ## Background
 
-- [Accuracy](accuracy.md): what each part is validated against, and measured accuracy of the
+- [Accuracy and validation](accuracy.md): what each part is validated against, and measured accuracy of the
   propagators and the consistency checks, with the programs that produce the numbers.
+- [Compatibility](compatibility.md): what a version number promises, how things are deprecated, and
+  the supported platforms.
 - [Performance](performance.md): timings, and how to get the most out of the propagators.
 - [References](references.md): the papers, standards and books the implementations follow.
 - [Glossary](glossary.md): every acronym and term used here, spelled out.
