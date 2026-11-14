@@ -18,7 +18,10 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <cmath>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "astro/core/angle.h"
@@ -135,32 +138,142 @@ TEST(Gravity, ForceModelPartialsMatchDefaultDifferences) {
     EXPECT_LT(maxRelDiff(G, Gfd), 1e-5);
 }
 
-TEST(Covariance, EquinoctialJacobianIsTheLinearization) {
-    // J dx against the element change for small dx, including circular, near-equatorial, eccentric,
-    // polar and (non-equatorial) retrograde orbits.
-    const KeplerianElements orbits[] = {
+namespace {
+
+/// The orbits of the equinoctial Jacobian tests: circular, near-equatorial, eccentric, polar,
+/// retrograde (not equatorial), and a mean longitude 1e-9 rad below 2 pi, so that the perturbed
+/// states of the differences fall on both sides of the wrap.
+std::vector<KeplerianElements> jacobianOrbits() {
+    return {
         {7000 * km,  0.001, deg2rad(51.6),  0.3, 0.6, 0.9},
         {7000 * km,  0.0,   deg2rad(0.3),   0.0, 0.0, 1.0},
         {26000 * km, 0.6,   deg2rad(63.4),  1.0, 4.7, 0.5},
         {7100 * km,  0.002, deg2rad(90.0),  2.0, 0.3, 0.1},
-        {7000 * km,  0.001, deg2rad(140.0), 0.5, 1.0, 2.0}
+        {7000 * km,  0.001, deg2rad(140.0), 0.5, 1.0, 2.0},
+        elementsFromMeanAnomaly(8000 * km, 0.05, deg2rad(30.0), 3.0, 3.0, constants::twoPi - 6.0 - 1e-9),
     };
-    for (const auto& el : orbits) {
-        const StateVector s          = elementsToState(el);
-        const Mat6        J          = stateToEquinoctialJacobian(s);
-        const double      dx[6]      = {0.7, -0.4, 0.2, 3e-4, -2e-4, 5e-4}; // m, m/s
-        StateVector       t          = s;
-        t.r                         += Vec3{dx[0], dx[1], dx[2]};
-        t.v                         += Vec3{dx[3], dx[4], dx[5]};
-        const EquinoctialElements a = stateToEquinoctial(s), b = stateToEquinoctial(t);
-        const double d[6] = {b.a - a.a, b.h - a.h, b.k - a.k, b.p - a.p, b.q - a.q, wrapPi(b.lambda - a.lambda)};
-        for (std::size_t i = 0; i < 6; ++i) {
-            double lin = 0.0, scale = 0.0;
+}
+
+/// Analytic partial derivatives of a, h, k, p, q (rows 0 to 4; row 5 is left zero) with respect to
+/// (r, v), written out from the definitions:
+///   a from vis-viva:  da/dr = 2 a^2 r / |r|^3,  da/dv = 2 a^2 v / mu;
+///   p = w_x / (1 + w_z), q = -w_y / (1 + w_z) with w the unit angular momentum (this is
+///   tan(i/2) (sin raan, cos raan));
+///   k = e . f, h = e . g with e the eccentricity vector (v x (r x v)) / mu - r / |r| and f, g the
+///   equinoctial unit vectors f = (1 - p^2 + q^2, 2pq, -2p) / D, g = (2pq, 1 + p^2 - q^2, 2q) / D,
+///   D = 1 + p^2 + q^2 (Broucke & Cefola 1972).
+Mat6 analyticEquinoctialPartials(const StateVector& s, double mu) {
+    const Vec3   r = s.r, v = s.v, hv = cross(r, v);
+    const double rm = norm(r), hm = norm(hv);
+    const double a = 1.0 / (2.0 / rm - norm2(v) / mu);
+    const Vec3   w = hv / hm;
+    const double p = w.x / (1.0 + w.z), q = -w.y / (1.0 + w.z), D = 1.0 + p * p + q * q;
+    const Vec3   e = cross(v, hv) / mu - r / rm;
+    const Vec3   f = Vec3{1.0 - p * p + q * q, 2.0 * p * q, -2.0 * p} / D;
+    const Vec3   g = Vec3{2.0 * p * q, 1.0 + p * p - q * q, 2.0 * q} / D;
+    // Derivatives of f and g with respect to p and q.
+    const Vec3 fp = (Vec3{-2.0 * p, 2.0 * q, -2.0} - f * (2.0 * p)) / D;
+    const Vec3 fq = (Vec3{2.0 * q, 2.0 * p, 0.0} - f * (2.0 * q)) / D;
+    const Vec3 gp = (Vec3{2.0 * q, 2.0 * p, 0.0} - g * (2.0 * p)) / D;
+    const Vec3 gq = (Vec3{2.0 * p, -2.0 * q, 2.0} - g * (2.0 * q)) / D;
+    Mat6       T{};
+    for (std::size_t j = 0; j < 6; ++j) {
+        Vec3 u;
+        u[j % 3] = 1.0;
+        // Derivatives of the angular momentum, the eccentricity vector and a along component j.
+        const Vec3   dh = j < 3 ? cross(u, v) : cross(r, u);
+        const Vec3   de = j < 3 ? cross(v, cross(u, v)) / mu - (u / rm - r * (r[j] / (rm * rm * rm)))
+                                : (cross(u, hv) + cross(v, cross(r, u))) / mu;
+        const double da = j < 3 ? 2.0 * a * a * r[j] / (rm * rm * rm) : 2.0 * a * a * v[j - 3] / mu;
+        const Vec3   dw = (dh - w * dot(w, dh)) / hm;
+        const double dp = (dw.x * (1.0 + w.z) - w.x * dw.z) / ((1.0 + w.z) * (1.0 + w.z));
+        const double dq = -(dw.y * (1.0 + w.z) - w.y * dw.z) / ((1.0 + w.z) * (1.0 + w.z));
+        T[0][j]         = da;
+        T[1][j]         = dot(de, g) + dot(e, gp * dp + gq * dq);
+        T[2][j]         = dot(de, f) + dot(e, fp * dp + fq * dq);
+        T[3][j]         = dp;
+        T[4][j]         = dq;
+    }
+    return T;
+}
+
+/// J x for a state-space direction x = (dr, dv), and the sum of the magnitudes of its terms (the
+/// scale of the rounding and truncation errors of the sum, which may cancel).
+struct Applied {
+    std::array<double, 6> value{}, scale{};
+};
+Applied apply(const Mat6& J, const Vec3& dr, const Vec3& dv) {
+    Applied out;
+    for (std::size_t i = 0; i < 6; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            out.value[i] += J[i][j] * dr[j] + J[i][j + 3] * dv[j];
+            out.scale[i] += std::abs(J[i][j] * dr[j]) + std::abs(J[i][j + 3] * dv[j]);
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+TEST(Covariance, EquinoctialJacobianMatchesTheAnalyticPartials) {
+    // Rows a, h, k, p, q against the analytic partials above. The Jacobian is a central difference
+    // documented to ~1e-8 relative. Each entry is compared in units of the change of the element
+    // for a relative change of the state, |dX/dr| |r| or |dX/dv| |v|, relative to the largest such
+    // change in its row. Measured: 2.6e-9.
+    for (const KeplerianElements& el : jacobianOrbits()) {
+        const StateVector s = elementsToState(el);
+        const Mat6        J = stateToEquinoctialJacobian(s);
+        const Mat6        T = analyticEquinoctialPartials(s, constants::gmEarth);
+        for (std::size_t i = 0; i < 5; ++i) {
+            double scale = 0.0, worst = 0.0;
             for (std::size_t j = 0; j < 6; ++j) {
-                lin   += J[i][j] * dx[j];
-                scale += std::abs(J[i][j] * dx[j]);
+                const double unit = j < 3 ? norm(s.r) : norm(s.v);
+                scale             = std::max(scale, std::abs(T[i][j]) * unit);
+                worst             = std::max(worst, std::abs(J[i][j] - T[i][j]) * unit);
             }
-            EXPECT_NEAR(lin, d[i], 1e-5 * scale + 1e-15) << "element " << i << ", e = " << el.e << ", i = " << el.i;
+            EXPECT_LT(worst, 1e-8 * scale) << "element " << i << ", e = " << el.e << ", i = " << el.i;
+        }
+    }
+}
+
+TEST(Covariance, EquinoctialJacobianMovesTheMeanLongitudeAsTheOrbitMoves) {
+    // The mean-longitude row against motions of the state whose effect on lambda is known exactly:
+    //  - along the two-body flow (v, -mu r / |r|^3), lambda advances at the mean motion n and
+    //    a, h, k, p, q stay constant;
+    //  - turning the state about z by one radian turns the node, so lambda, by one radian; h, k and
+    //    p, q turn with it (dh = k, dk = -h, dp = q, dq = -p);
+    //  - turning it about its own orbit normal turns the perigee, so lambda, by one radian;
+    //  - scaling r by (1 + x) and v by (1 - x / 2) scales a by (1 + x) and leaves every angle.
+    // Tolerance: relative to the sum of the magnitudes of the terms of J x (along the flow the terms
+    // of the a row cancel). Measured: 2.6e-8, in lambda where it is near 2 pi and so known only to a
+    // rounding error of 2 pi; 1e-8 is the documented accuracy of the differences.
+    const double mu = constants::gmEarth;
+    for (const KeplerianElements& el : jacobianOrbits()) {
+        const StateVector         s = elementsToState(el);
+        const Mat6                J = stateToEquinoctialJacobian(s);
+        const EquinoctialElements q = stateToEquinoctial(s);
+        const Vec3                z{0.0, 0.0, 1.0};
+        const Vec3                w  = cross(s.r, s.v) / norm(cross(s.r, s.v));
+        const double              rm = norm(s.r);
+        const double              n  = std::sqrt(mu / (q.a * q.a * q.a));
+        const std::string         at = "e = " + std::to_string(el.e) + ", i = " + std::to_string(el.i);
+        // clang-format off
+        const struct {
+            const char*           what;
+            Applied               change;
+            std::array<double, 6> expected;
+        } motions[] = {
+            {"two-body flow",     apply(J, s.v, s.r * (-mu / (rm * rm * rm))), {0.0, 0.0,  0.0,  0.0, 0.0,  n  }},
+            {"turn about z",      apply(J, cross(z, s.r), cross(z, s.v)),      {0.0, q.k,  -q.h, q.q, -q.p, 1.0}},
+            {"turn about normal", apply(J, cross(w, s.r), cross(w, s.v)),      {0.0, q.k,  -q.h, 0.0, 0.0,  1.0}},
+            {"scale",             apply(J, s.r, s.v * -0.5),                   {q.a, 0.0,  0.0,  0.0, 0.0,  0.0}},
+        };
+        // clang-format on
+        for (const auto& m : motions) {
+            for (std::size_t i = 0; i < 6; ++i) {
+                EXPECT_NEAR(m.change.value[i], m.expected[i], 1e-7 * m.change.scale[i])
+                    << m.what << ", element " << i << ", " << at;
+            }
         }
     }
 }
@@ -242,8 +355,15 @@ TEST(Covariance, InterpolatedStmMatchesExactStops) {
     }
 }
 
-TEST(Covariance, PropagatesThroughStm) {
-    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), leo());
+TEST(Covariance, PropagatedCovarianceMatchesPerturbedTrajectories) {
+    // The truth does not use the variational equations: write P0 = L L^T (Cholesky) and propagate
+    // the initial state displaced by plus and minus each column of L; half the difference of each
+    // pair is Phi times that column to second order, so P(t) = sum_k (Phi L_k) (Phi L_k)^T. The
+    // displacements are one standard deviation (10 m, 1 cm/s), and the reference propagations use a
+    // tight tolerance. Differences are compared in units of the standard deviations,
+    // |dP_ij| / sqrt(P_ii P_jj). Measured: 1.8e-8 over 4 h.
+    const StateVector         s0   = leo();
+    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0);
     Mat6                      P0{};
     for (std::size_t i = 0; i < 3; ++i) {
         P0[i][i]         = 100.0; // (10 m)^2
@@ -251,18 +371,61 @@ TEST(Covariance, PropagatesThroughStm) {
         P0[i][i + 3]     = 0.05;  // some position/velocity correlation
         P0[i + 3][i]     = 0.05;
     }
-    const auto               pc = prop.propagateGridWithCovariance(0.0, 60.0, 241, P0);
-    std::vector<StateVector> st(241);
-    std::vector<Mat6>        phi(241);
-    prop.propagateGridStm(0.0, 60.0, st, phi);
-    const auto grid = prop.propagateGrid(0.0, 60.0, 241);
-    for (std::size_t k = 0; k < pc.size(); ++k) {
-        EXPECT_EQ(pc[k].state, grid[k]); // the extra equations do not change the steps
-        EXPECT_EQ(pc[k].covariance, congruence(phi[k], P0));
-        EXPECT_EQ(pc[k].covariance, transpose(pc[k].covariance));
+    Mat6 L{};
+    for (std::size_t j = 0; j < 6; ++j) {
+        double d = P0[j][j];
+        for (std::size_t k = 0; k < j; ++k) {
+            d -= L[j][k] * L[j][k];
+        }
+        L[j][j] = std::sqrt(d);
+        for (std::size_t i = j + 1; i < 6; ++i) {
+            double x = P0[i][j];
+            for (std::size_t k = 0; k < j; ++k) {
+                x -= L[i][k] * L[j][k];
+            }
+            L[i][j] = x / L[j][j];
+        }
     }
+    AdaptiveOptions tight;
+    tight.relTol            = 1e-14;
+    tight.absTol            = 1e-11;
+    const std::size_t count = 241;
+    const double      step  = 60.0;
+    const auto        field = std::make_shared<GravityField>(kJ2J4);
+    const auto        pc    = prop.propagateGridWithCovariance(0.0, step, count, P0);
+    std::vector<Mat6> truth(count, Mat6{});
+    for (std::size_t k = 0; k < 6; ++k) {
+        const Vec3 dr{L[0][k], L[1][k], L[2][k]}, dv{L[3][k], L[4][k], L[5][k]};
+        const auto plus =
+            NumericalPropagator(Time(), {s0.r + dr, s0.v + dv}, {field}, tight).propagateGrid(0.0, step, count);
+        const auto minus =
+            NumericalPropagator(Time(), {s0.r - dr, s0.v - dv}, {field}, tight).propagateGrid(0.0, step, count);
+        for (std::size_t t = 0; t < count; ++t) {
+            const Vec3   a = (plus[t].r - minus[t].r) * 0.5, b = (plus[t].v - minus[t].v) * 0.5;
+            const double x[6] = {a.x, a.y, a.z, b.x, b.y, b.z};
+            for (std::size_t i = 0; i < 6; ++i) {
+                for (std::size_t j = 0; j < 6; ++j) {
+                    truth[t][i][j] += x[i] * x[j];
+                }
+            }
+        }
+    }
+    const auto grid  = prop.propagateGrid(0.0, step, count);
+    double     worst = 0.0;
+    for (std::size_t t = 0; t < count; ++t) {
+        EXPECT_EQ(pc[t].state, grid[t]); // the extra equations do not change the steps
+        for (std::size_t i = 0; i < 6; ++i) {
+            for (std::size_t j = 0; j < 6; ++j) {
+                worst = std::max(worst,
+                                 std::abs(pc[t].covariance[i][j] - truth[t][i][j])
+                                     / std::sqrt(truth[t][i][i] * truth[t][j][j]));
+            }
+        }
+        EXPECT_EQ(pc[t].covariance, transpose(pc[t].covariance));
+    }
+    EXPECT_LT(worst, 1e-7);
     EXPECT_EQ(pc[0].covariance, P0);
-    // Along-track uncertainty grows: position variance after 4 h far exceeds the initial 100 m^2.
+    // Along-track uncertainty grows: position variance after 4 h far exceeds the initial 300 m^2.
     const Mat6& P = pc.back().covariance;
     EXPECT_GT(P[0][0] + P[1][1] + P[2][2], 10.0 * 300.0);
 }
