@@ -288,13 +288,11 @@ TEST(TimeScales, Ut1Before1972IsUtcPlusDut1) {
     checkDriftEraUt1(false);
 }
 
-// DISABLED: exposes a defect. On the two shortened UTC days the conversion to UT1 evaluates TAI - UTC at the
-// day fraction scaled to the shortened day, (seconds of day) / 86399.95 or / 86399.9, instead of at the time
-// of day, (seconds of day) / 86400. UT1 then differs from UTC + dut1 by the drift rate times the shift in the
-// fraction (the shortening of the day, 0.05 s or 0.1 s, times the fraction): measured 3.0e-9 s at
-// 1968-01-31T23:59:59.5 and 1.5e-9 s at 12h; 7.6e-10 s and 3.8e-10 s at the same times on 1961-07-31; zero at 0h.
-// Enable when that is fixed.
-TEST(TimeScales, DISABLED_Ut1OnTheShortenedUtcDaysIsUtcPlusDut1) {
+// On the two shortened UTC days (1961-07-31 and 1968-01-31, 0.05 s and 0.1 s short) TAI - UTC must be
+// evaluated at the clock time of day, (seconds of day) / 86400, not at the quasi-JD fraction, which is
+// scaled to the short day. The conversion to UT1 used the second, and was off by the drift rate times the
+// shift in the fraction: 3.0e-9 s at 1968-01-31T23:59:59.5, 1.5e-9 s at 12h, zero at 0h.
+TEST(TimeScales, Ut1OnTheShortenedUtcDaysIsUtcPlusDut1) {
     checkDriftEraUt1(true);
 }
 

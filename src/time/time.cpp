@@ -137,8 +137,12 @@ JulianDate taiToUt1(const JulianDate& tai, const EopProvider& eop) {
     const JulianDate utc   = taiToUtc(tai);
     const UtcDay     u     = utcDay(utc.jd1);
     const auto       table = leapSecondTable();
-    const double     dat   = table->taiMinusUtc(u.year, u.month, u.day, utc.jd2);
-    const double     dut1  = eop.at(utc.mjd()).dut1;
+    // TAI-UTC is a function of the UTC clock reading: the time of day over 86400 s. The quasi-JD
+    // fraction is the time of day over the length of this day, which differs on a day that ends
+    // early or late (1961-07-31 and 1968-01-31 were 0.05 s and 0.1 s short): converted back here.
+    const double clockFraction = utc.jd2 * utcDayLength(utc.jd1) / secondsPerDay;
+    const double dat           = table->taiMinusUtc(u.year, u.month, u.day, clockFraction);
+    const double dut1          = eop.at(utc.mjd()).dut1;
     return add(tai, (dut1 - dat) / secondsPerDay);
 }
 
