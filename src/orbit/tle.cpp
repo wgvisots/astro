@@ -178,10 +178,11 @@ Time parseEpoch(std::string_view yearField, std::string_view dayField) {
     // Two-digit years 57 to 59 are 1957 to 1959, before UTC and the leap-second table begin. Say so here: the time
     // module could only report that TAI - UTC is undefined, which does not tell the caller what is wrong with the
     // element set.
-    int month = 0, dayOfMonth = 0;
-    dayOfYearToMonthDay(year, static_cast<int>(wholeDay), month, dayOfMonth);
-    const auto             table = leapSecondTable();
-    const LeapSecondEntry& first = table->entries().front();
+    const YearMonthDay     date       = dayOfYearToDate(year, static_cast<int>(wholeDay));
+    const int              month      = date.month;
+    const int              dayOfMonth = date.day;
+    const auto             table      = leapSecondTable();
+    const LeapSecondEntry& first      = table->entries().front();
     if (year < first.year || (year == first.year && month < first.month)) {
         char text[96];
         std::snprintf(text,
@@ -297,13 +298,13 @@ std::string epochField(const Time& epoch) {
     if (!std::isfinite(epoch.jd().jd1 + epoch.jd().jd2)) {
         throw Error("Tle::line1: epoch is not finite");
     }
-    const JulianDate utc  = epoch.to(TimeScale::UTC).jd();
-    int              year = 0, month = 0, dayOfMonth = 0;
-    julianDayNumberToDate(std::llround(utc.jd1 + 0.5), year, month, dayOfMonth);
-    const double perUtcDay = detail::tleDayPerUtcDay(utc.jd1);
-    const double fraction  = utc.jd2 / perUtcDay; // of 86400 s; it reaches 1 and goes on during a leap second
-    int          day       = dayOfYear(year, month, dayOfMonth);
-    long long    units     = std::llround(fraction * 1e8); // of 1e-8 day (0.864 ms), the resolution of the field
+    const JulianDate   utc       = epoch.to(TimeScale::UTC).jd();
+    const YearMonthDay date      = julianDayNumberToDate(std::llround(utc.jd1 + 0.5));
+    int                year      = date.year;
+    const double       perUtcDay = detail::tleDayPerUtcDay(utc.jd1);
+    const double       fraction  = utc.jd2 / perUtcDay; // of 86400 s; it reaches 1 and goes on during a leap second
+    int                day       = dayOfYear(date.year, date.month, date.day);
+    long long          units     = std::llround(fraction * 1e8); // of 1e-8 day (0.864 ms), the resolution of the field
     if (units >= 100000000) {
         // The fraction rounds up to the end of an 86400 s day, which the field cannot say ("366.00000000" is not a
         // time on day 365). Normally the end of the day is 0h of the next day, and that is the epoch to write. On

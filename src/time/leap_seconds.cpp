@@ -122,8 +122,8 @@ bool atEnd(std::istream& in) {
 /// Reports a line that cannot be used, by its number and text. (A line that is skipped instead goes unnoticed,
 /// and TAI-UTC is then wrong by a second from that line's date on.)
 [[noreturn]] void failLine(const char* format, int lineNumber, std::string_view line, const char* why) {
-    throw Error(std::string(format) + ": line " + std::to_string(lineNumber) + ": " + why + ": '"
-                + std::string(trimmed(line)) + "'");
+    throw Error("LeapSecondTable::parse: " + std::string(format) + " line " + std::to_string(lineNumber) + ": " + why
+                + " (got '" + std::string(trimmed(line)) + "')");
 }
 
 // The built-in history before the first entry read from a file, followed by all entries of the file.
@@ -207,7 +207,7 @@ LeapSecondTable parseTaiUtcDat(std::string_view content) {
         entries.push_back(e);
     }
     if (entries.empty()) {
-        throw Error("tai-utc.dat: no entries found");
+        throw Error("LeapSecondTable::parse: tai-utc.dat: no entries found");
     }
     return LeapSecondTable(withEarlierHistory(entries));
 }
@@ -266,7 +266,7 @@ LeapSecondTable parseLeapSecondDat(std::string_view content) {
         entries.push_back({y, m, offset});
     }
     if (entries.empty()) {
-        throw Error("Leap_Second.dat: no entries found");
+        throw Error("LeapSecondTable::parse: Leap_Second.dat: no entries found");
     }
     return LeapSecondTable(withEarlierHistory(entries), expires);
 }
@@ -304,18 +304,17 @@ LeapSecondTable parseLeapSecondsList(std::string_view content) {
         if (!(ntp >= 0.0 && ntp < kMaxNtpSeconds)) {
             failLine(kLeapSecondsList, lineNumber, line, "NTP time out of range");
         }
-        const double    days = ntp / 86400.0;
-        const long long mjd  = static_cast<long long>(std::llround(ntpEpochMjd + days));
-        int             y = 0, m = 0, d = 0;
-        julianDayNumberToDate(mjd + 2400001, y, m, d);
+        const double       days = ntp / 86400.0;
+        const long long    mjd  = static_cast<long long>(std::llround(ntpEpochMjd + days));
+        const YearMonthDay date = julianDayNumberToDate(mjd + 2400001);
         // A step takes effect at 0h on the first of a month; the table cannot hold any other instant.
-        if (days != std::floor(days) || d != 1) {
+        if (days != std::floor(days) || date.day != 1) {
             failLine(kLeapSecondsList, lineNumber, line, "the NTP time is not 0h on the first of a month");
         }
-        entries.push_back({y, m, offset});
+        entries.push_back({date.year, date.month, offset});
     }
     if (entries.empty()) {
-        throw Error("leap-seconds.list: no entries found");
+        throw Error("LeapSecondTable::parse: leap-seconds.list: no entries found");
     }
     return LeapSecondTable(withEarlierHistory(entries), expires);
 }
@@ -384,18 +383,18 @@ LeapSecondTable LeapSecondTable::parse(std::string_view content) {
         if (count == 5) {
             return parseLeapSecondDat(content);
         }
-        failLine("LeapSecondTable",
+        failLine("leap-second file",
                  lineNumber,
                  line,
                  "not a line of Leap_Second.dat, leap-seconds.list or tai-utc.dat");
     }
-    throw Error("LeapSecondTable: no entries found");
+    throw Error("LeapSecondTable::parse: no entries found");
 }
 
 LeapSecondTable LeapSecondTable::load(const std::string& path) {
     std::ifstream in(path);
     if (!in) {
-        throw Error("LeapSecondTable: cannot open " + path);
+        throw Error("LeapSecondTable::load: cannot open " + path);
     }
     std::stringstream ss;
     ss << in.rdbuf();
@@ -405,7 +404,8 @@ LeapSecondTable LeapSecondTable::load(const std::string& path) {
 double LeapSecondTable::taiMinusUtc(int year, int month, int day, double fractionOfDay) const {
     const long long key = monthKey(year, month);
     if (key < monthKey(entries_.front().year, entries_.front().month)) {
-        throw Error("TAI-UTC undefined before " + std::to_string(entries_.front().year) + " (UTC did not exist)");
+        throw Error("LeapSecondTable::taiMinusUtc: TAI-UTC undefined before " + std::to_string(entries_.front().year)
+                    + " (UTC did not exist; got " + std::to_string(year) + ")");
     }
     // Last entry whose start month <= requested month.
     auto it = std::upper_bound(entries_.begin(), entries_.end(), key, [](long long k, const LeapSecondEntry& e) {
@@ -421,12 +421,11 @@ double LeapSecondTable::taiMinusUtc(int year, int month, int day, double fractio
 
 double LeapSecondTable::taiMinusUtc(double mjdUtc) const {
     if (!(std::abs(mjdUtc) < 1.0e9)) {
-        throw Error("TAI-UTC: MJD out of range");
+        throw Error("LeapSecondTable::taiMinusUtc: MJD out of range (got " + std::to_string(mjdUtc) + ")");
     }
-    const double whole = std::floor(mjdUtc);
-    int          y = 0, m = 0, d = 0;
-    julianDayNumberToDate(static_cast<long long>(whole) + 2400001, y, m, d);
-    return taiMinusUtc(y, m, d, mjdUtc - whole);
+    const double       whole = std::floor(mjdUtc);
+    const YearMonthDay date  = julianDayNumberToDate(static_cast<long long>(whole) + 2400001);
+    return taiMinusUtc(date.year, date.month, date.day, mjdUtc - whole);
 }
 
 std::shared_ptr<const LeapSecondTable> leapSecondTable() {

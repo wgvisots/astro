@@ -188,6 +188,10 @@ TEST(EstimateTracker, Mahalanobis) {
     Mat6 bad  = D;
     bad(0, 1) = bad(1, 0) = 5.0; // |rho| > 1
     EXPECT_FALSE(mahalanobis2(d, bad).has_value());
+    // A dimension outside 1 to 6 is a wrong argument, not a matrix that is not positive definite: it throws.
+    EXPECT_THROW((void)mahalanobis2(d, D, 0), Error);
+    EXPECT_THROW((void)mahalanobis2(d, D, 7), Error);
+    EXPECT_NEAR(*mahalanobis2(d, D, 1), 1.0, 1e-12);
 }
 
 TEST(EstimateTracker, ConsistentDeliveryPasses) {

@@ -30,7 +30,7 @@
 namespace astro {
 
 std::string_view toString(Body b) noexcept {
-    return detail::enumName(b, "?");
+    return detail::enumName(b, "INVALID_VALUE");
 }
 
 Vec3 sunPositionLowPrecision(const Time& time) {
@@ -90,8 +90,8 @@ StateVector LowPrecisionEphemeris::state(Body target, Body center, const Time& t
         case Body::Sun:   return sunPositionLowPrecision(tt);
         case Body::Moon:  return moonPositionLowPrecision(tt);
         default:
-            throw Error("LowPrecisionEphemeris supports only Sun, Moon and Earth (got " + std::string(toString(b))
-                        + ")");
+            throw Error("LowPrecisionEphemeris::state: supports only Sun, Moon and Earth (got Body::"
+                        + std::string(toString(b)) + ")");
         }
     };
     auto             pos = [&](const Time& tt) { return geocentric(target, tt) - geocentric(center, tt); };

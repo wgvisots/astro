@@ -48,16 +48,18 @@ long long julianDayNumber(int year, int month, int day) noexcept {
     return day + floorDiv(153 * m + 2, 5) + 365 * y + floorDiv(y, 4) - floorDiv(y, 100) + floorDiv(y, 400) - 32045;
 }
 
-void julianDayNumberToDate(long long jdn, int& year, int& month, int& day) noexcept {
+YearMonthDay julianDayNumberToDate(long long jdn) noexcept {
     const long long a = jdn + 32044;
     const long long b = floorDiv(4 * a + 3, 146097);
     const long long c = a - floorDiv(146097 * b, 4);
     const long long d = floorDiv(4 * c + 3, 1461);
     const long long e = c - floorDiv(1461 * d, 4);
     const long long m = floorDiv(5 * e + 2, 153);
-    day               = static_cast<int>(e - floorDiv(153 * m + 2, 5) + 1);
-    month             = static_cast<int>(m + 3 - 12 * floorDiv(m, 10));
-    year              = static_cast<int>(100 * b + d - 4800 + floorDiv(m, 10));
+    YearMonthDay    date;
+    date.day   = static_cast<int>(e - floorDiv(153 * m + 2, 5) + 1);
+    date.month = static_cast<int>(m + 3 - 12 * floorDiv(m, 10));
+    date.year  = static_cast<int>(100 * b + d - 4800 + floorDiv(m, 10));
+    return date;
 }
 
 int daysInMonth(int year, int month) {
@@ -72,13 +74,12 @@ int dayOfYear(int year, int month, int day) {
     return static_cast<int>(julianDayNumber(year, month, day) - julianDayNumber(year, 1, 1)) + 1;
 }
 
-void dayOfYearToMonthDay(int year, int doy, int& month, int& day) {
+YearMonthDay dayOfYearToDate(int year, int doy) {
     const int ndays = isLeapYear(year) ? 366 : 365;
     if (doy < 1 || doy > ndays) {
-        throw Error("day of year out of range: " + std::to_string(doy));
+        throw Error("dayOfYearToDate: day of year out of range (got " + std::to_string(doy) + ")");
     }
-    int y;
-    julianDayNumberToDate(julianDayNumber(year, 1, 1) + doy - 1, y, month, day);
+    return julianDayNumberToDate(julianDayNumber(year, 1, 1) + doy - 1);
 }
 
 int dayOfWeek(int year, int month, int day) {
@@ -151,12 +152,15 @@ CalendarDate JulianDate::calendar(int decimals) const {
         ticks -= ticksPerDay;
         ++jdn;
     }
-    CalendarDate c;
-    julianDayNumberToDate(jdn, c.year, c.month, c.day);
-    const double secs = ticks / scale;
-    c.hour            = static_cast<int>(secs / 3600.0);
-    c.minute          = static_cast<int>((secs - c.hour * 3600.0) / 60.0);
-    c.second          = (ticks - (c.hour * 3600.0 + c.minute * 60.0) * scale) / scale;
+    CalendarDate       c;
+    const YearMonthDay date = julianDayNumberToDate(jdn);
+    c.year                  = date.year;
+    c.month                 = date.month;
+    c.day                   = date.day;
+    const double secs       = ticks / scale;
+    c.hour                  = static_cast<int>(secs / 3600.0);
+    c.minute                = static_cast<int>((secs - c.hour * 3600.0) / 60.0);
+    c.second                = (ticks - (c.hour * 3600.0 + c.minute * 60.0) * scale) / scale;
     return c;
 }
 

@@ -160,8 +160,10 @@ UnitMark unitMarkAt(std::string_view rest, Whole whole) {
     }
 }
 
-[[noreturn]] void failSexagesimal(const char* what, std::string_view text) {
-    throw Error(std::string(what) + ": '" + std::string(text) + "'");
+// Throws astro::Error naming the public function (parseHms or parseDms), what is wrong and the text.
+[[noreturn]] void failSexagesimal(Whole whole, const char* what, std::string_view text) {
+    const char* function = whole == Whole::Hours ? "parseHms" : "parseDms";
+    throw Error(std::string(function) + ": " + what + " (got '" + std::string(text) + "')");
 }
 
 // Parses the grammar documented at parseHms in angle.h: an optional sign, then one to three numbers
@@ -210,22 +212,22 @@ double parseSexagesimal(std::string_view text, Whole whole) {
             digits += skipDigits();
         }
         if (digits == 0) {
-            failSexagesimal("malformed sexagesimal string", text);
+            failSexagesimal(whole, "malformed sexagesimal string", text);
         }
         if (count == fields.size()) {
-            failSexagesimal("sexagesimal string must have 1-3 fields", text);
+            failSexagesimal(whole, "sexagesimal string must have 1-3 fields", text);
         }
         if (hadFraction) {
-            failSexagesimal("only the last field of a sexagesimal string may have a fraction", text);
+            failSexagesimal(whole, "only the last field of a sexagesimal string may have a fraction", text);
         }
         hadFraction = point;
         const std::from_chars_result converted =
             std::from_chars(text.data() + begin, text.data() + pos, fields[count], std::chars_format::fixed);
         if (converted.ec != std::errc{}) {
-            failSexagesimal("malformed sexagesimal string", text); // more digits than a double can hold
+            failSexagesimal(whole, "malformed sexagesimal string", text); // more digits than a double can hold
         }
         if (count > 0 && fields[count] >= 60.0) {
-            failSexagesimal("sexagesimal minutes/seconds must be < 60", text);
+            failSexagesimal(whole, "sexagesimal minutes/seconds must be < 60", text);
         }
 
         // What follows the number: its unit mark, or one ':' or ',', or blanks alone. Blanks may
@@ -234,7 +236,7 @@ double parseSexagesimal(std::string_view text, Whole whole) {
         const UnitMark mark   = unitMarkAt(text.substr(pos), whole);
         if (mark.length > 0) {
             if (!mark.allowed || mark.field != count) {
-                failSexagesimal("sexagesimal unit mark is of the wrong kind or out of place", text);
+                failSexagesimal(whole, "sexagesimal unit mark is of the wrong kind or out of place", text);
             }
             pos += mark.length;
             skipBlanks();
@@ -242,15 +244,15 @@ double parseSexagesimal(std::string_view text, Whole whole) {
             ++pos;
             skipBlanks();
             if (atEnd()) {
-                failSexagesimal("malformed sexagesimal string", text); // nothing after the separator
+                failSexagesimal(whole, "malformed sexagesimal string", text); // nothing after the separator
             }
         } else if (!atEnd() && !blanks) {
-            failSexagesimal("malformed sexagesimal string", text); // a character that cannot follow a number
+            failSexagesimal(whole, "malformed sexagesimal string", text); // a character that cannot follow a number
         }
         ++count;
     }
     if (count == 0) {
-        failSexagesimal("sexagesimal string must have 1-3 fields", text);
+        failSexagesimal(whole, "sexagesimal string must have 1-3 fields", text);
     }
     const double v = fields[0] + fields[1] / 60.0 + fields[2] / 3600.0;
     return negative ? -v : v;
@@ -285,19 +287,19 @@ Sexagesimal radToDms(double rad, int decimals) noexcept {
 
 // A number with hundreds of digits is a number, but not an angle a double can hold: refuse it rather
 // than return infinity.
-static double finiteAngle(double radians, std::string_view text) {
+static double finiteAngle(double radians, std::string_view text, Whole whole) {
     if (!std::isfinite(radians)) {
-        failSexagesimal("sexagesimal value is too large", text);
+        failSexagesimal(whole, "sexagesimal value is too large", text);
     }
     return radians;
 }
 
 double parseHms(std::string_view text) {
-    return finiteAngle(parseSexagesimal(text, Whole::Hours) * (15.0 * constants::degToRad), text);
+    return finiteAngle(parseSexagesimal(text, Whole::Hours) * (15.0 * constants::degToRad), text, Whole::Hours);
 }
 
 double parseDms(std::string_view text) {
-    return finiteAngle(parseSexagesimal(text, Whole::Degrees) * constants::degToRad, text);
+    return finiteAngle(parseSexagesimal(text, Whole::Degrees) * constants::degToRad, text, Whole::Degrees);
 }
 
 std::string formatHms(double rad, int decimals, char sep) {

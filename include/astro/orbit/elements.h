@@ -83,9 +83,9 @@ struct EquinoctialElements {
     double lambda{0.0}; ///< mean longitude raan + argp + M (rad, [0, 2pi))
 };
 
-/// Equinoctial elements from Keplerian ones (lambda from the mean anomaly). If the orbit is not
-/// elliptic (a <= 0 or e >= 1, or either is NaN) every element returned is NaN.
-[[nodiscard]] EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el) noexcept;
+/// Equinoctial elements from Keplerian ones (lambda from the mean anomaly). Throws astro::Error
+/// unless the elements are those of an ellipse (a > 0 and e < 1; NaN in either is not).
+[[nodiscard]] EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el);
 /// Keplerian elements from equinoctial ones (RAAN and argp set to 0 where undefined). Throws
 /// astro::Error unless the elements are those of an ellipse (a > 0, h^2 + k^2 < 1).
 [[nodiscard]] KeplerianElements equinoctialToKeplerian(const EquinoctialElements& eq);

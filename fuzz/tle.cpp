@@ -41,13 +41,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
                     fuzz::require(again.line1() == l1 && again.line2() == l2);
                 } catch (const Error&) {
                 }
-                // SGP4 must give a finite state with code 0 or 6, an error code, or astro::Error.
+                // SGP4 must give a finite state with status Ok, another status, or astro::Error.
                 try {
                     const Sgp4 sgp4(tle);
                     for (double dt : {0.0, 60.0, -86400.0, 864000.0}) { // seconds
-                        StateVector s;
-                        const int   code = sgp4.propagate(dt, s);
-                        if (code == 0) {
+                        const auto [s, status] = sgp4.tryPropagate(dt);
+                        if (status == Sgp4Status::Ok) {
                             fuzz::require(std::isfinite(s.r.x + s.r.y + s.r.z + s.v.x + s.v.y + s.v.z));
                         }
                     }

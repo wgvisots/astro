@@ -662,10 +662,14 @@ TEST(Elements, EquinoctialElementsAreDefinedForEllipsesOnly) {
     EXPECT_THROW((void)equinoctialToKeplerian({-20000.0 * km, 0.1, 0.2, 0.1, 0.2, 1.0}), Error);
     EXPECT_THROW((void)equinoctialToKeplerian({kNaN, 0.1, 0.2, 0.1, 0.2, 1.0}), Error);
     EXPECT_THROW((void)equinoctialToState({-20000.0 * km, 1.2, 0.9, 0.1, 0.2, 1.0}), Error);
-    // keplerianToEquinoctial is noexcept: every element is NaN.
-    const EquinoctialElements q = keplerianToEquinoctial(hyperbola);
-    EXPECT_TRUE(std::isnan(q.a) && std::isnan(q.h) && std::isnan(q.k) && std::isnan(q.p) && std::isnan(q.q)
-                && std::isnan(q.lambda));
+    // keplerianToEquinoctial throws as equinoctialToKeplerian does: for a hyperbola, a parabola, a <= 0 and NaN.
+    EXPECT_THROW((void)keplerianToEquinoctial(hyperbola), Error);
+    EXPECT_THROW((void)keplerianToEquinoctial({20000.0 * km, 1.0, 0.5, 1.0, 2.0, 1.5}), Error);  // parabola
+    EXPECT_THROW((void)keplerianToEquinoctial({0.0, 0.1, 0.5, 1.0, 2.0, 1.5}), Error);           // a = 0
+    EXPECT_THROW((void)keplerianToEquinoctial({-20000.0 * km, 0.1, 0.5, 1.0, 2.0, 1.5}), Error); // a < 0
+    EXPECT_THROW((void)keplerianToEquinoctial({kNaN, 0.1, 0.5, 1.0, 2.0, 1.5}), Error);
+    EXPECT_THROW((void)keplerianToEquinoctial({20000.0 * km, kNaN, 0.5, 1.0, 2.0, 1.5}), Error);
+    EXPECT_NO_THROW((void)keplerianToEquinoctial({20000.0 * km, 0.999, 0.5, 1.0, 2.0, 1.5}));
     // An ellipse close to the parabola is still converted.
     const StateVector         nearParabolic = stateFromElements(7000.0 * km / (1.0 - 0.999), 0.999, 0.5, 1.0, 2.0, 1.5);
     const EquinoctialElements qe            = stateToEquinoctial(nearParabolic);

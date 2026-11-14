@@ -131,10 +131,7 @@ TEST(JulianDate, CalendarRoundTrip) {
 TEST(JulianDate, Helpers) {
     EXPECT_EQ(dayOfYear(2024, 12, 31), 366);
     EXPECT_EQ(dayOfYear(2023, 3, 1), 60);
-    int m, d;
-    dayOfYearToMonthDay(2024, 60, m, d);
-    EXPECT_EQ(m, 2);
-    EXPECT_EQ(d, 29);
+    EXPECT_EQ(dayOfYearToDate(2024, 60), (YearMonthDay{2024, 2, 29}));
     EXPECT_EQ(dayOfWeek(1980, 1, 6), 0); // GPS epoch was a Sunday
     EXPECT_EQ(dayOfWeek(2000, 1, 1), 6); // Saturday
     EXPECT_TRUE(isLeapYear(2000));

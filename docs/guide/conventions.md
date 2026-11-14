@@ -114,7 +114,13 @@ boost::mp11::mp_for_each<boost::describe::describe_enumerators<Frame>>(
 ## Errors
 
 Bad input and missing data (no EOP for an epoch, a TLE checksum mismatch, a non-converging solution)
-throw `astro::Error`, derived from `std::runtime_error`. Functions marked `noexcept` cannot fail.
+throw `astro::Error`, derived from `std::runtime_error`. The message names the function first:
+`"Function: what is wrong (got <value>)"`. A function marked `noexcept` evaluates a formula and does
+not check its input: NaN in gives NaN out. A normal outcome without a value (no impact, an event that
+does not happen) is a `std::optional`, and a function with several results returns a struct, never
+out-parameters. Only SGP4 has non-throwing variants, `Sgp4::tryPropagate` and
+`Sgp4::tryPropagateMinutes`, for a loop that must handle a failure at every sample. The full policy is
+at the top of `astro/core/error.h`.
 
 <!-- snippet: examples/conventions.cpp#errors -->
 ```cpp

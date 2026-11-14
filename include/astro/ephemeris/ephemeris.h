@@ -77,7 +77,7 @@ BOOST_DESCRIBE_ENUM(Body,
 /// Writes "Body::<enumerator>", or "Body::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, Body value);
 
-/// Enumerator name of `b` (e.g. "Moon"), or "?" for any other value.
+/// Enumerator name of `b` (e.g. "Moon"), or "INVALID_VALUE" for any other value, as operator<< writes it.
 [[nodiscard]] std::string_view toString(Body b) noexcept;
 /// NAIF integer ID of `b`.
 [[nodiscard]] constexpr int naifId(Body b) noexcept {

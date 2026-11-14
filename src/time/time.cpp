@@ -56,17 +56,19 @@ struct UtcDay {
 };
 
 UtcDay utcDay(double jd1Midnight) {
-    UtcDay     u{};
-    const auto jdn = static_cast<long long>(std::floor(jd1Midnight + 0.5));
-    julianDayNumberToDate(jdn, u.year, u.month, u.day);
-    int y2, m2, d2;
-    julianDayNumberToDate(jdn + 1, y2, m2, d2);
-    const auto table   = leapSecondTable();
-    u.dat0             = table->taiMinusUtc(u.year, u.month, u.day, 0.0);
-    const double dat12 = table->taiMinusUtc(u.year, u.month, u.day, 0.5);
-    const double dat24 = table->taiMinusUtc(y2, m2, d2, 0.0);
-    u.dlod             = 2.0 * (dat12 - u.dat0);
-    u.dleap            = dat24 - (2.0 * dat12 - u.dat0);
+    UtcDay             u{};
+    const auto         jdn   = static_cast<long long>(std::floor(jd1Midnight + 0.5));
+    const YearMonthDay date  = julianDayNumberToDate(jdn);
+    u.year                   = date.year;
+    u.month                  = date.month;
+    u.day                    = date.day;
+    const YearMonthDay next  = julianDayNumberToDate(jdn + 1);
+    const auto         table = leapSecondTable();
+    u.dat0                   = table->taiMinusUtc(u.year, u.month, u.day, 0.0);
+    const double dat12       = table->taiMinusUtc(u.year, u.month, u.day, 0.5);
+    const double dat24       = table->taiMinusUtc(next.year, next.month, next.day, 0.0);
+    u.dlod                   = 2.0 * (dat12 - u.dat0);
+    u.dleap                  = dat24 - (2.0 * dat12 - u.dat0);
     return u;
 }
 
@@ -126,11 +128,18 @@ JulianDate tdbToTt(const JulianDate& tdb) {
     return add(tdb, -tdbMinusTt(tdb) / secondsPerDay);
 }
 
-const EopProvider& requireEop(const EopProvider* eop) {
+// The Earth orientation data a UT1 conversion needs; throws astro::Error naming `function` if there is none.
+const EopProvider& requireEop(const EopProvider* eop, const char* function) {
     if (eop == nullptr) {
-        throw Error("UT1 conversion requires Earth orientation data (EopProvider)");
+        throw Error(std::string(function) + ": UT1 conversion requires Earth orientation data (EopProvider)");
     }
     return *eop;
+}
+
+// Throws astro::Error naming `function` for a TimeScale value that is not an enumerator.
+[[noreturn]] void failTimeScale(TimeScale scale, const char* function) {
+    throw Error(std::string(function) + ": invalid TimeScale value (got " + std::to_string(static_cast<int>(scale))
+                + ")");
 }
 
 JulianDate taiToUt1(const JulianDate& tai, const EopProvider& eop) {
@@ -146,7 +155,7 @@ JulianDate taiToUt1(const JulianDate& tai, const EopProvider& eop) {
     return add(tai, (dut1 - dat) / secondsPerDay);
 }
 
-JulianDate toTai(const JulianDate& jd, TimeScale scale, const EopProvider* eop) {
+JulianDate toTai(const JulianDate& jd, TimeScale scale, const EopProvider* eop, const char* function) {
     switch (scale) {
     case TimeScale::TAI: return jd;
     case TimeScale::UTC: return utcToTai(jd);
@@ -158,7 +167,7 @@ JulianDate toTai(const JulianDate& jd, TimeScale scale, const EopProvider* eop) 
     case TimeScale::TDB: return add(tdbToTt(jd), -constants::ttMinusTai / secondsPerDay);
     case TimeScale::TCB: return add(tdbToTt(tcbToTdb(jd)), -constants::ttMinusTai / secondsPerDay);
     case TimeScale::UT1: {
-        const EopProvider& e   = requireEop(eop);
+        const EopProvider& e   = requireEop(eop, function);
         JulianDate         tai = add(jd, 37.0 / secondsPerDay);
         for (int i = 0; i < 4; ++i) {
             const JulianDate u = taiToUt1(tai, e);
@@ -167,10 +176,10 @@ JulianDate toTai(const JulianDate& jd, TimeScale scale, const EopProvider* eop) 
         return tai;
     }
     }
-    throw Error("unknown time scale");
+    failTimeScale(scale, function);
 }
 
-JulianDate fromTai(const JulianDate& tai, TimeScale scale, const EopProvider* eop) {
+JulianDate fromTai(const JulianDate& tai, TimeScale scale, const EopProvider* eop, const char* function) {
     switch (scale) {
     case TimeScale::TAI: return tai;
     case TimeScale::UTC: return taiToUtc(tai);
@@ -181,9 +190,9 @@ JulianDate fromTai(const JulianDate& tai, TimeScale scale, const EopProvider* eo
     case TimeScale::TCG: return ttToTcg(add(tai, constants::ttMinusTai / secondsPerDay));
     case TimeScale::TDB: return ttToTdb(add(tai, constants::ttMinusTai / secondsPerDay));
     case TimeScale::TCB: return tdbToTcb(ttToTdb(add(tai, constants::ttMinusTai / secondsPerDay)));
-    case TimeScale::UT1: return taiToUt1(tai, requireEop(eop));
+    case TimeScale::UT1: return taiToUt1(tai, requireEop(eop, function));
     }
-    throw Error("unknown time scale");
+    failTimeScale(scale, function);
 }
 
 double gnssEpochJd(GnssSystem system) {
@@ -245,7 +254,9 @@ struct Cursor {
         }
         ++p;
     }
-    [[noreturn]] void fail() const { throw Error("malformed ISO-8601 time: '" + std::string(s) + "'"); }
+    [[noreturn]] void fail() const {
+        throw Error("Time::fromIso8601: malformed ISO-8601 time (got '" + std::string(s) + "')");
+    }
 };
 
 } // namespace
@@ -253,7 +264,7 @@ struct Cursor {
 // ------------------------------------------------------------------ names
 
 std::string_view toString(TimeScale scale) noexcept {
-    return detail::enumName(scale, "?");
+    return detail::enumName(scale, "INVALID_VALUE");
 }
 
 TimeScale parseTimeScale(std::string_view name) {
@@ -279,7 +290,7 @@ TimeScale parseTimeScale(std::string_view name) {
     if (up == "GPST") {
         return TimeScale::GPS;
     }
-    throw Error("unknown time scale '" + std::string(name) + "'");
+    throw Error("parseTimeScale: unknown time scale (got '" + std::string(name) + "')");
 }
 
 // ------------------------------------------------------------------ Time
@@ -391,7 +402,9 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
     c.expect('-');
     int month = 1, day = 1;
     if (c.digitsAhead() == 3) {
-        dayOfYearToMonthDay(year, c.integer(3), month, day);
+        const YearMonthDay date = dayOfYearToDate(year, c.integer(3));
+        month                   = date.month;
+        day                     = date.day;
     } else {
         month = c.integer(2);
         c.expect('-');
@@ -473,9 +486,12 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
             dayShift     = 1;
             minuteOfDay -= kMinutesPerDay;
         }
-        julianDayNumberToDate(julianDayNumber(year, month, day) + dayShift, year, month, day);
-        hour   = minuteOfDay / 60;
-        minute = minuteOfDay % 60;
+        const YearMonthDay shifted = julianDayNumberToDate(julianDayNumber(year, month, day) + dayShift);
+        year                       = shifted.year;
+        month                      = shifted.month;
+        day                        = shifted.day;
+        hour                       = minuteOfDay / 60;
+        minute                     = minuteOfDay % 60;
         if (year < 0 || year > kMaxIsoYear) {
             throw Error("Time::fromIso8601: the UTC year is outside 0000-9999 in '" + std::string(text) + "'");
         }
@@ -487,7 +503,7 @@ Time Time::to(TimeScale target, const EopProvider* eop) const {
     if (target == scale_) {
         return *this;
     }
-    return Time(fromTai(toTai(jd_, scale_, eop), target, eop), target);
+    return Time(fromTai(toTai(jd_, scale_, eop, "Time::to"), target, eop, "Time::to"), target);
 }
 
 CalendarDate Time::calendar(int decimals) const {
@@ -506,8 +522,11 @@ CalendarDate Time::calendar(int decimals) const {
         ticks = 0.0;
         ++jdn;
     }
-    CalendarDate cal;
-    julianDayNumberToDate(jdn, cal.year, cal.month, cal.day);
+    CalendarDate       cal;
+    const YearMonthDay date = julianDayNumberToDate(jdn);
+    cal.year                = date.year;
+    cal.month               = date.month;
+    cal.day                 = date.day;
     const double tPerHour = 3600.0 * scale, tPerMin = 60.0 * scale;
     cal.hour    = std::min(23, static_cast<int>(std::floor(ticks / tPerHour)));
     ticks      -= cal.hour * tPerHour;
@@ -595,7 +614,7 @@ Time Time::operator+(double seconds) const {
 
 double operator-(const Time& a, const Time& b) {
     if (a.scale_ == TimeScale::UTC) {
-        return utcToTai(a.jd_).secondsSince(toTai(b.jd_, b.scale_, nullptr));
+        return utcToTai(a.jd_).secondsSince(toTai(b.jd_, b.scale_, nullptr, "Time::operator-"));
     }
     const Time bb = b.to(a.scale_);
     return a.jd_.secondsSince(bb.jd_);

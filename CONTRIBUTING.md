@@ -41,6 +41,13 @@ The CMake options are listed in [Getting started](docs/guide/getting-started.md)
   radians, the naming rules, the argument order of the propagators, and the error style.
 - Every public declaration has a `///` comment that says what each parameter is (with its unit) and
   what throws. The documentation build treats Doxygen warnings as errors.
+- **Errors** follow the policy at the top of
+  [include/astro/core/error.h](include/astro/core/error.h): a failure throws `astro::Error` (a new
+  subclass only if it carries data the caller can act on); a `noexcept` function is a formula that
+  does not check its input; no out-parameters; `std::optional` for a normal outcome without a value.
+  A message starts with the function's name: `"Function: what is wrong (got <value>)"`, for example
+  `throw Error("dayOfYearToDate: day of year out of range (got " + std::to_string(doy) + ")")`. A
+  helper that throws for several functions takes the name as an argument.
 - A new formula cites its source in a comment, and the source goes in
   [docs/references.md](docs/references.md). Code that follows another project's code is credited in
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), with its licence.

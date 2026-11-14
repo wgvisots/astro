@@ -31,10 +31,11 @@ Things to know about `Sgp4`:
 - **Constants.** The default is WGS 72 (`Sgp4Gravity::WGS72`), with which element sets are made.
 - **Mode.** The default is `Sgp4OpsMode::Improved`, the mode of the verification output in this
   repository; `Afspc` reproduces the older operational behaviour.
-- **Errors.** `propagate` throws `Sgp4Error` with the reference code's error number (1 to 6; 6 is a
-  decayed satellite), or 7 for a time that is not finite. The overload
-  `propagate(dt, StateVector&)` (and `propagateMinutes(minutes, StateVector&)`) returns the number
-  instead of throwing.
+- **Errors.** `propagate` throws `Sgp4Error`, whose `code()` is an `Sgp4Status`: the reference
+  code's error number as its value (1 to 6; `Sgp4Status::Decayed`, 6, is a decayed satellite), or
+  `Sgp4Status::TimeNotFinite` (7) for a time that is not finite. For a loop that must handle a
+  failure at every sample, `tryPropagate(dt)` (and `tryPropagateMinutes(minutes)`) returns an
+  `Sgp4Result`, the state and its status, instead of throwing.
 - **Element sets.** `Tle::parseMany` reads a file of sets (with or without name lines);
   `line1()` and `line2()` write a set back and throw if a value does not fit its columns.
 

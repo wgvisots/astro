@@ -29,10 +29,17 @@
 /// Two-body (Keplerian) propagation and Lambert's problem.
 namespace astro {
 
+/// The two Stumpff functions of one argument, as stumpff() returns them.
+struct Stumpff {
+    double c2{0.0}; ///< c2(psi), dimensionless
+    double c3{0.0}; ///< c3(psi), dimensionless
+};
+
 /// Stumpff functions c2(psi) = (1 - cos sqrt(psi)) / psi and c3(psi) = (sqrt(psi) - sin sqrt(psi)) / psi^(3/2),
-/// continued to psi <= 0 (hyperbolic functions). Accurate to a few rounding errors for every psi: by
-/// their power series for |psi| < 1, where the closed forms cancel.
-void stumpff(double psi, double& c2, double& c3) noexcept;
+/// continued to psi <= 0 (hyperbolic functions). `psi` is dimensionless (chi^2 alpha in the universal
+/// variables). Accurate to a few rounding errors for every psi: by their power series for |psi| < 1, where the
+/// closed forms cancel.
+[[nodiscard]] Stumpff stumpff(double psi) noexcept;
 
 /// Propagate a two-body state by dt seconds using universal variables
 /// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits, any dt of
