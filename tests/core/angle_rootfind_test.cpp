@@ -21,6 +21,8 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <string>
+#include <utility>
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
@@ -38,6 +40,20 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 /// True if a and b are the same double, bit for bit (so +0 and -0 differ).
 bool sameBits(double a, double b) {
     return a == b && std::signbit(a) == std::signbit(b);
+}
+
+constexpr double kEps = std::numeric_limits<double>::epsilon();
+
+// `call` must throw astro::Error, and the message must contain `what`.
+template <typename Call>
+void expectErrorSaying(Call&& call, const std::string& what) {
+    try {
+        call();
+        ADD_FAILURE() << "no error; expected one saying \"" << what << "\"";
+    } catch (const Error& e) {
+        EXPECT_NE(std::string(e.what()).find(what), std::string::npos)
+            << "expected \"" << what << "\" in the message, which was: " << e.what();
+    }
 }
 
 } // namespace
@@ -301,14 +317,141 @@ TEST(Angle, FormatHmsDoesNotWrapIntoOneDay) {
     EXPECT_EQ(formatHms(-hmsToRad(1, 30, 0.0)), "-01:30:00.000");
 }
 
+// One unit of each kind against pi in long double: 180 degrees, 648000 arcseconds and 648 million
+// milliarcseconds make half a turn. Tolerance: one rounding error in the constant and one in the product,
+// 2.3e-16 relative (worst seen 1.0e-16).
+TEST(Angle, UnitConversionsAgainstPi) {
+    const long double piL  = std::acos(-1.0L);
+    const auto        near = [&](double got, long double want) {
+        return static_cast<double>(std::abs(got - want) / std::abs(want));
+    };
+    EXPECT_LE(near(deg2rad(180.0), piL), 2.3e-16);
+    EXPECT_LE(near(arcsec2rad(648000.0), piL), 2.3e-16);
+    EXPECT_LE(near(mas2rad(648.0e6), piL), 2.3e-16);
+    EXPECT_LE(near(rad2deg(pi), 180.0L), 2.3e-16);
+    EXPECT_LE(near(rad2arcsec(pi), 648000.0L), 2.3e-16);
+    EXPECT_LE(near(rad2mas(pi), 648.0e6L), 2.3e-16);
+    EXPECT_LE(near(deg2rad(-45.0), -piL / 4), 2.3e-16);
+    EXPECT_LE(near(mas2rad(1.0), piL / 648.0e6L), 2.3e-16);
+}
+
+// radToHms and radToDms against angles built in long double from known hours (or degrees), minutes and
+// seconds. The seconds are rounded to `decimals` places, with carries into the minutes and the hours.
+TEST(Angle, RadToHmsAndDmsDecomposeTheAngle) {
+    const long double piL = std::acos(-1.0L);
+    const auto        hms = [&](long double h, long double m, long double s) {
+        return static_cast<double>((h + m / 60 + s / 3600) * 15 * piL / 180);
+    };
+    const auto dms = [&](long double d, long double m, long double s) {
+        return static_cast<double>((d + m / 60 + s / 3600) * piL / 180);
+    };
+    const auto expect = [](const Sexagesimal& got, bool negative, int whole, int minutes, double seconds) {
+        EXPECT_EQ(got.negative, negative);
+        EXPECT_EQ(got.whole, whole);
+        EXPECT_EQ(got.minutes, minutes);
+        EXPECT_DOUBLE_EQ(got.seconds, seconds);
+    };
+    expect(radToHms(hms(5, 34, 56.789)), false, 5, 34, 56.789); // three decimals by default
+    expect(radToHms(hms(5, 34, 56.789), 0), false, 5, 34, 57.0);
+    expect(radToHms(hms(5, 34, 56.789), 1), false, 5, 34, 56.8);
+    expect(radToHms(-hms(23, 0, 0.25)), true, 23, 0, 0.25);
+    expect(radToDms(dms(12, 3, 4.5)), false, 12, 3, 4.5); // two decimals by default
+    expect(radToDms(-dms(12, 3, 4.5)), true, 12, 3, 4.5);
+    expect(radToDms(-dms(0, 0, 4.5)), true, 0, 0, 4.5);
+    // Carries: 59.996 arcseconds round to 60.00, which is the next minute, and 59 minutes then make a degree.
+    expect(radToDms(dms(0, 59, 59.996)), false, 1, 0, 0.0);
+    expect(radToHms(hms(9, 59, 59.9999), 3), false, 10, 0, 0.0);
+    // A negative angle that rounds to zero is zero, which is never negative.
+    expect(radToDms(-dms(0, 0, 0.001)), false, 0, 0, 0.0);
+    expect(radToDms(-0.0), false, 0, 0, 0.0);
+}
+
+TEST(Angle, FormatWithOtherDecimalsAndSeparators) {
+    const long double piL = std::acos(-1.0L);
+    const double      a   = static_cast<double>((5 + 34 / 60.0L + 56.789L / 3600) * 15 * piL / 180);
+    const double      b   = static_cast<double>((12 + 3 / 60.0L + 4.5L / 3600) * piL / 180);
+    EXPECT_EQ(formatHms(a), "05:34:56.789");
+    EXPECT_EQ(formatHms(a, 0), "05:34:57");
+    EXPECT_EQ(formatHms(a, 1), "05:34:56.8");
+    EXPECT_EQ(formatHms(a, 3, ' '), "05 34 56.789");
+    EXPECT_EQ(formatDms(b), "+12:03:04.50");
+    EXPECT_EQ(formatDms(-b, 1, '/'), "-12/03/04.5");
+    EXPECT_EQ(formatDms(b, 0), "+12:03:05"); // 4.5 rounds away from zero
+    EXPECT_EQ(formatDms(0.0), "+00:00:00.00");
+}
+
+// The root of cos(x) = x (the Dottie number), 0.739085133215160641655... Tolerances: what rootfind.h promises
+// for tol = 1e-14, tol + 4 eps |x| for brentRoot and tol for bisect (measured 5.9e-16 and 2.0e-15; this test
+// once allowed 1e-13 for both). newtonRoot's tolerance is a test on its last step, not a bound on the error;
+// converging quadratically it lands on the nearest double (measured 3.1e-17), so one unit in the last place.
 TEST(RootFind, BrentAndBisect) {
     auto         f    = [](double x) { return std::cos(x) - x; };
     const double root = 0.7390851332151607;
-    EXPECT_NEAR(brentRoot(f, 0.0, 1.0, 1e-14), root, 1e-13);
-    EXPECT_NEAR(bisect(f, 0.0, 1.0, 1e-14), root, 1e-13);
+    EXPECT_NEAR(brentRoot(f, 0.0, 1.0, 1e-14), root, 1e-14 + 4.0 * kEps * root);
+    EXPECT_NEAR(bisect(f, 0.0, 1.0, 1e-14), root, 1e-14);
     EXPECT_THROW((void)brentRoot(f, 1.0, 2.0), Error);
     auto fdf = [](double x) { return std::pair{std::cos(x) - x, -std::sin(x) - 1.0}; };
-    EXPECT_NEAR(newtonRoot(fdf, 1.0), root, 1e-14);
+    EXPECT_NEAR(newtonRoot(fdf, 1.0), root, 1.2e-16);
+}
+
+// `tol` is an absolute tolerance on x: the result is within tol of the root for bisect, and within
+// tol + 4 eps |x| for brentRoot. Truth: the cube root of 2, from std::cbrt in long double.
+TEST(RootFind, ResultIsWithinTheDocumentedTolerance) {
+    const auto        f    = [](double x) { return x * x * x - 2.0; };
+    const long double root = std::cbrt(2.0L);
+    for (double tol : {1e-2, 1e-3, 1e-6, 1e-9, 1e-12}) {
+        EXPECT_LE(static_cast<double>(std::abs(bisect(f, 0.0, 3.0, tol) - root)), tol) << tol;
+        EXPECT_LE(static_cast<double>(std::abs(brentRoot(f, 0.0, 3.0, tol) - root)), tol + 4.0 * kEps * 1.26) << tol;
+    }
+}
+
+// rootfind.h: bisect and brentRoot throw if f(a) and f(b) have the same sign; an end of the interval at
+// which f is exactly zero is returned as it is.
+TEST(RootFind, UnbracketedIntervalThrowsAndARootAtAnEndIsReturned) {
+    const auto f = [](double x) { return x * x - 2.0; };
+    expectErrorSaying([&] { (void)bisect(f, 2.0, 3.0); }, "not bracketed");
+    expectErrorSaying([&] { (void)brentRoot(f, -1.0, 1.0); }, "not bracketed");
+    const auto g = [](double x) { return (x - 1.0) * (x + 3.0); }; // roots at 1 and -3
+    EXPECT_EQ(bisect(g, 1.0, 5.0), 1.0);
+    EXPECT_EQ(bisect(g, -7.0, -3.0), -3.0);
+    EXPECT_EQ(brentRoot(g, 1.0, 5.0), 1.0);
+    EXPECT_EQ(brentRoot(g, -7.0, -3.0), -3.0);
+}
+
+// Reaching maxIter: bisect returns the middle of its last bracket (no error), brentRoot and newtonRoot throw.
+// For cos(x) - x on [0, 1] the brackets are worked out by hand: f(0.5) > 0, f(0.75) < 0, f(0.625) > 0, so
+// after three halvings the bracket is [0.625, 0.75] and its middle is 0.6875.
+TEST(RootFind, MaxIterEndsBisectQuietlyAndTheOthersWithAnError) {
+    int        calls = 0;
+    const auto f     = [&](double x) {
+        ++calls;
+        return std::cos(x) - x;
+    };
+    EXPECT_EQ(bisect(f, 0.0, 1.0, 1e-12, 3), 0.6875);
+    EXPECT_EQ(calls, 5); // the two ends and three middles
+    expectErrorSaying([&] { (void)brentRoot(f, 0.0, 1.0, 1e-12, 1); }, "did not converge");
+    // Newton from x = 1 is still taking steps of 3e-5 after three of them.
+    const auto fdf = [](double x) { return std::pair{std::cos(x) - x, -std::sin(x) - 1.0}; };
+    expectErrorSaying([&] { (void)newtonRoot(fdf, 1.0, 1e-14, 3); }, "did not converge");
+    EXPECT_NO_THROW((void)newtonRoot(fdf, 1.0, 1e-14, 6));
+}
+
+TEST(RootFind, NewtonThrowsOnAZeroDerivative) {
+    // x^2 - 1 has a flat tangent at x = 0, where Newton's step is undefined.
+    const auto fdf = [](double x) { return std::pair{x * x - 1.0, 2.0 * x}; };
+    expectErrorSaying([&] { (void)newtonRoot(fdf, 0.0); }, "zero derivative");
+    EXPECT_EQ(newtonRoot(fdf, 3.0), 1.0);
+}
+
+// "An exception thrown by f passes through": it is not swallowed or turned into astro::Error.
+TEST(RootFind, ExceptionFromTheFunctionPassesThrough) {
+    struct Thrown {};
+    const auto f   = [](double x) -> double { return x < 0.5 ? x - 0.7 : throw Thrown{}; };
+    const auto fdf = [](double) -> std::pair<double, double> { throw Thrown{}; };
+    EXPECT_THROW((void)bisect(f, 0.0, 1.0), Thrown);
+    EXPECT_THROW((void)brentRoot(f, 0.0, 1.0), Thrown);
+    EXPECT_THROW((void)brentMinimize(f, 0.0, 1.0), Thrown);
+    EXPECT_THROW((void)newtonRoot(fdf, 0.0), Thrown);
 }
 
 TEST(RootFind, BrentMinimize) {
