@@ -813,6 +813,28 @@ void NumericalPropagator::propagateGridStm(double                 start,
                         });
 }
 
+// The single-time forms are grids of one output; the step of such a grid is never used.
+StateTransition NumericalPropagator::propagateStm(double dt, AdaptiveStats* stats) const {
+    if (!std::isfinite(dt)) {
+        throw Error("NumericalPropagator::propagateStm: dt must be finite");
+    }
+    StateTransition out;
+    propagateGridStm(dt, 1.0, std::span(&out.state, 1), std::span(&out.stm, 1), stats);
+    return out;
+}
+
+StateCovariance NumericalPropagator::propagateWithCovariance(double         dt,
+                                                             const Mat6&    P0,
+                                                             double         accelerationNoisePsd,
+                                                             AdaptiveStats* stats) const {
+    if (!std::isfinite(dt)) {
+        throw Error("NumericalPropagator::propagateWithCovariance: dt must be finite");
+    }
+    StateCovariance out;
+    propagateGridWithCovariance(dt, 1.0, P0, std::span(&out, 1), accelerationNoisePsd, stats);
+    return out;
+}
+
 void NumericalPropagator::propagateGrid(double                 start,
                                         double                 step,
                                         std::span<StateVector> out,

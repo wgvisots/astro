@@ -94,7 +94,7 @@ int main() {
     int        n       = 0;
     const auto secular = SecularPropagatorCorrected(s0);
     std::printf("  propagateKeplerWithCovariance                     %7.2f us\n",
-                microseconds([&] { sink += propagateKeplerWithCovariance(s0, P0, 100.0 + n++).covariance[0][0]; }));
+                microseconds([&] { sink += propagateKeplerWithCovariance(s0, 100.0 + n++, P0).covariance[0][0]; }));
     std::printf("  SecularPropagatorCorrected::propagateWithCovariance %5.2f us\n",
                 microseconds([&] { sink += secular.propagateWithCovariance(100.0 + n++, P0).covariance[0][0]; }));
     std::printf("  SecularPropagatorCorrected::propagateGridWithCovariance, 1441 outputs %7.0f us\n", microseconds([&] {

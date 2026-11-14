@@ -169,7 +169,7 @@ public:
     /// State and covariance dt seconds after the epoch: P = Phi P0 Phi^T, Phi from propagateStm. P0 is
     /// the covariance of epochState() (m^2, m^2/s, m^2/s^2) in its frame. There is no process noise:
     /// the covariance shows only how the model maps the initial uncertainty (see
-    /// NumericalPropagator::propagateGridWithCovariance for process noise). Throws astro::Error as
+    /// NumericalPropagator::propagateWithCovariance for process noise). Throws astro::Error as
     /// propagateStm does.
     [[nodiscard]] StateCovariance propagateWithCovariance(double dt, const Mat6& P0) const;
     /// States and covariances at dt = start + k * step for k = 0 .. out.size() - 1, written into

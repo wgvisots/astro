@@ -183,7 +183,7 @@ TEST(TwoBodyStm, StateAndCovariance) {
         // The state is propagateKepler's, bit for bit, and P = Phi P0 Phi^T (symmetric).
         const StateTransition t = propagateKeplerStm(c.s0, c.dt);
         EXPECT_EQ(t.state, propagateKepler(c.s0, c.dt)) << c.name;
-        const StateCovariance pc = propagateKeplerWithCovariance(c.s0, P0, c.dt);
+        const StateCovariance pc = propagateKeplerWithCovariance(c.s0, c.dt, P0);
         EXPECT_EQ(pc.state, t.state);
         const Mat6 expected = congruence(t.stm, P0);
         for (std::size_t i = 0; i < 6; ++i) {
@@ -196,7 +196,7 @@ TEST(TwoBodyStm, StateAndCovariance) {
     // dt = 0: the identity.
     const StateTransition zero = propagateKeplerStm(twoBodyCases()[0].s0, 0.0);
     EXPECT_EQ(zero.stm, identity6());
-    EXPECT_EQ(propagateKeplerWithCovariance(twoBodyCases()[0].s0, P0, 0.0).covariance, P0);
+    EXPECT_EQ(propagateKeplerWithCovariance(twoBodyCases()[0].s0, 0.0, P0).covariance, P0);
 }
 
 TEST(SecularStm, ReducesToTwoBodyWithoutZonals) {

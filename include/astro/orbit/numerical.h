@@ -274,6 +274,22 @@ public:
     [[nodiscard]] std::vector<StateVector12>
     propagateGrid12(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
 
+    /// State dt seconds after the epoch and the state transition matrix Phi(dt, epoch) = d(state at
+    /// dt) / d(initial state), integrated with the state as in propagateGridStm: the same steps and
+    /// the same result as a grid of one output at dt. Phi(0) is the identity. Throws astro::Error as
+    /// propagate(dt) does.
+    [[nodiscard]] StateTransition propagateStm(double dt, AdaptiveStats* stats = nullptr) const;
+    /// State and covariance dt seconds after the epoch: P = Phi P0 Phi^T + Q(dt), as in
+    /// propagateGridWithCovariance (the same steps and the same result as a grid of one output at dt).
+    /// P0 is the covariance of the initial state in the propagation frame (m^2, m^2/s, m^2/s^2);
+    /// accelerationNoisePsd is the power spectral density of the white acceleration noise (m^2/s^3),
+    /// 0 for none. Throws astro::Error as propagate(dt) does, and if accelerationNoisePsd is negative
+    /// or not finite.
+    [[nodiscard]] StateCovariance propagateWithCovariance(double         dt,
+                                                          const Mat6&    P0,
+                                                          double         accelerationNoisePsd = 0.0,
+                                                          AdaptiveStats* stats                = nullptr) const;
+
     /// States and covariances at dt = start + k * step for k = 0 .. out.size() - 1 (step != 0).
     ///
     /// P0 is the covariance of the initial state: position and velocity in the propagation frame

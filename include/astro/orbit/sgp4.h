@@ -74,6 +74,11 @@ private:
 };
 
 /// SGP4/SDP4 propagator for one TLE. The deep-space (SDP4) branch is selected automatically.
+///
+/// Times are seconds, as for every propagator in the library: propagate(double) takes seconds since
+/// the element set's epoch. The reference code (Vallado's sgp4) and most other SGP4 implementations
+/// take minutes instead; propagateMinutes takes minutes, for comparison with them and with their
+/// verification output.
 class Sgp4 {
 public:
     /// Initialize from `tle`. Throws Sgp4Error (an astro::Error) if the elements fail at the epoch (codes 1-4; a
@@ -98,21 +103,26 @@ public:
     /// Move; the moved-from object may only be destroyed or assigned to.
     Sgp4& operator=(Sgp4&&) noexcept;
 
-    /// TEME position (m) and velocity (m/s) `minutes` after the TLE epoch.
+    /// TEME position (m) and velocity (m/s) `dt` seconds after the TLE epoch: propagateMinutes(dt / 60).
     /// Throws Sgp4Error on propagation failure: for any code of the class description, 6 (decayed)
-    /// and 7 (`minutesSinceEpoch` is not finite) included.
-    [[nodiscard]] StateVector propagate(double minutesSinceEpoch) const;
-    /// TEME state at a time (any scale). The minutes since the epoch are the elapsed time, leap
+    /// and 7 (`dt` is not finite) included.
+    [[nodiscard]] StateVector propagate(double dt) const;
+    /// TEME state at a time (any scale). The seconds since the epoch are the elapsed time, leap
     /// seconds included; software that subtracts Julian dates instead differs by one second (7.7 km
-    /// in low Earth orbit) across a leap second. Throws Sgp4Error as
-    /// propagate(minutesSinceEpoch) does, and
+    /// in low Earth orbit) across a leap second. Throws Sgp4Error as propagate(dt) does, and
     /// astro::Error if t cannot be subtracted from the epoch (a UT1 time, or a UTC time before 1960;
     /// see Time).
     [[nodiscard]] StateVector propagate(const Time& t) const;
-    /// Non-throwing variant: returns the SGP4 error code (0 on success). For
-    /// code 6 (decayed) the state is still filled in, as in Vallado's code. For
-    /// code 7 (the time is NaN or infinite) every component of the state is NaN.
-    [[nodiscard]] int propagate(double minutesSinceEpoch, StateVector& out) const noexcept;
+    /// Non-throwing variant of propagate(dt), `dt` in seconds since the TLE epoch: returns the SGP4
+    /// error code (0 on success). For code 6 (decayed) the state is still filled in, as in Vallado's
+    /// code. For code 7 (the time is NaN or infinite) every component of the state is NaN.
+    [[nodiscard]] int propagate(double dt, StateVector& out) const noexcept;
+    /// TEME position (m) and velocity (m/s) `minutes` after the TLE epoch, the time argument of the
+    /// reference code. Throws Sgp4Error as propagate(dt) does.
+    [[nodiscard]] StateVector propagateMinutes(double minutes) const;
+    /// Non-throwing variant of propagateMinutes, `minutes` after the TLE epoch: returns the SGP4 error
+    /// code (0 on success) and fills in `out` as propagate(dt, out) does.
+    [[nodiscard]] int propagateMinutes(double minutes, StateVector& out) const noexcept;
 
     /// The element set this propagator was built from.
     [[nodiscard]] const Tle& tle() const noexcept;

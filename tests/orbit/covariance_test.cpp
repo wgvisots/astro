@@ -601,3 +601,47 @@ TEST(Covariance, ProcessNoiseGrowsInBothDirections) {
         }
     }
 }
+
+TEST(Covariance, SingleTimeFormsAreGridsOfOneOutput) {
+    // propagateStm and propagateWithCovariance take the steps of a grid with one output at dt, so
+    // they give its results exactly, on either side of the epoch, with and without process noise.
+    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), leo(), Frame::TOD);
+    Mat6                      P0{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        P0[i][i]         = 100.0;
+        P0[i + 3][i + 3] = 1e-4;
+    }
+    for (const double dt : {-5400.0, -20.0, 20.0, 3000.0, 14400.0}) {
+        std::vector<StateVector> st(1);
+        std::vector<Mat6>        phi(1);
+        AdaptiveStats            gridStats, stats;
+        prop.propagateGridStm(dt, 1.0, st, phi, &gridStats);
+        const StateTransition one = prop.propagateStm(dt, &stats);
+        EXPECT_EQ(one.state, st[0]) << dt;
+        EXPECT_EQ(one.stm, phi[0]) << dt;
+        EXPECT_EQ(stats.accepted, gridStats.accepted) << dt;
+        EXPECT_EQ(stats.evaluations, gridStats.evaluations) << dt;
+        for (const double q : {0.0, 1e-8}) {
+            const StateCovariance grid = prop.propagateGridWithCovariance(dt, 1.0, 1, P0, q)[0];
+            const StateCovariance pc   = prop.propagateWithCovariance(dt, P0, q);
+            EXPECT_EQ(pc.state, grid.state) << dt << ", q = " << q;
+            EXPECT_EQ(pc.covariance, grid.covariance) << dt << ", q = " << q;
+        }
+    }
+
+    // At the epoch: the initial state, Phi = I and P = P0, exactly.
+    const StateTransition zero = prop.propagateStm(0.0);
+    EXPECT_EQ(zero.state, leo());
+    EXPECT_EQ(zero.stm, identity6());
+    EXPECT_EQ(prop.propagateWithCovariance(0.0, P0).covariance, P0);
+    EXPECT_EQ(prop.propagateWithCovariance(0.0, P0, 1e-8).covariance, P0);
+
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    for (const double bad : {nan, inf, -inf}) {
+        EXPECT_THROW((void)prop.propagateStm(bad), Error) << bad;
+        EXPECT_THROW((void)prop.propagateWithCovariance(bad, P0), Error) << bad;
+    }
+    EXPECT_THROW((void)prop.propagateWithCovariance(60.0, P0, -1.0), Error);
+    EXPECT_THROW((void)prop.propagateWithCovariance(60.0, P0, nan), Error);
+}

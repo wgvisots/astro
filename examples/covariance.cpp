@@ -66,7 +66,7 @@ int main() {
     // state transition matrix) and secular J2/J4. The secular model needs z along the pole, so the
     // state and covariance are rotated from GCRS first (a fixed rotation, which commutes with the
     // propagation; RIC sigmas do not depend on the frame).
-    const StateCovariance            kepler = propagateKeplerWithCovariance(s0, P0, 4.0 * 3600.0);
+    const StateCovariance            kepler = propagateKeplerWithCovariance(s0, 4.0 * 3600.0, P0);
     const Mat3                       toPole = poleOfDateMatrix(Frame::GCRS, epoch);
     const SecularPropagatorCorrected secular(StateVector{toPole * s0.r, toPole * s0.v});
     const StateCovariance            mean = secular.propagateWithCovariance(4.0 * 3600.0, rotateCovariance(P0, toPole));

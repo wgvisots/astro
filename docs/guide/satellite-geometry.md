@@ -22,9 +22,10 @@ std::cout << tle.name << " at " << t.iso8601(0) << "\n  TEME " << teme.r << " m\
 
 Things to know about `Sgp4`:
 
-- **Time.** `propagate(minutes)` takes minutes since the element set's epoch. `propagate(Time)`
-  uses the elapsed time, leap seconds included; a tool that subtracts Julian dates instead is 1 s
-  (7.7 km in LEO) different across a leap second.
+- **Time.** `propagate(dt)` takes seconds since the element set's epoch, as every propagator in the
+  library does. The reference code and most other SGP4 implementations take minutes: for those, use
+  `propagateMinutes(minutes)`. `propagate(Time)` uses the elapsed time, leap seconds included; a
+  tool that subtracts Julian dates instead is 1 s (7.7 km in LEO) different across a leap second.
 - **Epoch.** The day fraction of an element set is a fraction of 86 400 s, also on a day with a
   leap second, as in the reference code.
 - **Constants.** The default is WGS 72 (`Sgp4Gravity::WGS72`), with which element sets are made.
@@ -32,7 +33,8 @@ Things to know about `Sgp4`:
   repository; `Afspc` reproduces the older operational behaviour.
 - **Errors.** `propagate` throws `Sgp4Error` with the reference code's error number (1 to 6; 6 is a
   decayed satellite), or 7 for a time that is not finite. The overload
-  `propagate(minutes, StateVector&)` returns the number instead of throwing.
+  `propagate(dt, StateVector&)` (and `propagateMinutes(minutes, StateVector&)`) returns the number
+  instead of throwing.
 - **Element sets.** `Tle::parseMany` reads a file of sets (with or without name lines);
   `line1()` and `line2()` write a set back and throw if a value does not fit its columns.
 

@@ -98,8 +98,8 @@ TEST(ConjunctionAssessment, TwoBodyIsTheChainOfItsParts) {
     EXPECT_EQ(a.approach.distance, ca.distance);
     EXPECT_NEAR(a.approach.time - c.tca, 0.0, 1e-6);
     EXPECT_NEAR(a.approach.distance, Crossing60::kMiss, 1e-6);
-    const StateCovariance s1 = propagateKeplerWithCovariance(c.first, P1, a.approach.time - c.epoch);
-    const StateCovariance s2 = propagateKeplerWithCovariance(c.second, P2, a.approach.time - c.epoch);
+    const StateCovariance s1 = propagateKeplerWithCovariance(c.first, a.approach.time - c.epoch, P1);
+    const StateCovariance s2 = propagateKeplerWithCovariance(c.second, a.approach.time - c.epoch, P2);
     EXPECT_EQ(a.firstCovariance, s1.covariance);
     EXPECT_EQ(a.secondCovariance, s2.covariance);
     EXPECT_LT(norm(a.approach.first.r - s1.state.r), 1e-6); // the same time, by two roundings
@@ -256,8 +256,8 @@ TEST(ConjunctionAssessment, ApproachAtAnEndOfTheWindowIsFlaggedAndAssessedThere)
         EXPECT_LT(norm(a.approach.second.r - s2.r), 1e-6);
         EXPECT_NEAR(a.approach.distance, norm(s1.r - s2.r), 1e-6);
         EXPECT_GT(a.approach.distance, 500 * km); // 100 s at the 7.5 km/s relative speed
-        expectMatNear(a.firstCovariance, propagateKeplerWithCovariance(c.first, P1, dt).covariance, 1e-12, "first");
-        expectMatNear(a.secondCovariance, propagateKeplerWithCovariance(c.second, P2, dt).covariance, 1e-12, "second");
+        expectMatNear(a.firstCovariance, propagateKeplerWithCovariance(c.first, dt, P1).covariance, 1e-12, "first");
+        expectMatNear(a.secondCovariance, propagateKeplerWithCovariance(c.second, dt, P2).covariance, 1e-12, "second");
         EXPECT_EQ(a.collision.probability,
                   collisionProbability(a.approach, a.firstCovariance, a.secondCovariance, 20.0).probability);
         EXPECT_NEAR(a.collision.probability / inside.collision.probability, 1.0, 0.1);
@@ -273,7 +273,7 @@ TEST(ConjunctionAssessment, CovarianceFunctionThatIsNotFiniteIsAnError) {
     const UncertainTrajectory first{c.epoch, c.first, P};
     const auto                withCovariance = [&](double value, std::size_t i, std::size_t j) {
         return UncertainTrajectory(Trajectory{c.epoch, c.second}, [=, epoch = c.epoch, s = c.second](const Time& t) {
-            StateCovariance out  = propagateKeplerWithCovariance(s, P, t - epoch);
+            StateCovariance out  = propagateKeplerWithCovariance(s, t - epoch, P);
             out.covariance[i][j] = value;
             out.covariance[j][i] = value;
             return out;

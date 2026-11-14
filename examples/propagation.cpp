@@ -104,7 +104,7 @@ int main() {
     // Probability of collision at that approach, for a 5 m and a 1 m object. Position covariances at
     // the time of the approach: 400 m radial, 4 km in-track, 400 m cross-track (1 sigma) in each
     // object's RIC frame, rotated into the inertial frame. (From an epoch covariance,
-    // NumericalPropagator::propagateGridWithCovariance gives them at any time.)
+    // NumericalPropagator::propagateWithCovariance gives them at any time.)
     // clang-format off
     const Mat3 ric{400.0 * 400.0,             0.0,           0.0,
                              0.0, 4000.0 * 4000.0,           0.0,

@@ -423,11 +423,9 @@ void covarianceStudy() {
     for (const Case& c : twoBody) {
         const Mat6                phi = propagateKeplerStm(c.s0, c.dt).stm;
         const NumericalPropagator mass(Time(), c.s0, {std::make_shared<GravityField>(CentralBody::pointMass())}, tight);
-        std::vector<StateVector>  st(1);
-        std::vector<Mat6>         var(1);
-        mass.propagateGridStm(c.dt, 1.0, st, var);
-        const Mat6 sym   = multiply(transpose(phi), multiply(J, phi));
-        double     worst = 0.0;
+        const Mat6                var   = mass.propagateStm(c.dt).stm;
+        const Mat6                sym   = multiply(transpose(phi), multiply(J, phi));
+        double                    worst = 0.0;
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
                 worst = std::max(worst, std::abs(sym[i][j] - J[i][j]));
@@ -437,7 +435,7 @@ void covarianceStudy() {
                     c.name,
                     c.dt / 86400.0,
                     maxBlockRelDiff(phi, keplerDifferences(c.s0, c.dt)),
-                    maxBlockRelDiff(phi, var[0]),
+                    maxBlockRelDiff(phi, var),
                     worst);
     }
 
@@ -480,9 +478,9 @@ void covarianceStudy() {
         const auto                       numerical = makePropagator({kEpoch, s0, Mat6{}}, tod);
         const SecularPropagatorCorrected secular(s0);
         for (double dt : {14400.0, 86400.0}) {
-            const Vec3 n = ricSigmas(numerical.propagateGridWithCovariance(dt, 1.0, 1, P0)[0]);
+            const Vec3 n = ricSigmas(numerical.propagateWithCovariance(dt, P0));
             const Vec3 s = ricSigmas(secular.propagateWithCovariance(dt, P0));
-            const Vec3 k = ricSigmas(propagateKeplerWithCovariance(s0, P0, dt));
+            const Vec3 k = ricSigmas(propagateKeplerWithCovariance(s0, dt, P0));
             std::printf("| %s | %.0f h | %.0f / %.0f / %.0f | %.3f / %.3f / %.3f | %.3f / %.3f / %.3f |\n",
                         o.name,
                         dt / 3600.0,
