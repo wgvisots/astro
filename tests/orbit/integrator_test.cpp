@@ -166,7 +166,7 @@ TEST(NumericalPropagator, RejectsNullForceModelsAndEphemeris) {
     // Both used to be accepted and dereferenced at the first propagation.
     const StateVector s0 = elementsToState({7000e3, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
     EXPECT_THROW(NumericalPropagator(Time(), s0, {std::shared_ptr<const ForceModel>{}}), Error);
-    EXPECT_THROW(NumericalPropagator(Time(), s0, {std::make_shared<GravityField>(std::vector<double>{}), nullptr}),
+    EXPECT_THROW(NumericalPropagator(Time(), s0, {std::make_shared<GravityField>(CentralBody::pointMass()), nullptr}),
                  Error);
     EXPECT_THROW(ThirdBodyForce(Body::Moon, 4.9e12, nullptr, Time()), Error);
 }
@@ -316,7 +316,7 @@ TEST(NumericalPropagator, PointMassOrbitMatchesKepler) {
     const StateVector         s0 = elementsToState({8000e3, 0.3, 0.9, 0.2, 0.4, 0.0});
     const NumericalPropagator prop(Time(),
                                    s0,
-                                   {std::make_shared<GravityField>(std::vector<double>{})},
+                                   {std::make_shared<GravityField>(CentralBody::pointMass())},
                                    {.relTol = 1e-13, .absTol = 1e-9});
     EXPECT_EQ(prop.epoch(), Time());
     const std::vector<double> dts{86400.0, 3600.0, -3600.0, 0.0, 7200.0, -86400.0};

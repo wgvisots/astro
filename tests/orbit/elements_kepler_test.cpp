@@ -683,10 +683,10 @@ struct J2Rates {
     double raanDot, argpDot, meanAnomalyDot;
 };
 
-J2Rates j2Rates(double a, double e, double i, const ZonalParameters& zp) {
-    const double n  = std::sqrt(zp.mu / (a * a * a));
+J2Rates j2Rates(double a, double e, double i, const CentralBody& body) {
+    const double n  = std::sqrt(body.mu / (a * a * a));
     const double p  = a * (1.0 - e * e);
-    const double k  = 1.5 * n * zp.J2 * (zp.re / p) * (zp.re / p);
+    const double k  = 1.5 * n * body.zonal(2) * (body.re / p) * (body.re / p);
     const double ci = std::cos(i);
     return {-k * ci, 0.5 * k * (5.0 * ci * ci - 1.0), n + 0.5 * k * std::sqrt(1.0 - e * e) * (3.0 * ci * ci - 1.0)};
 }
@@ -695,7 +695,7 @@ J2Rates j2Rates(double a, double e, double i, const ZonalParameters& zp) {
 
 TEST(Secular, RepeatGroundTrackSatisfiesTheRepeatCondition) {
     // revs nodal periods must equal days nodal days.
-    const ZonalParameters zp;
+    const CentralBody body;
     struct Case {
         int    revs, days;
         double e, i;
@@ -707,8 +707,8 @@ TEST(Secular, RepeatGroundTrackSatisfiesTheRepeatCondition) {
                           {1,   1,  0.0,   0.0          }};
     // clang-format on
     for (const Case& c : cases) {
-        const double  a = repeatGroundTrackSemiMajorAxis(c.revs, c.days, c.e, c.i, zp);
-        const J2Rates r = j2Rates(a, c.e, c.i, zp);
+        const double  a = repeatGroundTrackSemiMajorAxis(c.revs, c.days, c.e, c.i, body);
+        const J2Rates r = j2Rates(a, c.e, c.i, body);
         // The iteration stops when a changes by less than 1e-13 of itself.
         EXPECT_NEAR((r.meanAnomalyDot + r.argpDot) * c.days / ((constants::earthRotationRate - r.raanDot) * c.revs),
                     1.0,
@@ -741,10 +741,10 @@ TEST(Secular, SunSynchronousInclinationRejectsOrbitsThatAreNotEllipses) {
     EXPECT_THROW((void)sunSynchronousInclination(7200.0 * km, -0.1), Error);
     EXPECT_THROW((void)sunSynchronousInclination(7200.0 * km, kNaN), Error);
     // A valid orbit still has its solution: the node advances 2 pi in a tropical year.
-    const ZonalParameters zp;
-    const double          a = 7078.0 * km, e = 0.001;
-    const double          i = sunSynchronousInclination(a, e, zp);
-    EXPECT_NEAR(j2Rates(a, e, i, zp).raanDot * 365.242190 * 86400.0 / kTwoPi, 1.0, 1e-14);
+    const CentralBody body;
+    const double      a = 7078.0 * km, e = 0.001;
+    const double      i = sunSynchronousInclination(a, e, body);
+    EXPECT_NEAR(j2Rates(a, e, i, body).raanDot * 365.242190 * 86400.0 / kTwoPi, 1.0, 1e-14);
 }
 
 TEST(Secular, PropagateSecularRejectsTheSameElementsAsThePropagatorClass) {
@@ -763,10 +763,10 @@ TEST(Secular, PropagateSecularRejectsTheSameElementsAsThePropagatorClass) {
         EXPECT_THROW(SecularPropagator{el}, Error) << "a=" << el.a << " e=" << el.e;
     }
     // A valid ellipse: the node moves at the J2 rate.
-    const ZonalParameters   zp;
+    const CentralBody       body;
     const KeplerianElements el{7000.0 * km, 0.01, 1.0, 0.5, 1.0, 2.0};
-    const double            raan = propagateSecular(el, 1000.0, zp, SecularOrder::J2).raan;
-    EXPECT_NEAR(raan, 0.5 + j2Rates(el.a, el.e, el.i, zp).raanDot * 1000.0, 1e-15);
+    const double            raan = propagateSecular(el, 1000.0, body, SecularOrder::J2).raan;
+    EXPECT_NEAR(raan, 0.5 + j2Rates(el.a, el.e, el.i, body).raanDot * 1000.0, 1e-15);
 }
 
 // ------------------------------------------------------------------------- Smaller helpers

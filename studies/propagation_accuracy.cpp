@@ -327,14 +327,14 @@ void secularStartStudy() {
 
 void poleStudy() {
     std::printf("\n4. The J2 axis (LEO): J2/J4 about GCRS z instead of the true pole, and of-date frames frozen\n\n");
-    const Time        t0            = Time::fromIso8601("2026-11-02T00:00:00Z");
-    const StateVector s0            = elementsToState(kOrbits[0].el);
-    TrackerOptions    o             = tightOptions();
-    o.integrator.maxStep            = 1e30;
-    const auto                right = makePropagator({t0, s0, Mat6{}}, o).propagateGrid(0.0, 60.0, 241); // pole aligned
-    const std::vector<double> J{0, 0, constants::J2, 0, constants::J4};
-    const auto                wrong =
-        NumericalPropagator(t0, s0, {std::make_shared<GravityField>(J)}, o.integrator).propagateGrid(0.0, 60.0, 241);
+    const Time        t0 = Time::fromIso8601("2026-11-02T00:00:00Z");
+    const StateVector s0 = elementsToState(kOrbits[0].el);
+    TrackerOptions    o  = tightOptions();
+    o.integrator.maxStep = 1e30;
+    const auto right     = makePropagator({t0, s0, Mat6{}}, o).propagateGrid(0.0, 60.0, 241); // pole aligned
+    const auto wrong =
+        NumericalPropagator(t0, s0, {std::make_shared<GravityField>(CentralBody::earthJ2J4())}, o.integrator)
+            .propagateGrid(0.0, 60.0, 241);
     const Vec3 pole = poleOfDateMatrix(Frame::GCRS, t0).transpose() * Vec3{0, 0, 1};
     std::printf("  true pole vs GCRS z on 2026-11-02: %.4f deg\n", rad2deg(std::acos(pole.z)));
     std::printf("  J2/J4 about GCRS z: %.0f m after 1 h, %.0f m after 4 h\n",
@@ -422,7 +422,7 @@ void covarianceStudy() {
     }
     for (const Case& c : twoBody) {
         const Mat6                phi = propagateKeplerStm(c.s0, c.dt).stm;
-        const NumericalPropagator mass(Time(), c.s0, {std::make_shared<GravityField>(std::vector<double>{})}, tight);
+        const NumericalPropagator mass(Time(), c.s0, {std::make_shared<GravityField>(CentralBody::pointMass())}, tight);
         std::vector<StateVector>  st(1);
         std::vector<Mat6>         var(1);
         mass.propagateGridStm(c.dt, 1.0, st, var);
@@ -444,9 +444,7 @@ void covarianceStudy() {
     std::printf("\n5b. Secular, differenced (SecularPropagatorCorrected::propagateStm) with J2 = J4 = 0, against\n"
                 "    the closed-form two-body Phi\n\n");
     std::printf("| Orbit | 4 h | 1 day | 1 week |\n|---|---|---|---|\n");
-    ZonalParameters none;
-    none.J2 = 0.0;
-    none.J4 = 0.0;
+    const CentralBody none = CentralBody::pointMass();
     for (const Orbit& o : kOrbits) {
         const StateVector s0 = elementsToState(o.el);
         std::printf("| %s |", o.name);

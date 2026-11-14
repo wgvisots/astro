@@ -25,10 +25,10 @@
 
 #include <boost/describe/enum.hpp>
 
-#include "astro/core/constants.h"
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 #include "astro/frames/transform.h"
+#include "astro/orbit/central_body.h"
 #include "astro/orbit/integrators.h"
 #include "astro/orbit/numerical.h"
 #include "astro/time/time.h"
@@ -94,10 +94,9 @@ struct TrackerOptions {
     /// field aligned to the true pole at the estimate's epoch. The frame-rotation velocity of the
     /// of-date frames (below 0.1 mm/s in LEO) is not applied, as is usual for TOD/TEME states.
     Frame frame{Frame::GCRS};
-    /// Zonal coefficients by degree (J[2] = J2, ...) for the gravity model; point mass included.
-    std::vector<double> J{0.0, 0.0, constants::J2, 0.0, constants::J4};
-    double              mu{constants::gmEarth};            ///< gravitational parameter (m^3/s^2)
-    double              re{constants::earthRadiusEgm2008}; ///< reference radius of J (m)
+    /// Central body of the gravity model: point mass and every zonal term of body.J. The default
+    /// leaves out J3.
+    CentralBody body{CentralBody::earthJ2J4()};
     /// Integrator settings. The default (relTol 1e-9) keeps LEO positions within ~0.2 m over 4 h.
     AdaptiveOptions integrator{[] {
         AdaptiveOptions o;
@@ -173,7 +172,7 @@ class EstimateTracker {
 public:
     /// Throws astro::Error if options.frame is not a celestial frame, if
     /// options.accelerationNoisePsd is negative or not finite, if options.alarmProbability is not
-    /// between 0 and 1, or if options.mu or options.re is not positive and finite.
+    /// between 0 and 1, or if options.body.mu or options.body.re is not positive and finite.
     explicit EstimateTracker(TrackerOptions options = {});
 
     /// Take a new estimate. If there is a current one, `next` is first checked against it; the

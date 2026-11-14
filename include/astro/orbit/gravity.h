@@ -18,10 +18,9 @@
 
 #pragma once
 
-#include <vector>
-
 #include "astro/core/constants.h"
 #include "astro/core/vec.h"
+#include "astro/orbit/central_body.h"
 
 /// \file
 /// Gravitational accelerations. Positions are in a frame whose z axis is the
@@ -36,44 +35,29 @@ namespace astro {
 /// -mu / |r|^3 (v - 3 (r.v) r / |r|^2).
 [[nodiscard]] Vec3 pointMassJerk(const Vec3& r, const Vec3& v, double mu = constants::gmEarth) noexcept;
 
-/// Acceleration from the zonal harmonics J2..Jn (point mass excluded).
-/// `J` holds unnormalized zonal coefficients indexed by degree: J[2] = J2, J[3] = J3, ...
-/// (entries 0 and 1 are ignored). Does not allocate.
-[[nodiscard]] Vec3 zonalAcceleration(const Vec3&                r,
-                                     const std::vector<double>& J,
-                                     double                     mu = constants::gmEarth,
-                                     double                     re = constants::earthRadiusEgm2008) noexcept;
+/// Acceleration from the zonal harmonics J2..Jn of `body` (point mass excluded): every entry of
+/// body.J from degree 2 up, with body.mu and body.re. Does not allocate.
+[[nodiscard]] Vec3 zonalAcceleration(const Vec3& r, const CentralBody& body = CentralBody::earth()) noexcept;
 
 /// Gradient d(pointMassAcceleration)/dr = mu / |r|^3 (3 r_hat r_hat^T - I).
 [[nodiscard]] Mat3 pointMassGradient(const Vec3& r, double mu = constants::gmEarth) noexcept;
 
 /// Gradient d(zonalAcceleration)/dr (symmetric, exact).
-[[nodiscard]] Mat3 zonalGradient(const Vec3&                r,
-                                 const std::vector<double>& J,
-                                 double                     mu = constants::gmEarth,
-                                 double                     re = constants::earthRadiusEgm2008) noexcept;
+[[nodiscard]] Mat3 zonalGradient(const Vec3& r, const CentralBody& body = CentralBody::earth()) noexcept;
 
 /// Time derivative of zonalAcceleration along the motion (r moving with velocity v). Exact.
-[[nodiscard]] Vec3 zonalJerk(const Vec3&                r,
-                             const Vec3&                v,
-                             const std::vector<double>& J,
-                             double                     mu = constants::gmEarth,
-                             double                     re = constants::earthRadiusEgm2008) noexcept;
+[[nodiscard]] Vec3 zonalJerk(const Vec3& r, const Vec3& v, const CentralBody& body = CentralBody::earth()) noexcept;
 
 /// zonalAcceleration and zonalJerk together, sharing the Legendre recursion.
-void zonalAccelerationAndJerk(const Vec3&                r,
-                              const Vec3&                v,
-                              const std::vector<double>& J,
-                              Vec3&                      acceleration,
-                              Vec3&                      jerk,
-                              double                     mu = constants::gmEarth,
-                              double                     re = constants::earthRadiusEgm2008) noexcept;
+void zonalAccelerationAndJerk(const Vec3&        r,
+                              const Vec3&        v,
+                              Vec3&              acceleration,
+                              Vec3&              jerk,
+                              const CentralBody& body = CentralBody::earth()) noexcept;
 
-/// Closed-form J2 acceleration (for reference/testing).
-[[nodiscard]] Vec3 j2Acceleration(const Vec3& r,
-                                  double      J2 = constants::J2,
-                                  double      mu = constants::gmEarth,
-                                  double      re = constants::earthRadiusEgm2008) noexcept;
+/// Closed-form J2 acceleration (for reference/testing): body.zonal(2) with body.mu and body.re;
+/// the other harmonics of `body` are ignored.
+[[nodiscard]] Vec3 j2Acceleration(const Vec3& r, const CentralBody& body = CentralBody::earth()) noexcept;
 
 /// Point-mass third-body perturbation on a satellite at r (geocentric) from a body at s (geocentric).
 [[nodiscard]] Vec3 thirdBodyAcceleration(const Vec3& r, const Vec3& s, double muBody) noexcept;

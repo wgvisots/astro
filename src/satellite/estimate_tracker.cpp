@@ -70,7 +70,7 @@ NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions&
     const Mat3 pole = poleOfDateMatrix(options.frame, e.epoch);
     return NumericalPropagator(e.epoch,
                                e.state,
-                               {std::make_shared<GravityField>(options.J, options.mu, options.re, pole)},
+                               {std::make_shared<GravityField>(options.body, pole)},
                                options.integrator);
 }
 
@@ -140,11 +140,11 @@ ConsistencyCheck compare(const StateCovariance& pred, const StateEstimate& next,
     // the elements statistic is reported as not-a-number: the other two are still good, and with
     // the elements test selected the delivery then counts as not consistent (NaN fails the
     // comparison below), which neither throws nor stops a tracker taking later deliveries.
-    const bool elliptic = norm2(pred.state.v) * norm(pred.state.r) < 2.0 * opt.mu;
+    const bool elliptic = norm2(pred.state.v) * norm(pred.state.r) < 2.0 * opt.body.mu;
     if (!elliptic) {
         c.semiMajorAxisResidual = c.semiMajorAxisSigma = std::nan("");
     }
-    const auto de = elliptic ? elementsDistance(pred, next.state, opt.mu, c) : std::optional<double>(std::nan(""));
+    const auto de = elliptic ? elementsDistance(pred, next.state, opt.body.mu, c) : std::optional<double>(std::nan(""));
     c.valid       = d6.has_value() && d3.has_value() && de.has_value();
     if (c.valid) {
         c.mahalanobis2         = *d6;
@@ -274,8 +274,9 @@ EstimateTracker::EstimateTracker(TrackerOptions options)
     if (!(opt_.alarmProbability >= 0.0 && opt_.alarmProbability <= 1.0)) {
         throw Error("EstimateTracker: alarmProbability must be between 0 and 1");
     }
-    if (!(opt_.mu > 0.0) || !std::isfinite(opt_.mu) || !(opt_.re > 0.0) || !std::isfinite(opt_.re)) {
-        throw Error("EstimateTracker: mu and re must be positive and finite");
+    const CentralBody& body = opt_.body;
+    if (!(body.mu > 0.0) || !std::isfinite(body.mu) || !(body.re > 0.0) || !std::isfinite(body.re)) {
+        throw Error("EstimateTracker: body.mu and body.re must be positive and finite");
     }
 }
 

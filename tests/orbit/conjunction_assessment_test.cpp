@@ -168,7 +168,7 @@ TEST(ConjunctionAssessment, AnyTrajectoryWithACovarianceFunction) {
     AdaptiveOptions  tight;
     tight.relTol                   = 1e-13;
     tight.absTol                   = 1e-10;
-    const auto                mass = std::make_shared<GravityField>(std::vector<double>{});
+    const auto                mass = std::make_shared<GravityField>(CentralBody::pointMass());
     const auto                prop = std::make_shared<NumericalPropagator>(c.epoch,
                                                             c.second,
                                                             std::vector<std::shared_ptr<const ForceModel>>{mass},

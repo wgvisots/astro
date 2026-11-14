@@ -42,7 +42,7 @@ namespace {
 
 constexpr double km = 1000.0;
 
-const std::vector<double> kJ2J4{0.0, 0.0, constants::J2, 0.0, constants::J4};
+const CentralBody kJ2J4 = CentralBody::earthJ2J4();
 
 double maxPositionDifference(const std::vector<StateVector>& a, const std::vector<StateVector>& b) {
     double m = 0.0;
@@ -63,12 +63,12 @@ double maxVelocityDifference(const std::vector<StateVector>& a, const std::vecto
 /// State of the mean elements `el` (mean anomaly M0 at the epoch) dt seconds later, with the angles
 /// advanced at Brouwer's first-order J2 rates: written out independently of the library, in
 /// extended precision.
-StateVector meanElementState(const KeplerianElements& el, double M0, double dt, const ZonalParameters& zp) {
+StateVector meanElementState(const KeplerianElements& el, double M0, double dt, const CentralBody& body) {
     using L   = long double;
-    const L a = el.a, e = el.e, mu = zp.mu;
+    const L a = el.a, e = el.e, mu = body.mu;
     const L n   = std::sqrt(mu / (a * a * a));
     const L eta = std::sqrt(1.0L - e * e);
-    const L k   = 0.75L * n * zp.J2 * (zp.re / (a * eta * eta)) * (zp.re / (a * eta * eta));
+    const L k   = 0.75L * n * body.zonal(2) * (body.re / (a * eta * eta)) * (body.re / (a * eta * eta));
     const L ci = std::cos(static_cast<L>(el.i)), si = std::sin(static_cast<L>(el.i));
     const L raan = el.raan + -2.0L * k * ci * dt;
     const L argp = el.argp + k * (5.0L * ci * ci - 1.0L) * dt;
@@ -96,7 +96,9 @@ StateVector meanElementState(const KeplerianElements& el, double M0, double dt, 
 
 TEST(Gravity, ZonalJerkIsDirectionalDerivative) {
     // The zonal acceleration depends on position only, so its jerk is the derivative along v.
-    const std::vector<double> J{0.0, 0.0, constants::J2, constants::J3, constants::J4, -2.3e-7, 5.4e-7};
+    const CentralBody body{
+        .J = {0.0, 0.0, constants::J2, constants::J3, constants::J4, -2.3e-7, 5.4e-7}
+    };
     for (const Vec3 r : {
              Vec3{7000 * km, 0,          0        },
              Vec3{3000 * km, -2000 * km, 6000 * km},
@@ -104,12 +106,12 @@ TEST(Gravity, ZonalJerkIsDirectionalDerivative) {
     }) {
         const Vec3   v{1.2 * km, 6.8 * km, 2.1 * km};
         const double h  = 1e-2;
-        const Vec3   fd = (zonalAcceleration(r + v * h, J) - zonalAcceleration(r - v * h, J)) / (2 * h);
-        const Vec3   j  = zonalJerk(r, v, J);
+        const Vec3   fd = (zonalAcceleration(r + v * h, body) - zonalAcceleration(r - v * h, body)) / (2 * h);
+        const Vec3   j  = zonalJerk(r, v, body);
         expectVecNear(j, fd, 1e-9 * norm(fd) + 1e-20);
         Vec3 a2, j2;
-        zonalAccelerationAndJerk(r, v, J, a2, j2);
-        expectVecNear(a2, zonalAcceleration(r, J), 1e-22);
+        zonalAccelerationAndJerk(r, v, a2, j2, body);
+        expectVecNear(a2, zonalAcceleration(r, body), 1e-22);
         expectVecNear(j2, j, 1e-24);
     }
 }
@@ -123,8 +125,8 @@ TEST(SecularPropagator, StatesAreTheTwoBodyStatesOfTheDriftingMeanElements) {
     // vectors, all in extended precision. The velocity is the two-body velocity of the mean
     // elements (secular.h). Checked through the class (from elements and from a state) and both
     // free functions.
-    const ZonalParameters zp;
-    const double          eps = std::numeric_limits<double>::epsilon();
+    const CentralBody body;
+    const double      eps = std::numeric_limits<double>::epsilon();
     for (const KeplerianElements& el : {
              KeplerianElements{7100 * km,  0.02,  deg2rad(63.0),  1.0, 2.0, 3.0},
              KeplerianElements{26600 * km, 0.7,   deg2rad(63.4),  4.0, 4.7, 0.1},
@@ -132,22 +134,22 @@ TEST(SecularPropagator, StatesAreTheTwoBodyStatesOfTheDriftingMeanElements) {
              KeplerianElements{8000 * km,  0.1,   deg2rad(140.0), 5.5, 1.2, 2.0},
     }) {
         const StateVector       s0 = elementsToState(el);
-        const SecularPropagator fromElements(el, zp, SecularOrder::J2);
-        const SecularPropagator fromState(s0, zp, SecularOrder::J2);
+        const SecularPropagator fromElements(el, body, SecularOrder::J2);
+        const SecularPropagator fromState(s0, body, SecularOrder::J2);
         const double            M0 = el.meanAnomaly();
         for (double dt : {0.0, 100.0, -5000.0, 86400.0, 30 * 86400.0}) {
-            const StateVector truth = meanElementState(el, M0, dt, zp);
+            const StateVector truth = meanElementState(el, M0, dt, body);
             // Rounding of the mean anomaly n dt (up to 3000 rad after 30 days) and of the angles,
             // times the size of the state, and 1 / (1 - e) for the Kepler solution near perigee.
             // Measured: 7 eps in these units (from a state, which adds the element conversion).
             const double      turns       = 1.0 + std::abs(meanMotion(el.a) * dt);
             const double      tolR        = 16.0 * eps * turns * el.a / (1.0 - el.e);
             const double      tolV        = 16.0 * eps * turns * norm(truth.v) / (1.0 - el.e);
-            const StateVector viaElements = elementsToState(propagateSecular(el, dt, zp, SecularOrder::J2));
+            const StateVector viaElements = elementsToState(propagateSecular(el, dt, body, SecularOrder::J2));
             for (const auto& [what, s] : {
                      std::pair{"class from elements", fromElements.propagate(dt)},
                      std::pair{"class from a state", fromState.propagate(dt)},
-                     std::pair{"free function on a state", propagateSecular(s0, dt, zp, SecularOrder::J2)},
+                     std::pair{"free function on a state", propagateSecular(s0, dt, body, SecularOrder::J2)},
                      std::pair{"free function on elements", viaElements},
             }) {
                 EXPECT_LT(norm(s.r - truth.r), tolR) << what << ", a = " << el.a << ", dt = " << dt;
@@ -162,11 +164,11 @@ TEST(SecularPropagator, ElementsAreTheMeanElementsAtEachTime) {
     // meanElements() is what the propagator was built from (or the osculating elements of the input
     // state); elements(dt) has the same a, e and i and the angles drifted at the first-order J2
     // rates, so the state it describes is the truth of the test above.
-    const ZonalParameters   zp;
+    const CentralBody       body;
     const double            eps = std::numeric_limits<double>::epsilon();
     const KeplerianElements el{7100 * km, 0.02, deg2rad(63.0), 1.0, 2.0, 3.0};
-    const SecularPropagator fromElements(el, zp, SecularOrder::J2);
-    const SecularPropagator fromState(elementsToState(el), zp, SecularOrder::J2);
+    const SecularPropagator fromElements(el, body, SecularOrder::J2);
+    const SecularPropagator fromState(elementsToState(el), body, SecularOrder::J2);
     EXPECT_EQ(fromElements.meanElements().a, el.a);
     EXPECT_EQ(fromElements.meanElements().e, el.e);
     EXPECT_EQ(fromElements.meanElements().nu, el.nu);
@@ -183,7 +185,7 @@ TEST(SecularPropagator, ElementsAreTheMeanElementsAtEachTime) {
         EXPECT_EQ(e1.e, el.e);
         EXPECT_EQ(e1.i, el.i);
         EXPECT_TRUE(e1.raan >= 0.0 && e1.raan < constants::twoPi && e1.argp >= 0.0 && e1.argp < constants::twoPi);
-        const StateVector truth = meanElementState(el, el.meanAnomaly(), dt, zp);
+        const StateVector truth = meanElementState(el, el.meanAnomaly(), dt, body);
         const double      turns = 1.0 + std::abs(meanMotion(el.a) * dt);
         EXPECT_LT(norm(elementsToState(e1).r - truth.r), 16.0 * eps * turns * el.a / (1.0 - el.e)) << dt;
     }
@@ -396,7 +398,7 @@ TEST(NumericalGrid, TwelveStateAndEdgeCases) {
     {
         // An empty grid reports zero work rather than leaving the caller's counts in place.
         const NumericalPropagator p =
-            NumericalPropagator::j2j4(Time(), elementsToState({7000 * km, 0.001, 1.0, 0.0, 0.0, 0.0}));
+            NumericalPropagator::j2j4(Time(), elementsToState({7000 * km, 0.001, 1.0, 0.0, 0.0, 0.0}), Frame::TOD);
         AdaptiveStats st{7, 7, 7};
         p.propagateGrid(0.0, 10.0, std::span<StateVector>{}, &st);
         EXPECT_EQ(st.evaluations, 0);
@@ -405,7 +407,7 @@ TEST(NumericalGrid, TwelveStateAndEdgeCases) {
         EXPECT_EQ(st.accepted, 0);
     }
     const StateVector         s0   = elementsToState({7000 * km, 0.01, deg2rad(28.5), 0.0, 1.0, 2.0});
-    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0);
+    const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0, Frame::TOD);
     const auto                g    = prop.propagateGrid12(0.0, 60.0, 100);
     const auto                g6   = prop.propagateGrid(0.0, 60.0, 100);
     for (std::size_t k = 0; k < g.size(); ++k) {
@@ -427,7 +429,7 @@ TEST(NumericalGrid, J2J4FrameOverloadAlignsThePole) {
     const StateVector st{B * sg.r, B * sg.v};
     const auto        g    = NumericalPropagator::j2j4(t0, sg, Frame::GCRS).propagateGrid(0.0, 600.0, 25);
     const auto        tod  = NumericalPropagator::j2j4(t0, st, Frame::TOD).propagateGrid(0.0, 600.0, 25);
-    const auto        bare = NumericalPropagator::j2j4(t0, sg).propagateGrid(0.0, 600.0, 25);
+    const auto        bare = NumericalPropagator::j2j4(t0, sg, Frame::TOD).propagateGrid(0.0, 600.0, 25);
     double            same = 0.0, wrong = 0.0;
     for (std::size_t k = 0; k < g.size(); ++k) {
         same  = std::max(same, norm(B.transpose() * tod[k].r - g[k].r));
@@ -439,4 +441,21 @@ TEST(NumericalGrid, J2J4FrameOverloadAlignsThePole) {
     const StateVector12 s12{sg.r, sg.v, {}, {}};
     EXPECT_EQ(NumericalPropagator::j2j4(t0, s12, Frame::GCRS).propagate12(3600.0).rv(),
               NumericalPropagator::j2j4(t0, sg, Frame::GCRS).propagate(3600.0));
+}
+
+TEST(NumericalGrid, ZonalFactoryIsJ2J4ForTheEarthWithoutJ3) {
+    // j2j4 is zonal with CentralBody::earthJ2J4(): the same propagator, bit for bit, in both
+    // forms. The default CentralBody adds J3, which moves a LEO orbit by metres in an hour.
+    const Time          t0 = Time::fromIso8601("2026-11-02T00:00:00Z");
+    const StateVector   s0 = elementsToState({6778 * km, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    const StateVector12 s12{s0.r, s0.v, {}, {}};
+    const CentralBody   body = CentralBody::earthJ2J4();
+    EXPECT_EQ(NumericalPropagator::zonal(t0, s0, body, Frame::GCRS).propagate(3600.0),
+              NumericalPropagator::j2j4(t0, s0, Frame::GCRS).propagate(3600.0));
+    EXPECT_EQ(
+        NumericalPropagator::zonal(t0, s12, body, Frame::GCRS, HigherOrderMode::UnmodeledForce).propagate12(3600.0),
+        NumericalPropagator::j2j4(t0, s12, Frame::GCRS, HigherOrderMode::UnmodeledForce).propagate12(3600.0));
+    const StateVector withJ3 = NumericalPropagator::zonal(t0, s0, CentralBody{}, Frame::GCRS).propagate(3600.0);
+    EXPECT_GT(norm(withJ3.r - NumericalPropagator::j2j4(t0, s0, Frame::GCRS).propagate(3600.0).r), 1.0);
+    EXPECT_THROW((void)NumericalPropagator::zonal(t0, s0, body, Frame::ITRS), Error);
 }

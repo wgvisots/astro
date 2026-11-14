@@ -51,9 +51,28 @@ orbit, against a tight-tolerance reference:
 These are integration errors against the same J2/J4 model; the model itself omits drag, solar
 pressure and higher harmonics, which usually dominate.
 
-`GravityField` takes any list of zonal coefficients J2...Jn (default J2, J3, J4) and a rotation to the
-pole frame; `ThirdBodyForce` adds the Sun or Moon from any `Ephemeris`; derive from `ForceModel` for
-your own forces. `propagate(dt)` and `propagate(dts)` stop exactly at the requested times instead.
+`GravityField` takes a `CentralBody` (below; default J2, J3, J4) and a rotation to the pole frame,
+and `NumericalPropagator::zonal(epoch, s0, body, frame)` builds a propagator from any `CentralBody`
+with the field aligned to the true pole, as `j2j4` does; `ThirdBodyForce` adds the Sun or Moon from
+any `Ephemeris`; derive from `ForceModel` for your own forces. `propagate(dt)` and `propagate(dts)`
+stop exactly at the requested times instead.
+
+**One type describes the central body.** A `CentralBody` (`orbit/central_body.h`) holds the
+gravitational parameter `mu` (m^3/s^2), the reference radius `re` (m) of the harmonics, and the
+zonal coefficients `J` indexed by degree (`J[2]` is J2; entries 0 and 1 are ignored). Everything that
+models the central body's gravity takes one: `GravityField`, `NumericalPropagator::zonal`, the zonal
+functions of `orbit/gravity.h`, the secular propagators and design helpers, `Trajectory`,
+`UncertainTrajectory`, `TrackerOptions::body` and `ImpactOptions::body`. The two-body and Lambert
+functions, which need only a point mass, take `mu` alone. Three named values cover the usual cases,
+all with `constants::gmEarth` and `constants::earthRadiusEgm2008` (see `core/constants.h`):
+
+| Value | Zonal terms | Default of |
+|---|---|---|
+| `CentralBody::earth()` | EGM2008 J2, J3, J4 | `CentralBody{}`, `GravityField`, `ImpactOptions`, the secular models |
+| `CentralBody::earthJ2J4()` | EGM2008 J2, J4 | `NumericalPropagator::j2j4`, `TrackerOptions` |
+| `CentralBody::pointMass(mu)` | none | |
+
+The secular theory uses J2 and J4 only, so `earth()` and `earthJ2J4()` give it the same results.
 
 **A grid may lie anywhere relative to the epoch.** It can start before the epoch, span it, or step
 towards it. The integration only ever moves away from the epoch, so every output has the accuracy of

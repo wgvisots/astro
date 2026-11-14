@@ -198,7 +198,7 @@ TEST(CloseApproach, NumericalPropagatorThroughAFunction) {
     // A point-mass NumericalPropagator wrapped as a function gives the two-body answer.
     const Conjunction         c;
     const StateVector         s0 = elementsToState(c.elements);
-    const NumericalPropagator prop{kEpoch, s0, {std::make_shared<GravityField>(std::vector<double>{})}};
+    const NumericalPropagator prop{kEpoch, s0, {std::make_shared<GravityField>(CentralBody::pointMass())}};
     const Trajectory          numerical([&prop](const Time& t) { return prop.propagate(t); });
     const Trajectory          second{kEpoch + Conjunction::kTca, c.atTca};
     const CloseApproach       ca =

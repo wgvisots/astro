@@ -71,30 +71,28 @@ Vec3 ForceModel::jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalA
                                  totalAcceleration);
 }
 
-GravityField::GravityField(std::vector<double> J, double mu, double re, const Mat3& toBodyFrame)
-    : J_(std::move(J))
-    , mu_(mu)
-    , re_(re)
+GravityField::GravityField(const CentralBody& body, const Mat3& toBodyFrame)
+    : body_(body)
     , R_(toBodyFrame)
     , identity_(toBodyFrame == Mat3::identity()) {}
 
 Vec3 GravityField::acceleration(double /*t*/, const Vec3& r, const Vec3& /*v*/) const {
     Vec3 a;
     if (identity_) {
-        detail::gravity<false>(r, J_.data(), J_.size(), mu_, re_, true, &a, nullptr);
+        detail::gravity<false>(r, body_.J.data(), body_.J.size(), body_.mu, body_.re, true, &a, nullptr);
         return a;
     }
-    detail::gravity<false>(R_ * r, J_.data(), J_.size(), mu_, re_, true, &a, nullptr);
+    detail::gravity<false>(R_ * r, body_.J.data(), body_.J.size(), body_.mu, body_.re, true, &a, nullptr);
     return R_.transpose() * a;
 }
 
 Vec3 GravityField::jerk(double /*t*/, const Vec3& r, const Vec3& v, const Vec3& /*totalAcceleration*/) const {
     detail::GravityPartials p;
     if (identity_) {
-        detail::gravity<true>(r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
+        detail::gravity<true>(r, body_.J.data(), body_.J.size(), body_.mu, body_.re, true, nullptr, &p);
         return p.jerk(v);
     }
-    detail::gravity<true>(R_ * r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
+    detail::gravity<true>(R_ * r, body_.J.data(), body_.J.size(), body_.mu, body_.re, true, nullptr, &p);
     return R_.transpose() * p.jerk(R_ * v);
 }
 
@@ -102,11 +100,11 @@ Vec3 GravityField::partials(double /*t*/, const Vec3& r, const Vec3& /*v*/, Mat3
     detail::GravityPartials p;
     dadv = Mat3{};
     if (identity_) {
-        detail::gravity<true>(r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
+        detail::gravity<true>(r, body_.J.data(), body_.J.size(), body_.mu, body_.re, true, nullptr, &p);
         dadr = p.gradient();
         return p.acceleration;
     }
-    detail::gravity<true>(R_ * r, J_.data(), J_.size(), mu_, re_, true, nullptr, &p);
+    detail::gravity<true>(R_ * r, body_.J.data(), body_.J.size(), body_.mu, body_.re, true, nullptr, &p);
     dadr = R_.transpose() * p.gradient() * R_;
     return R_.transpose() * p.acceleration;
 }
@@ -191,18 +189,15 @@ NumericalPropagator::NumericalPropagator(const Time&                            
 
 namespace {
 
-std::shared_ptr<const ForceModel> j2j4Field(Frame frame, const Time& epoch) {
-    return std::make_shared<GravityField>(std::vector<double>{0.0, 0.0, constants::J2, 0.0, constants::J4},
-                                          constants::gmEarth,
-                                          constants::earthRadiusEgm2008,
-                                          poleOfDateMatrix(frame, epoch));
+std::shared_ptr<const ForceModel> zonalField(const CentralBody& body, Frame frame, const Time& epoch) {
+    return std::make_shared<GravityField>(body, poleOfDateMatrix(frame, epoch));
 }
 
 } // namespace
 
 NumericalPropagator
 NumericalPropagator::j2j4(const Time& epoch, const StateVector& initial, Frame frame, const AdaptiveOptions& options) {
-    return NumericalPropagator(epoch, initial, {j2j4Field(frame, epoch)}, options);
+    return zonal(epoch, initial, CentralBody::earthJ2J4(), frame, options);
 }
 
 NumericalPropagator NumericalPropagator::j2j4(const Time&            epoch,
@@ -210,27 +205,24 @@ NumericalPropagator NumericalPropagator::j2j4(const Time&            epoch,
                                               Frame                  frame,
                                               HigherOrderMode        mode,
                                               const AdaptiveOptions& options) {
-    return NumericalPropagator(epoch, initial, {j2j4Field(frame, epoch)}, mode, options);
+    return zonal(epoch, initial, CentralBody::earthJ2J4(), frame, mode, options);
 }
 
-NumericalPropagator NumericalPropagator::j2j4(const Time&          epoch,
-                                              const StateVector12& initial,
-                                              HigherOrderMode      mode,
-                                              double               mu,
-                                              double               re,
-                                              double               J2,
-                                              double               J4) {
-    return NumericalPropagator(epoch,
-                               initial,
-                               {std::make_shared<GravityField>(std::vector<double>{0.0, 0.0, J2, 0.0, J4}, mu, re)},
-                               mode);
+NumericalPropagator NumericalPropagator::zonal(const Time&            epoch,
+                                               const StateVector&     initial,
+                                               const CentralBody&     body,
+                                               Frame                  frame,
+                                               const AdaptiveOptions& options) {
+    return NumericalPropagator(epoch, initial, {zonalField(body, frame, epoch)}, options);
 }
 
-NumericalPropagator
-NumericalPropagator::j2j4(const Time& epoch, const StateVector& initial, double mu, double re, double J2, double J4) {
-    return NumericalPropagator(epoch,
-                               initial,
-                               {std::make_shared<GravityField>(std::vector<double>{0.0, 0.0, J2, 0.0, J4}, mu, re)});
+NumericalPropagator NumericalPropagator::zonal(const Time&            epoch,
+                                               const StateVector12&   initial,
+                                               const CentralBody&     body,
+                                               Frame                  frame,
+                                               HigherOrderMode        mode,
+                                               const AdaptiveOptions& options) {
+    return NumericalPropagator(epoch, initial, {zonalField(body, frame, epoch)}, mode, options);
 }
 
 OdeState<6> NumericalPropagator::derivative(double t, const OdeState<6>& y) const {

@@ -358,9 +358,9 @@ TEST(EstimateTracker, ElementTestIsMirrorInvariant) {
         };
     };
     TrackerOptions pointMass;
-    pointMass.J   = {};
-    const auto c  = checkConsistency(prior, next, pointMass);
-    const auto cm = checkConsistency(mirror(prior), mirror(next), pointMass);
+    pointMass.body.J = {};
+    const auto c     = checkConsistency(prior, next, pointMass);
+    const auto cm    = checkConsistency(mirror(prior), mirror(next), pointMass);
     ASSERT_TRUE(c.valid);
     ASSERT_TRUE(cm.valid);
     EXPECT_GT(c.elementsMahalanobis2, 1.0);
@@ -501,8 +501,8 @@ TEST(EstimateTracker, RejectsOptionsThatCannotWork) {
     EXPECT_TRUE(rejected([&](TrackerOptions& o) { o.alarmProbability = nan; }));
     EXPECT_TRUE(rejected([](TrackerOptions& o) { o.alarmProbability = -0.1; }));
     EXPECT_TRUE(rejected([](TrackerOptions& o) { o.alarmProbability = 1.5; }));
-    EXPECT_TRUE(rejected([](TrackerOptions& o) { o.mu = 0.0; }));
-    EXPECT_TRUE(rejected([&](TrackerOptions& o) { o.re = nan; }));
+    EXPECT_TRUE(rejected([](TrackerOptions& o) { o.body.mu = 0.0; }));
+    EXPECT_TRUE(rejected([&](TrackerOptions& o) { o.body.re = nan; }));
     // The ends of the range are meaningful: 0 never flags a delivery, 1 flags every one.
     EXPECT_FALSE(rejected([](TrackerOptions& o) { o.alarmProbability = 0.0; }));
     EXPECT_FALSE(rejected([](TrackerOptions& o) { o.alarmProbability = 1.0; }));

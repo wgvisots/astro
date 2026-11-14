@@ -44,7 +44,7 @@ struct Circular {
     double              period{constants::twoPi * std::sqrt(a * a * a / constants::gmEarth)};
     NumericalPropagator prop{Time(),
                              elementsToState({a, 0.0, deg2rad(51.6), 0.3, 0.0, 0.0}),
-                             {std::make_shared<GravityField>(std::vector<double>{}, constants::gmEarth)}};
+                             {std::make_shared<GravityField>(CentralBody::pointMass())}};
 };
 
 double z(double, const StateVector& s) {
@@ -103,8 +103,12 @@ TEST(PropagationEvent, AscendingNodesOnAJ2OrbitFollowTheSecularRates) {
     // the mean elements, taken as the averages of the osculating ones over the same day (as in
     // orbit_test.cpp). On a near-circular orbit the short-period terms are sampled at the same
     // argument of latitude every time, so they drop out of the drift.
-    const double              J2    = constants::J2;
-    const auto                field = std::make_shared<GravityField>(std::vector<double>{0.0, 0.0, J2});
+    const CentralBody j2{
+        constants::gmEarth,
+        constants::earthRadiusEgm2008,
+        {0.0, 0.0, constants::J2}
+    };
+    const auto                field = std::make_shared<GravityField>(j2);
     const StateVector         s0    = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 2.0});
     const NumericalPropagator start(Time(), s0, {field});
     std::vector<double>       times, nodes;
@@ -129,11 +133,10 @@ TEST(PropagationEvent, AscendingNodesOnAJ2OrbitFollowTheSecularRates) {
         e                         += o.e / (n + 1);
         i                         += o.i / (n + 1);
     }
-    const ZonalParameters zp{constants::gmEarth, constants::earthRadiusEgm2008, J2, 0.0};
-    const SecularRates    r      = secularRates(a, e, i, zp, SecularOrder::J2SquaredJ4);
-    const double          span   = times.back() - times.front();
-    const double          drift  = wrapPi(nodes.back() - nodes.front() - r.raanDot * span);
-    const double          period = span / static_cast<double>(times.size() - 1);
+    const SecularRates r      = secularRates(a, e, i, j2, SecularOrder::J2SquaredJ4);
+    const double       span   = times.back() - times.front();
+    const double       drift  = wrapPi(nodes.back() - nodes.front() - r.raanDot * span);
+    const double       period = span / static_cast<double>(times.size() - 1);
     // Measured: 1.8e-6 of the node's drift over the day (0.079 rad) and 2.2e-7 of the nodal period.
     EXPECT_LT(std::abs(drift), 1e-5 * std::abs(r.raanDot * span));
     EXPECT_NEAR(period / (constants::twoPi / (r.argpDot + r.meanAnomalyDot)), 1.0, 1e-6);

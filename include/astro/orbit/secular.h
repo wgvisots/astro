@@ -24,7 +24,7 @@
 
 #include <boost/describe/enum.hpp>
 
-#include "astro/core/constants.h"
+#include "astro/orbit/central_body.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/state12.h"
 #include "astro/orbit/state_covariance.h"
@@ -32,17 +32,11 @@
 /// \file
 /// Analytic secular (mean-element) drift due to the Earth's zonal harmonics,
 /// after Brouwer (1959): first order in J2, plus J2^2 and J4.
+///
+/// Every function and class here takes the central body as a CentralBody (default: the Earth),
+/// of which the theory uses mu, re, zonal(2) and zonal(4). J3 and the higher zonal terms do not
+/// enter it, so CentralBody::earth() and CentralBody::earthJ2J4() give the same results.
 namespace astro {
-
-/// Central-body constants for the secular theory. Defaults: the Earth, with the radius and zonal
-/// coefficients of EGM2008 and the gravitational parameter of constants::gmEarth, which is the
-/// TCG-compatible IERS value and 7.5e-10 larger than EGM2008's own (see its description).
-struct ZonalParameters {
-    double mu{constants::gmEarth};            ///< gravitational parameter (m^3/s^2)
-    double re{constants::earthRadiusEgm2008}; ///< reference radius of the harmonics (m)
-    double J2{constants::J2};                 ///< unnormalized zonal coefficient J2
-    double J4{constants::J4};                 ///< unnormalized zonal coefficient J4
-};
 
 /// Which zonal terms enter the secular rates.
 enum class SecularOrder {
@@ -63,28 +57,28 @@ struct SecularRates {
 };
 
 /// Rates for mean semi-major axis a, eccentricity e and inclination i.
-[[nodiscard]] SecularRates secularRates(double                 a,
-                                        double                 e,
-                                        double                 i,
-                                        const ZonalParameters& zp    = {},
-                                        SecularOrder           order = SecularOrder::J2SquaredJ4) noexcept;
+[[nodiscard]] SecularRates secularRates(double             a,
+                                        double             e,
+                                        double             i,
+                                        const CentralBody& body  = CentralBody::earth(),
+                                        SecularOrder       order = SecularOrder::J2SquaredJ4) noexcept;
 
 /// Propagate mean elements by dt seconds with the secular rates (a, e, i constant).
 /// The true anomaly is advanced through the mean anomaly. Throws astro::Error unless the orbit is
 /// elliptic (a > 0, 0 <= e < 1), as SecularPropagator does.
 [[nodiscard]] KeplerianElements propagateSecular(const KeplerianElements& mean,
                                                  double                   dt,
-                                                 const ZonalParameters&   zp    = {},
+                                                 const CentralBody&       body  = CentralBody::earth(),
                                                  SecularOrder             order = SecularOrder::J2SquaredJ4);
 
 /// propagateSecular for an inertial state whose z axis is the Earth's pole. The osculating
 /// elements of s0 are treated as mean elements (no short-period correction), so expect errors at the
 /// short-period level (kilometres in LEO); use NumericalPropagator::j2j4 when that matters.
 /// Throws astro::Error unless s0 is on an elliptic orbit, as SecularPropagator does.
-[[nodiscard]] StateVector propagateSecular(const StateVector&     s0,
-                                           double                 dt,
-                                           const ZonalParameters& zp    = {},
-                                           SecularOrder           order = SecularOrder::J2SquaredJ4);
+[[nodiscard]] StateVector propagateSecular(const StateVector& s0,
+                                           double             dt,
+                                           const CentralBody& body  = CentralBody::earth(),
+                                           SecularOrder       order = SecularOrder::J2SquaredJ4);
 
 /// propagateSecular for a 12-component state (position, velocity, acceleration, jerk), with the
 /// same mean-element caveat. The force model for acceleration, jerk and residuals is the point mass
@@ -96,11 +90,11 @@ struct SecularRates {
 ///    NumericalPropagator::j2j4 with HigherOrderMode::UnmodeledForce.
 ///
 /// Throws astro::Error unless s0 is on an elliptic orbit, as SecularPropagator does.
-[[nodiscard]] Propagation12 propagateSecular(const StateVector12&   s0,
-                                             double                 dt,
-                                             const ZonalParameters& zp    = {},
-                                             SecularOrder           order = SecularOrder::J2SquaredJ4,
-                                             HigherOrderMode        mode  = HigherOrderMode::ModelOnly);
+[[nodiscard]] Propagation12 propagateSecular(const StateVector12& s0,
+                                             double               dt,
+                                             const CentralBody&   body  = CentralBody::earth(),
+                                             SecularOrder         order = SecularOrder::J2SquaredJ4,
+                                             HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
 
 /// Secular J2/J4 propagation of one orbit to many times.
 ///
@@ -124,20 +118,20 @@ class SecularPropagator {
 public:
     /// From mean elements (elliptic: e < 1). Throws astro::Error unless a > 0 and 0 <= e < 1.
     explicit SecularPropagator(const KeplerianElements& mean,
-                               const ZonalParameters&   zp    = {},
+                               const CentralBody&       body  = CentralBody::earth(),
                                SecularOrder             order = SecularOrder::J2SquaredJ4);
     /// From an inertial state whose z axis is the Earth's pole; its osculating elements are taken
     /// as mean elements (see propagateSecular). Throws astro::Error unless s0 is on an elliptic
     /// orbit: for a hyperbolic, parabolic or rectilinear state (r = 0, or r parallel to v).
-    explicit SecularPropagator(const StateVector&     s0,
-                               const ZonalParameters& zp    = {},
-                               SecularOrder           order = SecularOrder::J2SquaredJ4);
+    explicit SecularPropagator(const StateVector& s0,
+                               const CentralBody& body  = CentralBody::earth(),
+                               SecularOrder       order = SecularOrder::J2SquaredJ4);
     /// From a 12-component state; `mode` is as for propagateSecular(const StateVector12&, ...).
     /// Throws astro::Error as the constructor from a StateVector does.
-    SecularPropagator(const StateVector12&   s0,
-                      const ZonalParameters& zp    = {},
-                      SecularOrder           order = SecularOrder::J2SquaredJ4,
-                      HigherOrderMode        mode  = HigherOrderMode::ModelOnly);
+    SecularPropagator(const StateVector12& s0,
+                      const CentralBody&   body  = CentralBody::earth(),
+                      SecularOrder         order = SecularOrder::J2SquaredJ4,
+                      HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
 
     /// Mean elements dt seconds after the epoch.
     [[nodiscard]] KeplerianElements elements(double dt) const;
@@ -187,7 +181,7 @@ public:
     [[nodiscard]] std::vector<StateCovariance>
     propagateGridWithCovariance(double start, double step, std::size_t count, const Mat6& P0) const;
     /// The input state the covariance methods refer to: the state given to the constructor, or for
-    /// mean elements elementsToState(mean, zp.mu).
+    /// mean elements elementsToState(mean, body.mu).
     [[nodiscard]] StateVector epochState() const;
 
     /// Mean elements at the epoch.
@@ -207,16 +201,16 @@ protected:
     struct RateVelocity {};
     /// As the public constructors, with velocities that are the time derivative of the positions.
     /// Throws astro::Error as they do.
-    SecularPropagator(RateVelocity, const KeplerianElements& mean, const ZonalParameters& zp, SecularOrder order);
+    SecularPropagator(RateVelocity, const KeplerianElements& mean, const CentralBody& body, SecularOrder order);
     /// As above, from an inertial state whose osculating elements are taken as mean elements.
     /// Throws astro::Error as the public constructor does.
-    SecularPropagator(RateVelocity, const StateVector& s0, const ZonalParameters& zp, SecularOrder order);
+    SecularPropagator(RateVelocity, const StateVector& s0, const CentralBody& body, SecularOrder order);
     /// As above, from a 12-component state. Throws astro::Error as the public constructor does.
     SecularPropagator(RateVelocity,
-                      const StateVector12&   s0,
-                      const ZonalParameters& zp,
-                      SecularOrder           order,
-                      HigherOrderMode        mode);
+                      const StateVector12& s0,
+                      const CentralBody&   body,
+                      SecularOrder         order,
+                      HigherOrderMode      mode);
 
 private:
     /// Time-dependent angles of one state: reduced mean anomaly, eccentric anomaly and the sines
@@ -242,8 +236,17 @@ private:
     /// States and state transition matrices on a grid. Throws astro::Error as propagateStm does.
     void stmGrid(double start, double step, std::span<StateVector> states, std::span<Mat6> stm) const;
 
-    KeplerianElements   mean_;
-    ZonalParameters     zp_;
+    KeplerianElements mean_;
+    // The four constants the secular theory uses, not the whole CentralBody: copying its vector of
+    // coefficients would cost an allocation in every propagateSecular call.
+    double                    mu_{0.0}, re_{0.0}, j2_{0.0}, j4_{0.0};
+    [[nodiscard]] CentralBody body() const {
+        return {
+            mu_,
+            re_,
+            {0.0, 0.0, j2_, 0.0, j4_}
+        };
+    }
     SecularOrder        order_;
     SecularRates        rates_;
     std::vector<double> J_;       // zonal coefficients of the model, by degree
@@ -284,33 +287,34 @@ class SecularPropagatorCorrected : public SecularPropagator {
 public:
     /// From mean elements (elliptic: e < 1). Throws astro::Error unless a > 0 and 0 <= e < 1.
     explicit SecularPropagatorCorrected(const KeplerianElements& mean,
-                                        const ZonalParameters&   zp    = {},
+                                        const CentralBody&       body  = CentralBody::earth(),
                                         SecularOrder             order = SecularOrder::J2SquaredJ4);
     /// From an inertial state whose z axis is the Earth's pole; its osculating elements are taken
     /// as mean elements, as for SecularPropagator. Throws astro::Error as SecularPropagator does:
     /// unless s0 is on an elliptic orbit.
-    explicit SecularPropagatorCorrected(const StateVector&     s0,
-                                        const ZonalParameters& zp    = {},
-                                        SecularOrder           order = SecularOrder::J2SquaredJ4);
+    explicit SecularPropagatorCorrected(const StateVector& s0,
+                                        const CentralBody& body  = CentralBody::earth(),
+                                        SecularOrder       order = SecularOrder::J2SquaredJ4);
     /// From a 12-component state; `mode` is as for SecularPropagator. Throws astro::Error as
     /// SecularPropagator does: unless s0 is on an elliptic orbit.
-    SecularPropagatorCorrected(const StateVector12&   s0,
-                               const ZonalParameters& zp    = {},
-                               SecularOrder           order = SecularOrder::J2SquaredJ4,
-                               HigherOrderMode        mode  = HigherOrderMode::ModelOnly);
+    SecularPropagatorCorrected(const StateVector12& s0,
+                               const CentralBody&   body  = CentralBody::earth(),
+                               SecularOrder         order = SecularOrder::J2SquaredJ4,
+                               HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
 };
 
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;
 /// nodal rate 360 deg per tropical year). Throws astro::Error unless the orbit is elliptic
 /// (a > 0, 0 <= e < 1), or if no solution exists.
-[[nodiscard]] double sunSynchronousInclination(double a, double e = 0.0, const ZonalParameters& zp = {});
+[[nodiscard]] double
+sunSynchronousInclination(double a, double e = 0.0, const CentralBody& body = CentralBody::earth());
 
 /// Mean semi-major axis of a repeat-ground-track orbit that completes `revs`
 /// revolutions in `days` nodal days, for given e and i (J2, iterative). Throws astro::Error if
 /// revs or days is not positive, unless 0 <= e < 1, and if the iteration does not converge (to
 /// 1e-13 of a): there is then no such orbit in the J2 model, e.g. 2 revolutions a day at e = 0.99.
 [[nodiscard]] double
-repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, const ZonalParameters& zp = {});
+repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, const CentralBody& body = CentralBody::earth());
 
 /// Critical inclination (rad) where the J2 apsidal rotation vanishes: acos(1/sqrt(5)).
 inline constexpr double kCriticalInclination = 1.1071487177940904;

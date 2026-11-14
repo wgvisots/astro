@@ -169,7 +169,7 @@ TEST(TwoBodyStm, MatchesIntegratedVariationalEquations) {
         if (c.dt < 0.0) {
             continue;
         }
-        const NumericalPropagator prop(Time(), c.s0, {std::make_shared<GravityField>(std::vector<double>{})}, tight);
+        const NumericalPropagator prop(Time(), c.s0, {std::make_shared<GravityField>(CentralBody::pointMass())}, tight);
         std::vector<StateVector>  st(1);
         std::vector<Mat6>         phi(1);
         prop.propagateGridStm(c.dt, 1.0, st, phi);
@@ -201,10 +201,8 @@ TEST(TwoBodyStm, StateAndCovariance) {
 
 TEST(SecularStm, ReducesToTwoBodyWithoutZonals) {
     // With J2 = J4 = 0 the secular map is the two-body map, and both velocities coincide.
-    ZonalParameters none;
-    none.J2            = 0.0;
-    none.J4            = 0.0;
-    const Case cases[] = {
+    const CentralBody none    = CentralBody::pointMass();
+    const Case        cases[] = {
         {"LEO",                            elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9}), 86400.0    },
         {"e = 0.74",                       elementsToState({26560 * km, 0.74, deg2rad(63.4), 0.3, 4.7, 0.2}), 86400.0    },
         {"near-circular, near-equatorial", elementsToState({7000 * km, 1e-6, deg2rad(1e-5), 0.0, 0.0, 0.9}),  86400.0    },
@@ -310,11 +308,11 @@ TEST(SecularStm, UnmodeledForceAddsTheDerivativeOfTheResidualTerms) {
     // with J = d(G(r) v0)/dr at r0 (by a central difference of the exact gradient; it is a small
     // term). Compared block by block, relative to the largest entry of each block of the added term.
     // Measured 6e-10 (the secular parts of the two differences cancel).
-    const std::vector<double> J{0.0, 0.0, constants::J2, 0.0, constants::J4};
-    const StateVector         s0       = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
-    const auto                gradient = [&](const Vec3& r) { return pointMassGradient(r) + zonalGradient(r, J); };
-    const Mat3                G        = gradient(s0.r);
-    Mat3                      Jr;
+    const CentralBody body     = CentralBody::earthJ2J4();
+    const StateVector s0       = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 0.9});
+    const auto        gradient = [&](const Vec3& r) { return pointMassGradient(r) + zonalGradient(r, body); };
+    const Mat3        G        = gradient(s0.r);
+    Mat3              Jr;
     for (std::size_t k = 0; k < 3; ++k) {
         Vec3 d;
         d[k]         = 1.0; // m
@@ -324,7 +322,7 @@ TEST(SecularStm, UnmodeledForceAddsTheDerivativeOfTheResidualTerms) {
         }
     }
     StateVector12 s12(s0.r, s0.v, Vec3{}, Vec3{});
-    s12.a = pointMassAcceleration(s0.r) + zonalAcceleration(s0.r, J) + Vec3{2e-4, -1e-4, 3e-4};
+    s12.a = pointMassAcceleration(s0.r) + zonalAcceleration(s0.r, body) + Vec3{2e-4, -1e-4, 3e-4};
     s12.j = G * s0.v + Vec3{1e-6, 2e-6, -1e-6};
     const SecularPropagator modelOnly(s12, {}, SecularOrder::J2SquaredJ4, HigherOrderMode::ModelOnly);
     const SecularPropagator unmodeled(s12, {}, SecularOrder::J2SquaredJ4, HigherOrderMode::UnmodeledForce);

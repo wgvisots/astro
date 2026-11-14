@@ -149,27 +149,25 @@ gravity<true>(const Vec3&, const double*, std::size_t, double, double, bool, Vec
 
 } // namespace detail
 
-Vec3 zonalAcceleration(const Vec3& r, const std::vector<double>& J, double mu, double re) noexcept {
+Vec3 zonalAcceleration(const Vec3& r, const CentralBody& body) noexcept {
     Vec3 a;
-    detail::gravity<false>(r, J.data(), J.size(), mu, re, false, &a, nullptr);
+    detail::gravity<false>(r, body.J.data(), body.J.size(), body.mu, body.re, false, &a, nullptr);
     return a;
 }
 
-Vec3 zonalJerk(const Vec3& r, const Vec3& v, const std::vector<double>& J, double mu, double re) noexcept {
+Vec3 zonalJerk(const Vec3& r, const Vec3& v, const CentralBody& body) noexcept {
     detail::GravityPartials p;
-    detail::gravity<true>(r, J.data(), J.size(), mu, re, false, nullptr, &p);
+    detail::gravity<true>(r, body.J.data(), body.J.size(), body.mu, body.re, false, nullptr, &p);
     return p.jerk(v);
 }
 
-void zonalAccelerationAndJerk(const Vec3&                r,
-                              const Vec3&                v,
-                              const std::vector<double>& J,
-                              Vec3&                      acceleration,
-                              Vec3&                      jerk,
-                              double                     mu,
-                              double                     re) noexcept {
+void zonalAccelerationAndJerk(const Vec3&        r,
+                              const Vec3&        v,
+                              Vec3&              acceleration,
+                              Vec3&              jerk,
+                              const CentralBody& body) noexcept {
     detail::GravityPartials p;
-    detail::gravity<true>(r, J.data(), J.size(), mu, re, false, nullptr, &p);
+    detail::gravity<true>(r, body.J.data(), body.J.size(), body.mu, body.re, false, nullptr, &p);
     acceleration = p.acceleration;
     jerk         = p.jerk(v);
 }
@@ -179,17 +177,17 @@ Mat3 pointMassGradient(const Vec3& r, double mu) noexcept {
     return (outer(r, r) * (3.0 / r2) - Mat3::identity()) * (mu / (r2 * rm));
 }
 
-Mat3 zonalGradient(const Vec3& r, const std::vector<double>& J, double mu, double re) noexcept {
+Mat3 zonalGradient(const Vec3& r, const CentralBody& body) noexcept {
     detail::GravityPartials p;
-    detail::gravity<true>(r, J.data(), J.size(), mu, re, false, nullptr, &p);
+    detail::gravity<true>(r, body.J.data(), body.J.size(), body.mu, body.re, false, nullptr, &p);
     return p.gradient();
 }
 
-Vec3 j2Acceleration(const Vec3& r, double J2, double mu, double re) noexcept {
+Vec3 j2Acceleration(const Vec3& r, const CentralBody& body) noexcept {
     const double rm   = norm(r);
     const double r2   = rm * rm;
     const double z2r2 = r.z * r.z / r2;
-    const double k    = -1.5 * J2 * mu * re * re / (r2 * r2 * rm);
+    const double k    = -1.5 * body.zonal(2) * body.mu * body.re * body.re / (r2 * r2 * rm);
     return {k * r.x * (1.0 - 5.0 * z2r2), k * r.y * (1.0 - 5.0 * z2r2), k * r.z * (3.0 - 5.0 * z2r2)};
 }
 

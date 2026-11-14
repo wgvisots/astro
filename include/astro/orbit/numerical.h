@@ -27,11 +27,11 @@
 
 #include <boost/describe/enum.hpp>
 
-#include "astro/core/constants.h"
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 #include "astro/ephemeris/ephemeris.h"
 #include "astro/frames/transform.h"
+#include "astro/orbit/central_body.h"
 #include "astro/orbit/integrators.h"
 #include "astro/orbit/state12.h"
 #include "astro/orbit/state_covariance.h"
@@ -77,26 +77,21 @@ public:
 /// propagation frame's z axis as the pole.
 class GravityField final : public ForceModel {
 public:
-    /// J indexed by degree (J[2] = J2, ...). Empty -> point mass only.
-    explicit GravityField(std::vector<double> J           = {0.0, 0.0, constants::J2, constants::J3, constants::J4},
-                          double              mu          = constants::gmEarth,
-                          double              re          = constants::earthRadiusEgm2008,
-                          const Mat3&         toBodyFrame = Mat3::identity());
+    /// The point mass and every zonal term of `body` (an empty body.J: point mass only).
+    explicit GravityField(const CentralBody& body = CentralBody::earth(), const Mat3& toBodyFrame = Mat3::identity());
     /// Point-mass plus zonal acceleration (m/s^2) in the propagation frame; t and v are unused.
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
     /// Exact (point mass and zonal terms).
     [[nodiscard]] Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
     /// Exact gravity gradient; no velocity dependence.
     Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
-    /// Gravitational parameter of the field (m^3/s^2).
-    [[nodiscard]] double mu() const noexcept { return mu_; }
+    /// The central body of the field.
+    [[nodiscard]] const CentralBody& body() const noexcept { return body_; }
 
 private:
-    std::vector<double> J_;
-    double              mu_;
-    double              re_;
-    Mat3                R_;
-    bool                identity_;
+    CentralBody body_;
+    Mat3        R_;
+    bool        identity_;
 };
 
 /// Point-mass perturbation from a third body (e.g. Sun, Moon) using an ephemeris.
@@ -184,9 +179,9 @@ public:
                         HigherOrderMode                                mode    = HigherOrderMode::ModelOnly,
                         const AdaptiveOptions&                         options = {});
 
-    /// Point mass + J2 + J4 for a state in the celestial frame `frame` (GCRS, J2000, MOD, TOD, TEME
-    /// or CIRS) at `epoch`: the zonal field is aligned with the true pole at the epoch (in GCRS the
-    /// pole is ~0.15 deg off z in 2026, which would cost ~270 m over 4 h in LEO). The frame itself
+    /// Point mass + J2 + J4 (CentralBody::earthJ2J4()) for a state in the celestial frame `frame`
+    /// (GCRS, J2000, MOD, TOD, TEME or CIRS) at `epoch`: the zonal field is aligned with the true
+    /// pole at the epoch (in GCRS the pole is ~0.15 deg off z in 2026, which would cost ~270 m over 4 h in LEO). The frame itself
     /// is treated as inertial, frozen at the epoch; for of-date frames (MOD, TOD, TEME, CIRS) that
     /// drifts from the frame of each output time by ~0.2 m/h in LEO. EstimateTracker converts
     /// outputs to the frame of their own time. Throws astro::Error as poleOfDateMatrix does: for an
@@ -200,22 +195,23 @@ public:
                                                   HigherOrderMode        mode    = HigherOrderMode::ModelOnly,
                                                   const AdaptiveOptions& options = {});
 
-    /// Point mass + J2 + J4 (the zonal J3 is omitted) in a frame whose z axis is the true pole
-    /// (TOD, TEME, CIRS). For GCRS or J2000 states use the overload taking a Frame.
-    [[nodiscard]] static NumericalPropagator j2j4(const Time&        epoch,
-                                                  const StateVector& initial,
-                                                  double             mu = constants::gmEarth,
-                                                  double             re = constants::earthRadiusEgm2008,
-                                                  double             J2 = constants::J2,
-                                                  double             J4 = constants::J4);
-    /// As above, from a 12-component state.
-    [[nodiscard]] static NumericalPropagator j2j4(const Time&          epoch,
-                                                  const StateVector12& initial,
-                                                  HigherOrderMode      mode = HigherOrderMode::ModelOnly,
-                                                  double               mu   = constants::gmEarth,
-                                                  double               re   = constants::earthRadiusEgm2008,
-                                                  double               J2   = constants::J2,
-                                                  double               J4   = constants::J4);
+    /// Point mass and every zonal term of `body`, for a state in the celestial frame `frame` (GCRS,
+    /// J2000, MOD, TOD, TEME or CIRS) at `epoch`: the zonal field is aligned with the true pole at the
+    /// epoch, frozen there, exactly as for j2j4 (which is zonal with CentralBody::earthJ2J4()).
+    /// Throws astro::Error as j2j4 does: for an Earth-fixed `frame` (TIRS, PEF, ITRS), and if
+    /// `epoch` cannot be converted to TT.
+    [[nodiscard]] static NumericalPropagator zonal(const Time&            epoch,
+                                                   const StateVector&     initial,
+                                                   const CentralBody&     body,
+                                                   Frame                  frame,
+                                                   const AdaptiveOptions& options = {});
+    /// As above, from a 12-component state. Throws astro::Error as the overload above does.
+    [[nodiscard]] static NumericalPropagator zonal(const Time&            epoch,
+                                                   const StateVector12&   initial,
+                                                   const CentralBody&     body,
+                                                   Frame                  frame,
+                                                   HigherOrderMode        mode    = HigherOrderMode::ModelOnly,
+                                                   const AdaptiveOptions& options = {});
 
     // Every propagation call takes an optional `stats` out-parameter for the integrator's step
     // counts. The propagator itself is immutable, so all member functions may be called

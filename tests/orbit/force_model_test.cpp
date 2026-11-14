@@ -80,17 +80,48 @@ private:
 
 } // namespace
 
+TEST(CentralBody, NamedValuesAndZonalLookup) {
+    // The default is the Earth with EGM2008 J2, J3 and J4; earthJ2J4 drops J3 only; a point mass
+    // has no zonal terms. zonal(n) reads past the end of the list as 0.
+    const CentralBody def, earth = CentralBody::earth(), j2j4 = CentralBody::earthJ2J4();
+    const CentralBody mass = CentralBody::pointMass(4.9028e12);
+    for (const CentralBody* b : {&def, &earth, &j2j4}) {
+        EXPECT_EQ(b->mu, constants::gmEarth);
+        EXPECT_EQ(b->re, constants::earthRadiusEgm2008);
+        EXPECT_EQ(b->zonal(2), constants::J2);
+        EXPECT_EQ(b->zonal(4), constants::J4);
+        EXPECT_EQ(b->zonal(5), 0.0);
+    }
+    EXPECT_EQ(def.J, earth.J);
+    EXPECT_EQ(earth.zonal(3), constants::J3);
+    EXPECT_EQ(j2j4.zonal(3), 0.0);
+    EXPECT_EQ(mass.mu, 4.9028e12);
+    EXPECT_TRUE(mass.J.empty());
+    EXPECT_EQ(mass.zonal(2), 0.0);
+    EXPECT_EQ(CentralBody::pointMass().mu, constants::gmEarth);
+    // A point-mass body gives the point-mass field and no zonal acceleration.
+    const Vec3 r{7000 * km, -1000 * km, 2000 * km};
+    const Vec3 a = pointMassAcceleration(r, mass.mu);
+    expectVecNear(GravityField(mass).acceleration(0.0, r, {}), a, 4.0 * kEps * norm(a), "point mass");
+    EXPECT_EQ(zonalAcceleration(r, mass), Vec3{});
+}
+
 TEST(GravityField, RotatedBodyFrameTurnsTheFieldWithIt) {
     // With toBodyFrame = R the field is the body-frame field at R r, turned back: a = R^T a_b(R r),
     // jerk = R^T j_b(R r, R v), gradient = R^T G_b(R r) R. The body-frame truths are the free
     // functions (checked against closed forms and the potential elsewhere). A non-default mu and
-    // reference radius are passed through, and mu() reports the field's.
-    const std::vector<double> J{0.0, 0.0, 1.1e-3, -2.5e-6, -1.6e-6};
-    const double              mu = 4.9028e12, re = 1737.4 * km; // a Moon-sized body
-    const Mat3                R = rotationX(0.4);
-    const GravityField        field(J, mu, re, R);
-    EXPECT_EQ(field.mu(), mu);
-    EXPECT_EQ(GravityField().mu(), constants::gmEarth);
+    // reference radius are passed through, and body() reports the field's.
+    const double      mu = 4.9028e12, re = 1737.4 * km; // a Moon-sized body
+    const CentralBody body{
+        mu,
+        re,
+        {0.0, 0.0, 1.1e-3, -2.5e-6, -1.6e-6}
+    };
+    const Mat3         R = rotationX(0.4);
+    const GravityField field(body, R);
+    EXPECT_EQ(field.body().mu, mu);
+    EXPECT_EQ(field.body().re, re);
+    EXPECT_EQ(GravityField().body().mu, constants::gmEarth);
     for (const Vec3 r : {
              Vec3{2000 * km, 300 * km,  -400 * km},
              Vec3{-500 * km, 1200 * km, 1500 * km},
@@ -98,9 +129,9 @@ TEST(GravityField, RotatedBodyFrameTurnsTheFieldWithIt) {
     }) {
         const Vec3 v{0.3 * km, -1.1 * km, 0.7 * km};
         const Vec3 rb = R * r, vb = R * v;
-        const Vec3 a = R.transpose() * (pointMassAcceleration(rb, mu) + zonalAcceleration(rb, J, mu, re));
-        const Vec3 j = R.transpose() * (pointMassJerk(rb, vb, mu) + zonalJerk(rb, vb, J, mu, re));
-        const Mat3 G = R.transpose() * (pointMassGradient(rb, mu) + zonalGradient(rb, J, mu, re)) * R;
+        const Vec3 a = R.transpose() * (pointMassAcceleration(rb, mu) + zonalAcceleration(rb, body));
+        const Vec3 j = R.transpose() * (pointMassJerk(rb, vb, mu) + zonalJerk(rb, vb, body));
+        const Mat3 G = R.transpose() * (pointMassGradient(rb, mu) + zonalGradient(rb, body)) * R;
         // A few rounding errors of the point-mass term, which dominates (measured 1.8 eps).
         expectVecNear(field.acceleration(0.0, r, v), a, 8.0 * kEps * norm(a), "acceleration");
         expectVecNear(field.jerk(0.0, r, v, a), j, 8.0 * kEps * norm(j), "jerk");

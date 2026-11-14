@@ -68,11 +68,8 @@ TEST(ThreadSafety, SharedNumericalPropagator) {
     // J2/J4 plus the Moon from the SPK kernel, so the ephemeris is shared too.
     const auto                spk  = std::make_shared<SpkEphemeris>(astro::test::dataPath("de440s_2024q1_le.bsp"));
     const auto                moon = std::make_shared<ThirdBodyForce>(Body::Moon, constants::gmMoon, spk, kEpoch);
-    const NumericalPropagator prop(
-        kEpoch,
-        leo(),
-        {std::make_shared<GravityField>(std::vector<double>{0, 0, constants::J2, 0, constants::J4}), moon});
-    Mat6 P0{};
+    const NumericalPropagator prop(kEpoch, leo(), {std::make_shared<GravityField>(CentralBody::earthJ2J4()), moon});
+    Mat6                      P0{};
     for (std::size_t i = 0; i < 3; ++i) {
         P0[i][i]         = 100.0;
         P0[i + 3][i + 3] = 1e-4;
