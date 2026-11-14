@@ -32,7 +32,11 @@ struct Atmosphere {
 };
 
 /// Refraction constants for the model  dZ = A tan Z + B tan^3 Z  (rad), computed as in ERFA's eraRefco
-/// (Green 1987 / Hohenkerk & Sinclair). Valid for zenith distances up to ~75-80 deg.
+/// (Green 1987 / Hohenkerk & Sinclair). Valid for zenith distances up to ~75-80 deg. Nearer the
+/// horizon it is not the conventional refraction (about 11' at a true elevation of 0, where the
+/// usual figure is 34'), and refractTrueToObserved and refractObservedToTrue are no longer exact
+/// inverses of each other (27" apart at 0-2 deg): use refractionBennett or refractionSaemundsson
+/// there.
 struct RefractionConstants {
     double A{0.0}; ///< coefficient of tan Z (rad)
     double B{0.0}; ///< coefficient of tan^3 Z (rad)

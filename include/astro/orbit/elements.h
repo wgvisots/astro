@@ -62,11 +62,13 @@ struct KeplerianElements {
 /// Inertial position (m) and velocity (m/s) from elements; the inverse of stateToElements.
 /// Throws astro::Error if the semi-latus rectum is not positive (inconsistent a and e).
 [[nodiscard]] StateVector elementsToState(const KeplerianElements& el, double mu = constants::gmEarth);
-/// Elements from mean anomaly instead of true anomaly.
+/// Elements from mean anomaly instead of true anomaly. Throws astro::Error as meanToTrueAnomaly
+/// does: for an e that is negative, infinite or NaN.
 [[nodiscard]] KeplerianElements
 elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp, double M);
 
-/// Modified equinoctial-style (prograde) equinoctial elements:
+/// Equinoctial elements of Broucke & Cefola (1972), prograde form (not the "modified equinoctial"
+/// set of Walker et al., which replaces a by the semi-latus rectum):
 ///   h = e sin(raan + argp), k = e cos(raan + argp),
 ///   p = tan(i/2) sin(raan), q = tan(i/2) cos(raan), lambda = mean longitude.
 /// Non-singular for circular and equatorial orbits (singular at i = 180 deg).

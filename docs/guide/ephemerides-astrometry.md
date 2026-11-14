@@ -17,6 +17,10 @@ types 2 and 3, either byte order) [NAIF SPK Required Reading](https://naif.jpl.n
 [Park et al. (2021)](https://doi.org/10.3847/1538-3881/abd414), chaining segments (Moon -> Earth-Moon barycentre -> Earth, ...) as
 needed. It matches the reference `jplephem` reader to 1e-12 relative.
 
+A kernel has only the bodies it has. DE440, for one, gives the barycentre of the Mars system
+(`Body::MarsBarycenter`) but not Mars itself (`Body::Mars`); asking for the planet throws, with a
+message that names the barycentre. One is never returned in place of the other.
+
 <!-- snippet: examples/sun_moon.cpp#ephemeris -->
 ```cpp
 // Low precision (Sun < 30", Moon < 6') needs no files; a JPL kernel gives the full DE440 accuracy.
@@ -50,6 +54,8 @@ std::cout << "Moon " << std::setprecision(0) << phase.illuminatedFraction * 100 
 
 `sunRiseSet` uses the conventional -0.8333 deg altitude of the Sun's centre (refraction plus the
 semi-diameter); `twilight` takes `Twilight::Civil`, `Nautical` or `Astronomical` (-6, -12, -18 deg).
+`moonRiseSet` uses the Moon's upper limb with 34' of refraction, as seen from the site (so the
+parallax is included). `sunRiseSet` and `moonRiseSet` also return the transits.
 `findElevationEvents` finds rises, sets and transits of any elevation function: it samples it and
 refines each event with Brent's method to about 1 ms.
 
@@ -64,13 +70,22 @@ polar motion, and optionally refraction:
 - `starObserved` and `bodyObserved` give azimuth, elevation (and range for bodies) at a site,
   with refraction when an `Atmosphere` is passed.
 
-They agree with ERFA's `atco13` to 1 mas without refraction and above 10 deg with it
-([Accuracy](../accuracy.md)).
+For stars the result agrees with ERFA's `atco13` to 1 mas without refraction, and above 10 deg
+with it ([Accuracy](../accuracy.md)). `bodyObserved` takes the same steps with the light time in
+place of the space motion; the tests check it for consistency between ephemerides, not against an
+outside reference. Two small differences from SOFA: the proper-motion interval leaves out the
+light-time (Roemer) term, worth up to 0.15 mas for the fastest stars, and the limit that keeps the
+light deflection finite at the Sun's limb is fixed.
 
 Refraction: `refractTrueToObserved` / `refractObservedToTrue` use the A tan z + B tan^3 z model
 with constants from pressure, temperature, humidity and wavelength (as SOFA's `refco`);
 `refractionBennett` [Bennett (1982)](https://doi.org/10.1017/S0373463300022037) and `refractionSaemundsson`
 [Saemundsson (1986), as given in Meeus (1998)](../references.md) are the simple formulas good to about 0.1' down to the horizon.
+
+The A/B model is meant for zenith distances up to about 75-80 deg. Lower down it is not the
+conventional refraction: at a true elevation of 0 it gives about 11' where the usual figure is
+34', and below about 5 deg its two directions are not exact inverses of each other (27" apart
+at 0-2 deg). Use the simple formulas near the horizon.
 
 Coordinates: `raDecFromVector`, `angularSeparation`, `positionAngle`, ecliptic conversions with the
 IAU 2006 obliquity, and ICRS <-> galactic with the Hipparcos matrix [ESA (1997)](https://ui.adsabs.harvard.edu/abs/1997ESASP1200.....E).

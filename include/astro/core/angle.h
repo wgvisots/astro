@@ -119,10 +119,11 @@ struct Sexagesimal {
 ///
 /// The grammar and the errors are those of parseHms, with these unit marks: 'd' or the degree sign
 /// (UTF-8 or ISO 8859-1) after degrees, 'm' or an apostrophe after arcminutes, 's' or a double quote after
-/// arcseconds. An hours mark ("12h") is an error.
+/// arcseconds. An hours mark ("12h") is an error. Throws astro::Error as parseHms does.
 [[nodiscard]] double parseDms(std::string_view text);
 
-/// Format as "HH:MM:SS.sss" (sep=':'). A NaN angle gives "nan"; an angle that is infinite, or too
+/// Format as "HH:MM:SS.sss" (sep=':'). The angle is not wrapped: 2 pi prints as 24:00:00.000 and
+/// larger angles as more than 24 hours. A NaN angle gives "nan"; an angle that is infinite, or too
 /// large for radToHms, gives "inf" or "-inf".
 [[nodiscard]] std::string formatHms(double rad, int decimals = 3, char sep = ':');
 /// Format as "+DD:MM:SS.ss" (sep=':'), always signed. A NaN angle gives "nan"; an angle that is

@@ -134,6 +134,13 @@ published linear and Monte Carlo probabilities. NASA releases that repository un
 Source Agreement (the `NOSA_GSC-*.pdf` files at its root). No CARA code is included; `collisionProbability` is written from the
 published method (Foster & Estes 1992; Alfano 2005).
 
+## QUADPACK
+
+The nodes and weights of the 15-point Gauss-Kronrod rule in `src/orbit/close_approach.cpp`, and the
+form of its error estimate, are those of the routine QK15 of QUADPACK (R. Piessens, E. de
+Doncker-Kapenga, C. W. Ueberhuber and D. K. Kahaner, *QUADPACK: A Subroutine Package for Automatic
+Integration*, Springer, 1983), which is in the public domain. No QUADPACK code is included.
+
 ## JPL planetary ephemeris
 
 `tests/data/de440s_2024q1_*.bsp` are small subsets of the JPL DE440s

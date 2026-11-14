@@ -34,7 +34,9 @@
 /// after Brouwer (1959): first order in J2, plus J2^2 and J4.
 namespace astro {
 
-/// Central-body constants for the secular theory (defaults: Earth, EGM2008).
+/// Central-body constants for the secular theory. Defaults: the Earth, with the radius and zonal
+/// coefficients of EGM2008 and the gravitational parameter of constants::gmEarth, which is the
+/// TCG-compatible IERS value and 7.5e-10 larger than EGM2008's own (see its description).
 struct ZonalParameters {
     double mu{constants::gmEarth};            ///< gravitational parameter (m^3/s^2)
     double re{constants::earthRadiusEgm2008}; ///< reference radius of the harmonics (m)
@@ -78,6 +80,7 @@ struct SecularRates {
 /// propagateSecular for an inertial state whose z axis is the Earth's pole. The osculating
 /// elements of s0 are treated as mean elements (no short-period correction), so expect errors at the
 /// short-period level (kilometres in LEO); use NumericalPropagator::j2j4 when that matters.
+/// Throws astro::Error unless s0 is on an elliptic orbit, as SecularPropagator does.
 [[nodiscard]] StateVector propagateSecular(const StateVector&     s0,
                                            double                 dt,
                                            const ZonalParameters& zp    = {},
@@ -91,6 +94,8 @@ struct SecularRates {
 ///    dr = da0 dt^2/2 + dj0 dt^3/6, dv = da0 dt + dj0 dt^2/2, ignoring how the displacement feeds
 ///    back into gravity. That is fine while dr stays small compared with the orbit; otherwise use
 ///    NumericalPropagator::j2j4 with HigherOrderMode::UnmodeledForce.
+///
+/// Throws astro::Error unless s0 is on an elliptic orbit, as SecularPropagator does.
 [[nodiscard]] Propagation12 propagateSecular(const StateVector12&   s0,
                                              double                 dt,
                                              const ZonalParameters& zp    = {},
@@ -117,16 +122,18 @@ struct SecularRates {
 /// for when each fits.
 class SecularPropagator {
 public:
-    /// From mean elements (elliptic: e < 1).
+    /// From mean elements (elliptic: e < 1). Throws astro::Error unless a > 0 and 0 <= e < 1.
     explicit SecularPropagator(const KeplerianElements& mean,
                                const ZonalParameters&   zp    = {},
                                SecularOrder             order = SecularOrder::J2SquaredJ4);
     /// From an inertial state whose z axis is the Earth's pole; its osculating elements are taken
-    /// as mean elements (see propagateSecular).
+    /// as mean elements (see propagateSecular). Throws astro::Error unless s0 is on an elliptic
+    /// orbit: for a hyperbolic, parabolic or rectilinear state (r = 0, or r parallel to v).
     explicit SecularPropagator(const StateVector&     s0,
                                const ZonalParameters& zp    = {},
                                SecularOrder           order = SecularOrder::J2SquaredJ4);
     /// From a 12-component state; `mode` is as for propagateSecular(const StateVector12&, ...).
+    /// Throws astro::Error as the constructor from a StateVector does.
     SecularPropagator(const StateVector12&   s0,
                       const ZonalParameters& zp    = {},
                       SecularOrder           order = SecularOrder::J2SquaredJ4,
@@ -168,13 +175,15 @@ public:
     /// State and covariance dt seconds after the epoch: P = Phi P0 Phi^T, Phi from propagateStm. P0 is
     /// the covariance of epochState() (m^2, m^2/s, m^2/s^2) in its frame. There is no process noise:
     /// the covariance shows only how the model maps the initial uncertainty (see
-    /// NumericalPropagator::propagateGridWithCovariance for process noise).
+    /// NumericalPropagator::propagateGridWithCovariance for process noise). Throws astro::Error as
+    /// propagateStm does.
     [[nodiscard]] StateCovariance propagateWithCovariance(double dt, const Mat6& P0) const;
     /// States and covariances at dt = start + k * step for k = 0 .. out.size() - 1, written into
     /// `out`: the grid form of propagateWithCovariance, 25 grid propagations in all (1.2 us per
-    /// output; NumericalPropagator::propagateGridWithCovariance is faster on long grids).
+    /// output; NumericalPropagator::propagateGridWithCovariance is faster on long grids). Throws
+    /// astro::Error as propagateStm does.
     void propagateGridWithCovariance(double start, double step, const Mat6& P0, std::span<StateCovariance> out) const;
-    /// As above, returning `count` states and covariances.
+    /// As above, returning `count` states and covariances. Throws astro::Error as propagateStm does.
     [[nodiscard]] std::vector<StateCovariance>
     propagateGridWithCovariance(double start, double step, std::size_t count, const Mat6& P0) const;
     /// The input state the covariance methods refer to: the state given to the constructor, or for
@@ -197,10 +206,12 @@ protected:
     /// Selects the velocity of SecularPropagatorCorrected in the constructors below.
     struct RateVelocity {};
     /// As the public constructors, with velocities that are the time derivative of the positions.
+    /// Throws astro::Error as they do.
     SecularPropagator(RateVelocity, const KeplerianElements& mean, const ZonalParameters& zp, SecularOrder order);
     /// As above, from an inertial state whose osculating elements are taken as mean elements.
+    /// Throws astro::Error as the public constructor does.
     SecularPropagator(RateVelocity, const StateVector& s0, const ZonalParameters& zp, SecularOrder order);
-    /// As above, from a 12-component state.
+    /// As above, from a 12-component state. Throws astro::Error as the public constructor does.
     SecularPropagator(RateVelocity,
                       const StateVector12&   s0,
                       const ZonalParameters& zp,
@@ -224,10 +235,11 @@ private:
     template <class Emit>
     void grid(double start, double step, std::size_t count, Emit&& emit) const noexcept;
     /// The same kind of propagator from another input state (keeping acceleration, jerk and mode).
+    /// Throws astro::Error unless `s` is on an elliptic orbit.
     [[nodiscard]] SecularPropagator rebuilt(const StateVector& s) const;
     /// States of the trajectory (including an unmodeled force) on a grid.
     void trajectoryGrid(double start, double step, std::span<StateVector> out) const;
-    /// States and state transition matrices on a grid.
+    /// States and state transition matrices on a grid. Throws astro::Error as propagateStm does.
     void stmGrid(double start, double step, std::span<StateVector> states, std::span<Mat6> stm) const;
 
     KeplerianElements   mean_;
@@ -270,16 +282,18 @@ private:
 /// It is a SecularPropagator (pass it wherever one is accepted) and costs ~2 % more per output.
 class SecularPropagatorCorrected : public SecularPropagator {
 public:
-    /// From mean elements (elliptic: e < 1).
+    /// From mean elements (elliptic: e < 1). Throws astro::Error unless a > 0 and 0 <= e < 1.
     explicit SecularPropagatorCorrected(const KeplerianElements& mean,
                                         const ZonalParameters&   zp    = {},
                                         SecularOrder             order = SecularOrder::J2SquaredJ4);
     /// From an inertial state whose z axis is the Earth's pole; its osculating elements are taken
-    /// as mean elements, as for SecularPropagator.
+    /// as mean elements, as for SecularPropagator. Throws astro::Error as SecularPropagator does:
+    /// unless s0 is on an elliptic orbit.
     explicit SecularPropagatorCorrected(const StateVector&     s0,
                                         const ZonalParameters& zp    = {},
                                         SecularOrder           order = SecularOrder::J2SquaredJ4);
-    /// From a 12-component state; `mode` is as for SecularPropagator.
+    /// From a 12-component state; `mode` is as for SecularPropagator. Throws astro::Error as
+    /// SecularPropagator does: unless s0 is on an elliptic orbit.
     SecularPropagatorCorrected(const StateVector12&   s0,
                                const ZonalParameters& zp    = {},
                                SecularOrder           order = SecularOrder::J2SquaredJ4,

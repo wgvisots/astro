@@ -116,7 +116,9 @@ struct ImpactOptions {
     /// (3 cm at the surface) and about 20x cheaper to set up.
     FrameOptions frameOptions{PrecessionNutationModel::IAU2006_2000B, true};
     /// Precomputed GCRS <-> ITRS rotations covering [epoch, epoch + maxFlightTime], shared between
-    /// calls for speed (many predictions in the same time window). nullptr: built per call.
+    /// calls for speed (many predictions in the same time window). nullptr: built per call. When
+    /// set, the series is used as it is: the `eop` argument of predictImpact and `frameOptions`
+    /// above play no part.
     const ItrsRotationSeries* rotations{nullptr};
 };
 
@@ -131,7 +133,10 @@ struct ImpactOptions {
 ///
 /// The Earth orientation data matter: without UT1 - UTC the impact point can be wrong by up to
 /// ~420 m east-west, and without polar motion by up to ~15 m (pass ConstantEop{} only if that is
-/// acceptable). Throws astro::Error for an Earth-fixed `frame` or invalid options.
+/// acceptable). Throws astro::Error for an Earth-fixed `frame` or invalid options; if the Earth
+/// orientation data in use (`eop`, or options.rotations when given) do not cover the window from
+/// `epoch` to `epoch` + options.maxFlightTime; and as NumericalPropagator::propagateToEvent does
+/// (the integration can fail).
 [[nodiscard]] std::optional<Impact> predictImpact(const Time&          epoch,
                                                   const StateVector&   state,
                                                   Frame                frame,
@@ -143,7 +148,7 @@ struct ImpactOptions {
 /// options.accelerationNoisePsd) and mapped onto the surface: a position error moves the impact
 /// along the ground-relative velocity until it reaches the surface again. The result is linear,
 /// which holds while the errors are small next to the trajectory's curvature (see the accuracy
-/// page for a Monte Carlo comparison).
+/// page for a Monte Carlo comparison). Throws astro::Error as the overload above does.
 [[nodiscard]] std::optional<Impact> predictImpact(const Time&          epoch,
                                                   const StateVector&   state,
                                                   const Mat6&          covariance,

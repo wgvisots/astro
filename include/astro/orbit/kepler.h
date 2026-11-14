@@ -53,14 +53,17 @@ namespace astro {
 [[nodiscard]] double trueToParabolicAnomaly(double nu) noexcept;
 /// Parabolic: D -> true anomaly, nu = 2 atan(D).
 [[nodiscard]] double parabolicToTrueAnomaly(double D) noexcept;
-/// Barker's equation M = D + D^3/3.
+/// Barker's equation M = D + D^3/3. Here D = tan(nu / 2) and M is the parabolic mean anomaly
+/// sqrt(mu / (2 q^3)) (t - T), with q the perifocal distance and T the time of perifocal passage.
 [[nodiscard]] double parabolicToMeanAnomaly(double D) noexcept;
 /// Solve Barker's equation M = D + D^3/3 for D (closed form), to rounding for every M of either
 /// sign. D has the sign of M and is finite for every finite M; an infinite M gives an infinite D
 /// and a NaN M gives NaN.
 [[nodiscard]] double meanToParabolicAnomaly(double M) noexcept;
 
-/// Mean anomaly <-> true anomaly for any eccentricity.
+/// Mean anomaly <-> true anomaly for any eccentricity. Throws astro::Error as
+/// meanToEccentricAnomaly (e < 1) and meanToHyperbolicAnomaly (e > 1) do: for an e that is negative,
+/// infinite or NaN.
 [[nodiscard]] double meanToTrueAnomaly(double M, double e);
 /// True -> mean anomaly for any eccentricity (elliptic, parabolic or hyperbolic M).
 [[nodiscard]] double trueToMeanAnomaly(double nu, double e) noexcept;

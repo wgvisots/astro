@@ -65,7 +65,8 @@ struct ShadowResult {
 
 /// Shadow condition of a satellite at `sat` with the Sun at `sun` (geocentric).
 /// The conical model follows Montenbruck & Gill (2000), sec. 3.4.2, with a
-/// spherical Earth of radius `earthRadius`.
+/// spherical Earth of radius `earthRadius`. A satellite at the Earth's centre or
+/// at the Sun's position has no shadow geometry: the illumination is then NaN.
 [[nodiscard]] ShadowResult shadow(const Vec3& sat,
                                   const Vec3& sun,
                                   ShadowModel model       = ShadowModel::Conical,
@@ -86,10 +87,14 @@ struct EclipseInterval {
 
 /// Find eclipse intervals in [start, end] given geocentric satellite and Sun
 /// position functions (same frame). Sampled every `step` s and refined with Brent.
-/// Eclipses already in progress at `start` or `end` are clipped to the window.
+/// Eclipses already in progress at `start` or `end` are clipped to the window. An
+/// eclipse (or a sunlit gap) shorter than `step` can fall between two samples and be
+/// missed. The Sun's radius is the nominal one (constants::sunRadius).
 /// An empty window (end == start) returns no eclipse. Throws astro::Error if `end`
 /// is before `start`, if either time is NaN, if `step` is not positive and finite,
-/// or if the window holds more than 2e9 steps.
+/// or if the window holds more than 2e9 steps. Also throws if `end - start` does
+/// (one of the two in UT1, or a UTC time before 1960; see Time). An exception
+/// thrown by `satPosition` or `sunPosition` passes through.
 [[nodiscard]] std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>& satPosition,
                                                         const std::function<Vec3(const Time&)>& sunPosition,
                                                         const Time&                             start,

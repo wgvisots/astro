@@ -29,6 +29,13 @@
 namespace astro {
 
 /// Find a root of f in [a, b] by bisection. f(a) and f(b) must differ in sign.
+///
+/// `tol` is an absolute tolerance on x, in the units of x: the search ends when half the width of
+/// the bracket is below `tol`, and the middle of the bracket is returned. If that has not happened
+/// after `maxIter` halvings, the middle of the last bracket is returned all the same: reaching the
+/// limit is not an error.
+///
+/// Throws astro::Error if f(a) and f(b) have the same sign. An exception thrown by `f` passes through.
 template <class F>
 [[nodiscard]] double bisect(F&& f, double a, double b, double tol = 1e-12, int maxIter = 200) {
     double       fa = f(a);
@@ -59,7 +66,14 @@ template <class F>
 }
 
 /// Brent's method root finder on [a, b]. f(a) and f(b) must differ in sign.
-/// Converges to |x - root| <= tol.
+///
+/// `tol` is an absolute tolerance on x, in the units of x. The result x is within tol + 4 eps |x| of
+/// the root, where eps is the machine epsilon (2.2e-16). The second term is a floor that no tolerance
+/// lowers.
+///
+/// Throws astro::Error if f(a) and f(b) have the same sign, or if the root is not located that
+/// closely within `maxIter` iterations: reaching the limit is an error here, where bisect and
+/// brentMinimize return their last estimate. An exception thrown by `f` passes through.
 template <class F>
 [[nodiscard]] double brentRoot(F&& f, double a, double b, double tol = 1e-12, int maxIter = 200) {
     double fa = f(a), fb = f(b);
@@ -144,6 +158,9 @@ struct MinimizeResult {
 /// floor that no tolerance lowers: closer to a minimum than that, f differs from its least value by
 /// less than its own rounding error. A `tol` below the floor, such as the default, is therefore safe
 /// and costs no extra evaluations.
+///
+/// If the minimum has not been located that closely after `maxIter` iterations, the best point found
+/// so far is returned: reaching the limit is not an error. An exception thrown by `f` passes through.
 template <class F>
 [[nodiscard]] MinimizeResult brentMinimize(F&& f, double a, double b, double tol = 1e-10, int maxIter = 200) {
     constexpr double golden  = 0.3819660112501051;    // (3 - sqrt(5)) / 2
@@ -229,6 +246,15 @@ template <class F>
 }
 
 /// Newton-Raphson with a derivative. `fdf(x)` returns std::pair{f(x), f'(x)}.
+///
+/// `tol` is a relative tolerance with an absolute floor: the iteration ends, and returns x, when the
+/// last step |dx| is at most tol * (1 + |x|). So `tol` is relative where |x| is well above 1 and
+/// absolute, in the units of x, where |x| is well below 1. It is a test on the step, not a bound on
+/// the error.
+///
+/// Throws astro::Error if the derivative is exactly zero at an iterate, or if the test is not met
+/// within `maxIter` iterations: reaching the limit is an error, as in brentRoot. An exception thrown
+/// by `fdf` passes through.
 template <class FdF>
 [[nodiscard]] double newtonRoot(FdF&& fdf, double x0, double tol = 1e-14, int maxIter = 50) {
     double x = x0;

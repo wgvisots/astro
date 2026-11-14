@@ -43,8 +43,8 @@
 /// covariances.
 namespace astro {
 
-/// A state estimate: inertial position and velocity (z axis along the Earth's pole, e.g. GCRS) and
-/// their 6x6 covariance (m^2, m^2/s, m^2/s^2) at an epoch.
+/// A state estimate: position and velocity in the celestial frame named by TrackerOptions::frame
+/// (GCRS by default) and their 6x6 covariance (m^2, m^2/s, m^2/s^2) at an epoch.
 struct StateEstimate {
     Time        epoch;      ///< time of the estimate
     StateVector state;      ///< position (m) and velocity (m/s)
@@ -137,9 +137,9 @@ struct ConsistencyCheck {
     double elementsPValue{1.0};        ///< P(chi^2 with 6 dof >= elementsMahalanobis2) (NaN likewise)
     double semiMajorAxisResidual{0.0}; ///< new - predicted osculating semi-major axis (m; NaN likewise, with its sigma)
     double semiMajorAxisSigma{0.0};    ///< predicted 1-sigma of the semi-major axis (m)
-    bool   valid{false};               ///< false if the predicted covariance is not positive definite
-    bool   consistent{false};          ///< valid and the selected test's p-value >= alarmProbability
-    bool   replaced{false};            ///< whether the tracker took the new estimate (it is not older)
+    bool   valid{false}; ///< false if the predicted covariance is not positive definite (the statistics are then NaN)
+    bool   consistent{false}; ///< valid and the selected test's p-value >= alarmProbability
+    bool   replaced{false};   ///< whether the tracker took the new estimate (it is not older)
 };
 
 /// @{
@@ -153,11 +153,16 @@ struct ConsistencyCheck {
 
 /// The numerical propagator TrackerOptions describes, started from `e` (in options.frame): point
 /// mass and zonal field aligned with the true pole at e.epoch, with options.frame treated as
-/// inertial (frozen at e.epoch).
+/// inertial (frozen at e.epoch). Throws astro::Error as poleOfDateMatrix does: for an Earth-fixed
+/// options.frame (TIRS, PEF, ITRS), and if e.epoch cannot be converted to TT.
 [[nodiscard]] NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions& options = {});
 
 /// Propagate `prior` to next.epoch and compare it with `next` (see ConsistencyCheck). Throws
-/// astro::Error if either estimate has a non-finite state, covariance or epoch.
+/// astro::Error if either estimate has a non-finite state, covariance or epoch. Also throws for an
+/// Earth-fixed options.frame, if the propagation fails (as
+/// NumericalPropagator::propagateGridWithCovariance does, a negative
+/// options.accelerationNoisePsd included), and if the two epochs cannot be subtracted (see Time).
+/// A prediction on an open orbit does not throw: see ConsistencyTest::Elements.
 [[nodiscard]] ConsistencyCheck
 checkConsistency(const StateEstimate& prior, const StateEstimate& next, const TrackerOptions& options = {});
 
@@ -166,14 +171,18 @@ checkConsistency(const StateEstimate& prior, const StateEstimate& next, const Tr
 /// may be called concurrently, while update() needs exclusive access.
 class EstimateTracker {
 public:
-    /// Throws astro::Error if options.frame is not a celestial frame.
+    /// Throws astro::Error if options.frame is not a celestial frame, if
+    /// options.accelerationNoisePsd is negative or not finite, if options.alarmProbability is not
+    /// between 0 and 1, or if options.mu or options.re is not positive and finite.
     explicit EstimateTracker(TrackerOptions options = {});
 
     /// Take a new estimate. If there is a current one, `next` is first checked against it; the
     /// result is returned (nullopt for the first estimate). `next` then replaces the current
     /// estimate, consistent or not, unless it is older than the current one (check.replaced).
     /// Throws astro::Error, keeping the current estimate, if `next` has a non-finite state,
-    /// covariance or epoch.
+    /// covariance or epoch. Also throws, again keeping the current estimate, as checkConsistency
+    /// does when `next` is compared with it, and if next.epoch cannot be converted to TT (a UTC
+    /// time before 1960).
     std::optional<ConsistencyCheck> update(const StateEstimate& next);
 
     /// Whether an estimate has been taken yet.
@@ -181,11 +190,15 @@ public:
     /// The current estimate. Throws astro::Error if there is none yet.
     [[nodiscard]] const StateEstimate& current() const;
 
-    /// The current estimate propagated to t, with its covariance.
+    /// The current estimate propagated to t, with its covariance. Throws astro::Error if there is
+    /// no estimate yet, if t cannot be subtracted from the estimate's epoch (see Time), or if the
+    /// propagation fails (as NumericalPropagator::propagateGridWithCovariance does).
     [[nodiscard]] StateCovariance predict(const Time& t) const;
     /// States and covariances at current().epoch + start + k * step for k = 0 .. out.size() - 1.
+    /// Throws astro::Error if there is no estimate yet, or as
+    /// NumericalPropagator::propagateGridWithCovariance does.
     void predictGrid(double start, double step, std::span<StateCovariance> out) const;
-    /// As above, returning `count` predictions.
+    /// As above, returning `count` predictions. Throws astro::Error as the overload above does.
     [[nodiscard]] std::vector<StateCovariance> predictGrid(double start, double step, std::size_t count) const;
 
     /// The settings given at construction.

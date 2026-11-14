@@ -25,8 +25,9 @@ const std::vector<StateCovariance> out = prop.propagateGridWithCovariance(0.0, 6
 ```
 
 - The integrator's error control looks at the state only, so the steps, and the states, are exactly
-  those of `propagateGrid`. Between steps Phi uses quintic Hermite interpolation (relative error
-  2e-9 at the default tolerance, 4e-7 at relTol 1e-9).
+  those of `propagateGrid`. Between steps Phi uses quintic Hermite interpolation. Against stopping
+  exactly at each output, over 4 h at 10 s: 1e-8 relative at the default tolerance and 1e-6 at
+  relTol 1e-9 for near-circular orbits, ten times that for a 1000 x 20000 km orbit.
 - `Q(t)` is optional process noise: white, isotropic acceleration noise with power spectral density
   q (m^2/s^3), standing in for what the model leaves out. Over a short interval it adds about
   q t^3 / 3 to each position variance.
@@ -163,14 +164,15 @@ conservative [Bar-Shalom et al. (2001)](https://doi.org/10.1002/0471221279). `Tr
 
 | `ConsistencyTest` | False alarms (nominal 1e-3), gaps to 4 h | Sees a burn just before the delivery |
 |---|---|---|
-| `Elements` (default) | 0.0007-0.0013 in every case | yes |
-| `Position` | 0-0.003 | no: blind until the burn has moved the position |
+| `Elements` (default) | nominal in every case (1 or 2 alarms in 1500 samples) | yes |
+| `Position` | nominal (0 to 5 alarms in 1500 samples) | no: blind until the burn has moved the position |
 | `PositionVelocity` (Cartesian) | up to 0.06 (20 m / 2 cm/s priors) and 0.34 (100 m / 0.1 m/s) at 4 h | yes |
 
 Linear covariance propagation in Cartesian coordinates stops describing the error once it stretches
 along the orbit (the "banana" shape [Junkins et al. (1996)](../references.md)); in orbital elements the
 error grows mostly in one coordinate, the mean longitude, and stays close to Gaussian much longer
-[Aristoff, Horwood & Alfriend (2021)](https://doi.org/10.1007/s10569-021-10004-0). The full Monte Carlo tables are in [Accuracy](../accuracy.md).
+[Aristoff, Horwood & Alfriend (2021)](https://doi.org/10.1007/s10569-021-10004-0); the Monte Carlo comparison here follows
+[Sabol et al. (2010)](../references.md). The full Monte Carlo tables are in [Accuracy](../accuracy.md).
 
 ## Frames, tolerance and process noise
 

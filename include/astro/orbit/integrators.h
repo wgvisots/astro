@@ -51,7 +51,7 @@ OdeState<N> axpy(const OdeState<N>& y, double h, std::initializer_list<std::pair
 }
 } // namespace detail
 
-/// One classical 4th-order Runge-Kutta step.
+/// One classical 4th-order Runge-Kutta step. An exception thrown by `f` passes through.
 template <std::size_t N, class F>
 [[nodiscard]] OdeState<N> rk4Step(F&& f, double t, const OdeState<N>& y, double h) {
     const OdeState<N> k1  = f(t, y);
@@ -81,6 +81,7 @@ template <std::size_t N, class F>
 }
 
 /// Integrate with fixed-step RK4 from t0 to t1 (the last step is shortened to land on t1).
+/// Throws astro::Error if `step` is zero or negative. An exception thrown by `f` passes through.
 template <std::size_t N, class F>
 [[nodiscard]] OdeState<N> integrateRk4(F&& f, double t0, OdeState<N> y, double t1, double step) {
     if (step <= 0.0) {
@@ -132,7 +133,8 @@ struct AdaptiveStats {
 /// Throws astro::Error if t0 or t1 is not finite, if the options are unusable (a zero or
 /// non-finite initial step, maxStep not positive, minStep negative or above maxStep, negative
 /// tolerances or both zero), if f returns a value that is not finite and a smaller step does not
-/// cure it, if the error stays too large at minStep, or after maxSteps attempts.
+/// cure it, if the error stays too large at minStep, or after maxSteps attempts. An exception
+/// thrown by f or by onStep passes through.
 template <std::size_t N, class F, class OnStep>
 OdeState<N> integrateRkf78Steps(F&&                    f,
                                 double                 t0,
@@ -258,6 +260,7 @@ OdeState<N> integrateRkf78Steps(F&&                    f,
 
 /// Runge-Kutta-Fehlberg 7(8) adaptive integration from t0 to t1, landing exactly on t1.
 /// Error control per component: |err_i| <= absTol + relTol * max(|y_i|, |y_new_i|).
+/// Throws astro::Error as integrateRkf78Steps does.
 template <std::size_t N, class F>
 [[nodiscard]] OdeState<N> integrateRkf78(F&&                    f,
                                          double                 t0,

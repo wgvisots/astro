@@ -20,8 +20,20 @@ LEO, output every Y seconds:
 | `NumericalPropagator::propagateGrid12`, relTol 1e-9 | | | 0.13 ms |
 
 `SecularPropagatorCorrected` was timed in a later run, alongside `SecularPropagator::propagateGrid` at
-38.7 ns/output: the velocity correction adds about 2 %. Times for the numerical propagator are per propagation (all outputs). Two-body `propagateKepler`
-costs about 100 ns per call (70-180 ns from near-circular to e = 0.7); SGP4 about 0.3 us per call (1.3 us for deep-space SDP4).
+38.7 ns/output: the velocity correction adds about 2 %. Times for the numerical propagator are per
+propagation (all outputs).
+
+Single calls of the closed-form propagators, from the same benchmark:
+
+| Call | Time |
+|---|---|
+| `propagateKepler` | about 115 ns (70-180 ns from near-circular to e = 0.7) |
+| `Sgp4::propagate`, near-Earth orbit | 0.2 us |
+| `Sgp4::propagate`, deep-space orbit, within a day of its epoch | 0.45 us |
+| `Sgp4::propagate`, 12 h resonant orbit, one year from its epoch | 69 us |
+
+A resonant deep-space orbit costs more the further the time is from the epoch, because SGP4
+integrates its resonance terms from the epoch in 12 h steps on every call.
 
 What makes the grids fast:
 
@@ -115,4 +127,5 @@ build/bench/astro_propagation_bench 86400 60 100   # X seconds, Y seconds, numbe
 build/bench/astro_propagation_bench 14400 10 100
 build/bench/astro_covariance_bench
 build/bench/astro_conjunction_bench                # optional argument: window seconds
+build/bench/astro_impact_bench
 ```

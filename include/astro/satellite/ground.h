@@ -37,7 +37,9 @@ namespace astro {
 /// point even when it is not a whole number of steps from `start`). An empty window
 /// (end == start) gives the one point at `start`. Throws astro::Error if `end` is
 /// before `start`, if either time is NaN, if `step` is not positive and finite, or
-/// if the window holds more than 2e9 steps.
+/// if the window holds more than 2e9 steps. Also throws if `end - start` does (one
+/// of the two in UT1, or a UTC time before 1960; see Time). An exception thrown by
+/// `satItrs` passes through.
 [[nodiscard]] std::vector<Geodetic> groundTrack(const std::function<Vec3(const Time&)>& satItrs,
                                                 const Time&                             start,
                                                 const Time&                             end,

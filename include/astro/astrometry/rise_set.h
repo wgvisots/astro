@@ -66,7 +66,9 @@ struct SkyEvent {
 /// window is allowed: the window is always sampled at its two ends and at least
 /// once between. Throws astro::Error if `end` is before `start`, if either time
 /// or `threshold` is NaN, if `step` is not positive and finite, or if the window
-/// holds more than 2e9 steps.
+/// holds more than 2e9 steps. Also throws if `end - start` does (one of the two
+/// in UT1, or a UTC time before 1960; see Time). An exception thrown by
+/// `elevation` passes through.
 [[nodiscard]] std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&)>& elevation,
                                                         const Time&                               start,
                                                         const Time&                               end,
@@ -91,21 +93,25 @@ std::ostream& operator<<(std::ostream& os, Twilight value);
 /// Sun elevation defining the twilight (-6, -12 or -18 deg).
 [[nodiscard]] double twilightElevation(Twilight tw) noexcept;
 
-/// Geometric topocentric elevation of a body's center (no refraction).
+/// Geometric topocentric elevation of a body's center (no refraction). Throws
+/// astro::Error if `eop` has no data at `t` or `t` is before 1960 (see
+/// FrameTransformer), and if `eph` has no data for `body` at `t`.
 [[nodiscard]] double
 bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider& eop, const Ephemeris& eph);
 
 /// Sunrise/sunset (and solar transits) in [start, end] for a horizon elevation.
 /// The window is treated as by findElevationEvents(): empty gives no event, and
 /// `end` before `start` throws astro::Error. The same holds for twilight() and
-/// moonRiseSet().
+/// moonRiseSet(). All three also throw as bodyElevation() does, for any time
+/// in the window, and sunRiseSet() for a `horizon` that is NaN.
 [[nodiscard]] std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
                                                const Time&        start,
                                                const Time&        end,
                                                const EopProvider& eop,
                                                const Ephemeris&   eph,
                                                double             horizon = kSunriseElevation);
-/// Twilight begin (Rise) / end (Set) events.
+/// Twilight begin (Rise) / end (Set) events. Throws astro::Error as
+/// sunRiseSet() does.
 [[nodiscard]] std::vector<SkyEvent> twilight(Twilight           tw,
                                              const Geodetic&    site,
                                              const Time&        start,
@@ -113,6 +119,8 @@ bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider&
                                              const EopProvider& eop,
                                              const Ephemeris&   eph);
 /// Moonrise/moonset of the upper limb with 34' refraction (topocentric, so parallax is included).
+/// Like sunRiseSet(), it also returns the transits.
+/// Throws astro::Error as sunRiseSet() does.
 [[nodiscard]] std::vector<SkyEvent>
 moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop, const Ephemeris& eph);
 
@@ -125,6 +133,7 @@ struct MoonPhase {
     bool   waxing{false};            ///< true while `age` < pi (new to full)
 };
 /// Geocentric phase of the Moon at `t`, from the Moon and Sun positions in `eph`.
+/// Throws astro::Error if `eph` has no data for the Moon or the Sun at `t`.
 [[nodiscard]] MoonPhase moonPhase(const Time& t, const Ephemeris& eph);
 
 } // namespace astro

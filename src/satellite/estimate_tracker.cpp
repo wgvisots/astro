@@ -266,6 +266,17 @@ checkConsistency(const StateEstimate& prior, const StateEstimate& next, const Tr
 EstimateTracker::EstimateTracker(TrackerOptions options)
     : opt_(std::move(options)) {
     requireCelestial(opt_.frame);
+    // Refuse here what would otherwise make every later update() throw, leaving a tracker that can
+    // never accept a delivery.
+    if (!(opt_.accelerationNoisePsd >= 0.0) || !std::isfinite(opt_.accelerationNoisePsd)) {
+        throw Error("EstimateTracker: accelerationNoisePsd must be finite and not negative");
+    }
+    if (!(opt_.alarmProbability >= 0.0 && opt_.alarmProbability <= 1.0)) {
+        throw Error("EstimateTracker: alarmProbability must be between 0 and 1");
+    }
+    if (!(opt_.mu > 0.0) || !std::isfinite(opt_.mu) || !(opt_.re > 0.0) || !std::isfinite(opt_.re)) {
+        throw Error("EstimateTracker: mu and re must be positive and finite");
+    }
 }
 
 std::optional<ConsistencyCheck> EstimateTracker::update(const StateEstimate& next) {

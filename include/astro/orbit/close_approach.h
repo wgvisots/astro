@@ -93,6 +93,8 @@ public:
     Trajectory(StateFunction stateAt);
     /// Any callable taking a Time and returning a StateVector, so that a lambda can be passed
     /// wherever a Trajectory is expected: `[&prop](const Time& t) { return prop.propagate(t); }`.
+    /// Throws astro::Error if `stateAt` converts to an empty function (a null function pointer,
+    /// for one).
     template <class F>
         requires(!std::same_as<std::remove_cvref_t<F>, Trajectory>
                  && !std::same_as<std::remove_cvref_t<F>, StateFunction>
@@ -100,11 +102,15 @@ public:
     Trajectory(F&& stateAt)
         : Trajectory(StateFunction(std::forward<F>(stateAt))) {}
 
-    /// Position (m) and velocity (m/s) at time t.
+    /// Position (m) and velocity (m/s) at time t. Throws astro::Error as propagateKepler does
+    /// (TwoBody model), and if t cannot be subtracted from the epoch (one of the two in UT1, or a
+    /// UTC time before 1960; see Time). An exception thrown by a wrapped function passes through.
     [[nodiscard]] StateVector state(const Time& t) const;
 
     /// The trajectory as a function of seconds after `origin`. The search uses this so that an
-    /// element set or state costs one propagation per sample, with no Time arithmetic.
+    /// element set or state costs one propagation per sample, with no Time arithmetic. Throws
+    /// astro::Error if `origin` cannot be subtracted from the epoch (see Time). The function
+    /// returned throws as state() does.
     [[nodiscard]] std::function<StateVector(double)> secondsAfter(const Time& origin) const;
 
 private:
@@ -161,7 +167,8 @@ struct CloseApproach {
 ///     closestApproach({epoch1, elements1}, {epoch2, state2}, start, end);
 ///
 /// Throws astro::Error if end is before start, for options that are not positive and finite, or
-/// if a trajectory returns a non-finite state.
+/// if a trajectory returns a non-finite state. Also throws as Trajectory::state does, for either
+/// trajectory, and if `end - start` does (see Time).
 [[nodiscard]] CloseApproach closestApproach(const Trajectory&           first,
                                             const Trajectory&           second,
                                             const Time&                 start,
@@ -173,7 +180,7 @@ struct CloseApproach {
 /// none is flagged atBoundary; one that falls exactly on `end` is included, one exactly on `start`
 /// is not. Objects that keep a constant distance (the same orbit, a fixed phase apart) have no
 /// minimum: a change of sign of the range rate within its rounding error is ignored. Same search
-/// and errors as closestApproach.
+/// as closestApproach. Throws astro::Error as closestApproach does, and if `maxDistance` is NaN.
 [[nodiscard]] std::vector<CloseApproach> closeApproaches(const Trajectory& first,
                                                          const Trajectory& second,
                                                          const Time&       start,
@@ -240,7 +247,8 @@ struct CollisionProbability {
                                                         double               hardBodyRadius);
 
 /// As above, from 6x6 position/velocity covariances (only the position blocks are used), e.g. from
-/// NumericalPropagator::propagateGridWithCovariance at the time of the approach.
+/// NumericalPropagator::propagateGridWithCovariance at the time of the approach. Throws
+/// astro::Error as the overload above does.
 [[nodiscard]] CollisionProbability collisionProbability(const CloseApproach& approach,
                                                         const Mat6&          covariance1,
                                                         const Mat6&          covariance2,
@@ -275,7 +283,10 @@ public:
 
     /// The trajectory the search samples.
     [[nodiscard]] const Trajectory& trajectory() const noexcept { return trajectory_; }
-    /// State and covariance at time t.
+    /// State and covariance at time t. Throws astro::Error as propagateKeplerWithCovariance
+    /// (TwoBody model) or SecularPropagator::propagateWithCovariance (secular models) does, and if
+    /// t cannot be subtracted from the epoch (see Time). An exception thrown by a wrapped function
+    /// passes through.
     [[nodiscard]] StateCovariance stateCovariance(const Time& t) const;
 
 private:
@@ -301,7 +312,8 @@ struct ConjunctionAssessment {
 /// The closest approach is not always the most probable collision; assessConjunctions gives every
 /// approach. If it is at an end of the window (approach.atBoundary) it is not a true closest
 /// approach, and the probability is that of the straight-line encounter through it. Throws
-/// astro::Error as closestApproach and collisionProbability do.
+/// astro::Error as closestApproach, UncertainTrajectory::stateCovariance and collisionProbability
+/// do.
 [[nodiscard]] ConjunctionAssessment assessConjunction(const UncertainTrajectory&  first,
                                                       const UncertainTrajectory&  second,
                                                       const Time&                 start,
@@ -311,7 +323,8 @@ struct ConjunctionAssessment {
 
 /// Every local minimum of the distance strictly inside [start, end] no farther than `maxDistance`
 /// (m), as closeApproaches, each with its covariances and collision probability, in time order.
-/// Throws astro::Error as closeApproaches and collisionProbability do.
+/// Throws astro::Error as closeApproaches, UncertainTrajectory::stateCovariance and
+/// collisionProbability do.
 [[nodiscard]] std::vector<ConjunctionAssessment>
 assessConjunctions(const UncertainTrajectory&  first,
                    const UncertainTrajectory&  second,

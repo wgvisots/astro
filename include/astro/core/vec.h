@@ -118,7 +118,7 @@ struct Vec3 {
     return dot(a, a);
 }
 /// Euclidean length. Uses sqrt(a.a) rather than std::hypot: the three-argument hypot guards
-/// against overflow far outside any physical range here and is ~20x slower.
+/// against overflow far outside any physical range here and is several times slower (5.5x measured).
 [[nodiscard]] inline double norm(const Vec3& a) noexcept {
     return std::sqrt(dot(a, a));
 }

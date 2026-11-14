@@ -1,8 +1,9 @@
 # References
 
 The standards, papers and books the implementations follow, grouped by topic, with what each is
-used for. DOIs and links were checked when this list was written (November 2026); the two marked
-"link not checked" could not be reached from the checking machine. Third-party tables, test data and
+used for. DOIs and links were checked when this list was written (November 2026); those marked
+"link not checked" could not be reached from the checking machine, and books and older papers
+without a link are cited from the works that use them (ERFA and the IERS Conventions). Third-party tables, test data and
 ported code included in the repository are credited in
 [THIRD_PARTY_NOTICES.md](https://github.com/wgvisots/astro/blob/main/THIRD_PARTY_NOTICES.md).
 
@@ -29,7 +30,15 @@ ported code included in the repository are credited in
 ## Time
 
 - **Fairhead, L. & Bretagnon, P. (1990).** An analytical formula for the time transformation
-  TB-TT. *A&A* 229, 240-247. <https://ui.adsabs.harvard.edu/abs/1990A%26A...229..240F>. TDB - TT.
+  TB-TT. *A&A* 229, 240-247. <https://ui.adsabs.harvard.edu/abs/1990A%26A...229..240F>. TDB - TT:
+  the model in its full form (787 terms) as distributed in ERFA's `eraDtdb`.
+- **Moyer, T. D. (1981).** Transformation from proper time on Earth to coordinate time in solar
+  system barycentric space-time frame of reference, parts 1 and 2. *Celest. Mech.* 23, 33-56 and
+  57-68. <https://doi.org/10.1007/BF01228543>, <https://doi.org/10.1007/BF01228544>. With
+  **Murray, C. A. (1983)**, *Vectorial Astrometry*, Adam Hilger: the topocentric terms of TDB - TT.
+- **IAU resolutions** 2000 B1.9 (TT and the constant L_G), 2006 B3 (TDB, L_B and TDB0), 2012 B2
+  (the astronomical unit) and 2015 B3 (nominal solar and planetary constants).
+  <https://www.iau.org/> (link not checked). The constants in `core/constants.h`.
 - **IERS Bulletin C** (leap seconds): <https://datacenter.iers.org/data/latestVersion/bulletinC.txt>;
   `Leap_Second.dat`: <https://hpiers.obspm.fr/iers/bul/bulc/Leap_Second.dat>.
 - **IANA time zone database**, `leap-seconds.list`: <https://data.iana.org/time-zones/data/leap-seconds.list>.
@@ -44,6 +53,16 @@ ported code included in the repository are credited in
 
 - **Capitaine, N. & Wallace, P. T. (2006).** High precision methods for locating the celestial
   intermediate pole and origin. *A&A* 450, 855-872. <https://doi.org/10.1051/0004-6361:20054550>.
+- **Wallace, P. T. & Capitaine, N. (2006).** Precession-nutation procedures consistent with IAU
+  2006 resolutions. *A&A* 459(3), 981-985. <https://doi.org/10.1051/0004-6361:20065897>. The
+  CIO-based and Fukushima-Williams procedures.
+- **Mathews, P. M., Herring, T. A. & Buffett, B. A. (2002).** Modeling of nutation and precession:
+  New nutation series for nonrigid Earth and insights into the Earth's interior. *J. Geophys.
+  Res.* 107(B4). <https://doi.org/10.1029/2001JB000390>. The IAU 2000A nutation.
+- **Simon, J.-L. et al. (1994).** Numerical expressions for precession formulae and mean elements
+  for the Moon and the planets. *A&A* 282(2), 663-683. The fundamental arguments.
+- **Aoki, S. et al. (1982).** The new definition of universal time. *A&A* 105(2), 359-361.
+  Greenwich mean sidereal time of 1982 (`gmst82`), which places the equinox of TEME.
 - **Hilton, J. L. et al. (2006).** Report of the IAU Division I Working Group on Precession and
   the Ecliptic. *Celest. Mech. Dyn. Astr.* 94, 351-367. <https://doi.org/10.1007/s10569-006-0001-2>.
   IAU 2006 precession, Fukushima-Williams angles.
@@ -58,8 +77,16 @@ ported code included in the repository are credited in
 
 ## Geodesy
 
-- **Vermeille, H. (2011).** An analytical method to transform geocentric into geodetic
-  coordinates. *J. Geodesy* 85, 105-117. <https://doi.org/10.1007/s00190-010-0419-x>.
+- **Vermeille, H. (2002).** Direct transformation from geocentric coordinates to geodetic
+  coordinates. *J. Geodesy* 76(8), 451-454. <https://doi.org/10.1007/s00190-002-0273-6>. The closed
+  form of `ecefToGeodetic` outside the evolute.
+- **Vermeille, H. (2004).** Computing geodetic coordinates from geocentric coordinates.
+  *J. Geodesy* 78(1-2). <https://doi.org/10.1007/s00190-004-0375-4>. Its half-angle longitude.
+- **Moritz, H. (2000).** Geodetic Reference System 1980. *J. Geodesy* 74(1), 128-133.
+  <https://doi.org/10.1007/s001900050278>. The GRS80 ellipsoid (`Ellipsoid::grs80`).
+- **Intergovernmental Committee on Surveying and Mapping.** *Geocentric Datum of Australia Technical
+  Manual*. <https://www.icsm.gov.au/> (link not checked). The Flinders Peak to Buninyong line in the
+  geodesic tests.
 - **Vincenty, T. (1975).** Direct and inverse solutions of geodesics on the ellipsoid with
   application of nested equations. *Survey Review* 23(176), 88-93. <https://doi.org/10.1179/sre.1975.23.176.88>.
 - **NGA (2014).** *Department of Defense World Geodetic System 1984: Its Definition and
@@ -76,9 +103,13 @@ ported code included in the repository are credited in
   and *DAF Required Reading* <https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/daf.html>. The SPK reader.
 - **Meeus, J. (1998).** *Astronomical Algorithms*, 2nd ed. Willmann-Bell, ISBN 0-943396-61-1.
   Low-precision Sun, rise/set; also the source used for Saemundsson's refraction formula
-  (Saemundsson, *Sky & Telescope* 72, 70, 1986).
+  (Saemundsson, *Sky & Telescope* 72, 70, 1986) and for the zenith terms of both simple refraction
+  formulas (chapter 16). Cited from the book, which is not online.
 - **Bennett, G. G. (1982).** The calculation of astronomical refraction in marine navigation.
   *J. Navigation* 35, 255-259. <https://doi.org/10.1017/S0373463300022037>.
+- **Green, R. M. (1987).** *Spherical Astronomy*. Cambridge University Press; and **Hohenkerk, C. Y.
+  & Sinclair, A. T. (1985)**, NAO Technical Note 63. The two-term refraction model behind
+  `refractionConstants`, as cited by ERFA's `eraRefco`, which that function follows.
 - **ESA (1997).** *The Hipparcos and Tycho Catalogues*, ESA SP-1200, Vol. 1, Sect. 1.5.3.
   <https://ui.adsabs.harvard.edu/abs/1997ESASP1200.....E>. ICRS <-> galactic matrix.
 
@@ -125,13 +156,22 @@ ported code included in the repository are credited in
 - **Shampine, L. F. & Thompson, S. (2000).** Event location for ordinary differential equations.
   *Computers & Mathematics with Applications* 39(5-6), 43-54.
   <https://doi.org/10.1016/S0898-1221%2800%2900045-6>. Locating events (impact) on the dense output.
-- **Brent, R. P. (1973).** *Algorithms for Minimization without Derivatives*. Prentice-Hall
-  (Dover reprint, 2002). Brent's method for event times (impacts, passes, rise and set) and times
-  of closest approach.
 - **Shepperd, S. W. (1978).** Quaternion from rotation matrix. *J. Guidance and Control* 1(3),
   223-224. <https://doi.org/10.2514/3.55767b>.
 - **Clohessy, W. H. & Wiltshire, R. S. (1960).** Terminal guidance system for satellite
   rendezvous. *J. Aerospace Sci.* 27(9), 653-658. <https://doi.org/10.2514/8.8704>. Relative motion in RIC.
+- **CCSDS (2019).** *Navigation Data: Definitions and Conventions*. CCSDS 500.0-G-4 (Green Book).
+  <https://ccsds.org/Pubs/500x0g4.pdf>. Section 4.3.7: the local orbital frames (RIC, also called
+  RSW or RTN; LVLH; TNW, here `ntwMatrix`).
+
+## Numerical methods
+
+- **Brent, R. P. (1973).** *Algorithms for Minimization without Derivatives*. Prentice-Hall
+  (Dover reprint, 2002). Brent's method for event times (impacts, passes, rise and set) and times
+  of closest approach.
+- **Kahan, W. (2006).** *How Futile are Mindless Assessments of Roundoff in Floating-Point
+  Computation?* <https://people.eecs.berkeley.edu/~wkahan/Mindless.pdf>. Section 12: the angle
+  between two vectors without loss of digits near 0 and 180 degrees (`slerp`, `angleBetween`).
 
 ## Conjunctions and collision probability
 
@@ -182,7 +222,9 @@ ported code included in the repository are credited in
   elements and their use for uncertainty propagation. *Celest. Mech. Dyn. Astr.* 133, 9.
   <https://doi.org/10.1007/s10569-021-10004-0>. Why the element-space consistency test holds up.
 - **Sabol, C. et al. (2010).** Linearized orbit covariance generation and propagation analysis via
-  simple Monte Carlo simulations. 20th AAS/AIAA Space Flight Mechanics Meeting.
+  simple Monte Carlo simulations. 20th AAS/AIAA Space Flight Mechanics Meeting, AAS 10-134. Monte
+  Carlo comparison of covariance propagation in Cartesian and element coordinates, the method of
+  `astro_study_consistency`.
 - **Julier, S. J. & Uhlmann, J. K. (1997).** A non-divergent estimation algorithm in the presence of
   unknown correlations. *Proc. American Control Conf.*, 2369-2373.
   <https://doi.org/10.1109/ACC.1997.609105>. Covariance intersection.

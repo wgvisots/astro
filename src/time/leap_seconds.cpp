@@ -32,7 +32,8 @@ namespace astro {
 
 namespace {
 
-// TAI-UTC history (USNO tai-utc.dat / IERS Bulletin C).
+// TAI-UTC history: USNO tai-utc.dat from 1961 and IERS Bulletin C from 1972. The first entry, for
+// 1960, is the one ERFA (eraDat) uses; tai-utc.dat starts in 1961.
 const std::vector<LeapSecondEntry>& builtinEntries() {
     static const std::vector<LeapSecondEntry> e = {
         {1960, 1, 1.4178180, 37300.0, 0.0012960},

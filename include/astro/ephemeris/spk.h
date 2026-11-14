@@ -72,11 +72,12 @@ public:
     SpkEphemeris& operator=(SpkEphemeris&&) noexcept;
 
     /// As stateById(), with the NAIF ids of `target` and `center` and the ephemeris time of `t`.
+    /// Throws astro::Error as stateById() and ephemerisTime() do.
     [[nodiscard]] StateVector state(Body target, Body center, const Time& t) const override;
     /// State by NAIF id at an ephemeris time (TDB seconds past J2000); meters, m/s, ICRF axes.
     /// Throws astro::Error if a body on the way from `target` to `center` is not in the kernel or
     /// has no segment covering `et`, or if that segment is of an unsupported type or not in the
-    /// J2000 frame.
+    /// J2000 frame. Also throws if a record cannot be read from the file or is corrupt.
     [[nodiscard]] StateVector stateById(int target, int center, double et) const;
 
     /// Summaries of all segments, in file order.
@@ -89,7 +90,8 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-/// TDB seconds past J2000.0 for a time in any scale.
+/// TDB seconds past J2000.0 for a time in any scale. Throws astro::Error if `t` cannot be
+/// converted to TDB: a UTC time before 1960, or a UT1 time (there is no Earth orientation data here).
 [[nodiscard]] double ephemerisTime(const Time& t);
 
 } // namespace astro
