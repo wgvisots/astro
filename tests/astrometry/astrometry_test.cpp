@@ -726,3 +726,33 @@ TEST(Apparent, RefractedBodyElevationIsTheUnrefractedOneRefracted) {
         EXPECT_NEAR(ref.range, raw.range, 1e-3);
     }
 }
+
+TEST(Spherical, RaDecOnTheZAxisHasRaZero) {
+    // Documented: RA is 0 on the z axis; declination +-90 deg there.
+    const RaDec north = raDecFromVector({0.0, 0.0, 3.0});
+    EXPECT_EQ(north.ra, 0.0);
+    EXPECT_EQ(north.dec, constants::halfPi);
+    EXPECT_EQ(north.distance, 3.0);
+    const RaDec south = raDecFromVector({0.0, 0.0, -1.0});
+    EXPECT_EQ(south.ra, 0.0);
+    EXPECT_EQ(south.dec, -constants::halfPi);
+    // RA just short of 2 pi stays in [0, 2 pi).
+    const RaDec r = raDecFromVector({1.0, -1e-17, 0.0});
+    EXPECT_GE(r.ra, 0.0);
+    EXPECT_LT(r.ra, constants::twoPi);
+}
+
+TEST(RiseSet, MoonIsWaningBetweenFullAndNew) {
+    // Between the full moon of 2024-01-25 and the new moon of 2024-02-09 the age runs from 180 to
+    // 360 deg: waning, and the illuminated fraction falls.
+    const SpkEphemeris eph(dataPath("de440s_2024q1_le.bsp"));
+    const MoonPhase    a = moonPhase(Time::fromIso8601("2024-01-29T00:00:00Z"), eph);
+    const MoonPhase    b = moonPhase(Time::fromIso8601("2024-02-04T00:00:00Z"), eph);
+    EXPECT_FALSE(a.waxing);
+    EXPECT_FALSE(b.waxing);
+    EXPECT_GT(a.age, constants::pi);
+    EXPECT_GT(b.age, a.age);
+    EXPECT_GT(a.illuminatedFraction, b.illuminatedFraction);
+    // The illuminated fraction is (1 + cos(phase angle)) / 2.
+    EXPECT_NEAR(a.illuminatedFraction, 0.5 * (1.0 + std::cos(a.phaseAngle)), 1e-15);
+}
