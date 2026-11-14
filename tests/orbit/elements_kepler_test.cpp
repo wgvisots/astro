@@ -768,3 +768,149 @@ TEST(Secular, PropagateSecularRejectsTheSameElementsAsThePropagatorClass) {
     const double            raan = propagateSecular(el, 1000.0, zp, SecularOrder::J2).raan;
     EXPECT_NEAR(raan, 0.5 + j2Rates(el.a, el.e, el.i, zp).raanDot * 1000.0, 1e-15);
 }
+
+// ------------------------------------------------------------------------- Smaller helpers
+
+namespace {
+
+/// Eccentric (e < 1) or hyperbolic (e > 1) anomaly from the true anomaly, in extended precision,
+/// from tan(E/2) = sqrt((1 - e) / (1 + e)) tan(nu/2) and tanh(F/2) = sqrt((e - 1) / (e + 1)) tan(nu/2).
+long double anomalyFromTrue(double nu, double e) {
+    using L    = long double;
+    const L el = e, t = std::tan(0.5L * static_cast<L>(nu));
+    return el < 1.0L ? 2.0L * std::atan(std::sqrt((1.0L - el) / (1.0L + el)) * t)
+                     : 2.0L * std::atanh(std::sqrt((el - 1.0L) / (el + 1.0L)) * t);
+}
+
+} // namespace
+
+TEST(Elements, EccentricAndMeanAnomalyOfTheElementsFollowTheirDefinitions) {
+    // E and M = E - e sin E (ellipse), F and M = e sinh F - F (hyperbola), from the half-angle forms
+    // in extended precision. Angles are compared modulo 2 pi. Allowed: 8 rounding errors of E and of
+    // nu carried into E (dE/dnu = sqrt(|1 - e^2|) / (1 + e cos nu), 14 near the apoapsis at e = 0.99),
+    // times dM/dE for M (measured: up to 0.15 of these).
+    for (const double e : {0.0, 0.1, 0.7, 0.99, 1.2, 3.0}) {
+        const double nuMax = e < 1.0 ? kPi : 0.95 * std::acos(-1.0 / e);
+        for (const double f : {-0.9, -0.3, 0.0, 0.2, 0.6, 0.99}) {
+            const double            nu = f * nuMax;
+            const KeplerianElements el{(e < 1.0 ? 1.0 : -1.0) * 9000.0 * km,
+                                       e,
+                                       0.5,
+                                       1.0,
+                                       2.0,
+                                       e < 1.0 ? wrapTwoPi(nu) : nu};
+            const long double       E    = anomalyFromTrue(nu, e);
+            const long double       M    = e < 1.0 ? E - e * std::sin(E) : e * std::sinh(E) - E;
+            const double            dEdv = std::sqrt(std::abs(1.0 - e * e)) / (1.0 + e * std::cos(nu));
+            const double            dMdE =
+                e < 1.0 ? 1.0 - e * std::cos(static_cast<double>(E)) : e * std::cosh(static_cast<double>(E)) - 1.0;
+            const double tolE = 8.0 * kEps * (std::abs(static_cast<double>(E)) + kTwoPi * dEdv);
+            const double tolM = tolE * dMdE + 8.0 * kEps * std::abs(static_cast<double>(M));
+            EXPECT_NEAR(angleDifference(el.eccentricAnomaly(), static_cast<double>(E)), 0.0, tolE)
+                << "e=" << e << " nu=" << nu;
+            EXPECT_NEAR(angleDifference(el.meanAnomaly(), static_cast<double>(M)), 0.0, tolM)
+                << "e=" << e << " nu=" << nu;
+        }
+    }
+}
+
+TEST(Elements, ElementsFromMeanAnomalySolveKeplersEquation) {
+    // The true anomaly returned must put the mean anomaly back, evaluated in extended precision from
+    // the half-angle form (independent of the library's anomaly functions), and the other elements
+    // are passed through. Allowed: 8 rounding errors of M and e (measured: up to 0.2 of these).
+    for (const double e : {0.0, 0.3, 0.9, 1.5}) {
+        for (const double M : {-2.0, -1e-6, 0.0, 0.4, 3.0, 5.5}) {
+            const KeplerianElements el = elementsFromMeanAnomaly(7000.0 * km, e, 0.5, 1.0, 2.0, M);
+            EXPECT_EQ(el.a, 7000.0 * km);
+            EXPECT_EQ(el.e, e);
+            EXPECT_EQ(el.i, 0.5);
+            EXPECT_EQ(el.raan, 1.0);
+            EXPECT_EQ(el.argp, 2.0);
+            const long double E    = anomalyFromTrue(el.nu, e);
+            const long double back = e < 1.0 ? E - e * std::sin(E) : e * std::sinh(E) - E;
+            const double      tol  = 8.0 * kEps * (std::abs(M) + 1.0) * (1.0 + e);
+            EXPECT_NEAR(e < 1.0 ? angleDifference(static_cast<double>(back), M) : static_cast<double>(back) - M,
+                        0.0,
+                        tol)
+                << "e=" << e << " M=" << M;
+        }
+    }
+    EXPECT_THROW((void)elementsFromMeanAnomaly(7000.0 * km, -0.1, 0.5, 1.0, 2.0, 1.0), Error);
+    EXPECT_THROW((void)elementsFromMeanAnomaly(7000.0 * km, kNaN, 0.5, 1.0, 2.0, 1.0), Error);
+}
+
+TEST(Elements, FlightPathAngleAndApsidesMatchTheConic) {
+    // tan(gamma) = e sin nu / (1 + e cos nu) for any conic; |r| at nu = 0 and pi is a (1 - e) and
+    // a (1 + e). States from the extended-precision perifocal construction.
+    for (const double e : {0.0, 0.2, 0.8, 1.5}) {
+        const double a = (e < 1.0 ? 1.0 : -1.0) * 12000.0 * km;
+        for (const double nu : {-1.5, -0.4, 0.0, 0.7, 1.9}) {
+            if (e > 1.0 && std::abs(nu) > 0.95 * std::acos(-1.0 / e)) {
+                continue;
+            }
+            const StateVector s     = stateFromElements(a, e, 0.9, 1.0, 2.0, nu);
+            const double      gamma = std::atan2(e * std::sin(nu), 1.0 + e * std::cos(nu));
+            EXPECT_NEAR(flightPathAngle(s), gamma, 8.0 * kEps) << "e=" << e << " nu=" << nu;
+        }
+        const double rp = norm(stateFromElements(a, e, 0.9, 1.0, 2.0, 0.0).r);
+        EXPECT_NEAR(periapsisRadius(a, e), rp, 4.0 * kEps * rp) << "e=" << e;
+        if (e < 1.0) {
+            const double ra = norm(stateFromElements(a, e, 0.9, 1.0, 2.0, kPi).r);
+            EXPECT_NEAR(apoapsisRadius(a, e), ra, 4.0 * kEps * ra) << "e=" << e;
+        }
+    }
+}
+
+TEST(Kepler, ParabolicAnomalyIsTheTangentOfHalfTheTrueAnomaly) {
+    // D = tan(nu / 2) and back, and the time law: on a parabola of perifocal distance q the radius is
+    // q (1 + D^2) = 2 q / (1 + cos nu).
+    for (const double nu : {-3.0, -1.0, -1e-9, 0.0, 0.5, 2.0, 3.1}) {
+        const double D = trueToParabolicAnomaly(nu);
+        EXPECT_NEAR(D, std::tan(0.5 * nu), 4.0 * kEps * std::abs(D)) << "nu=" << nu;
+        EXPECT_NEAR(parabolicToTrueAnomaly(D), nu, 4.0 * kEps * std::max(1.0, std::abs(nu))) << "nu=" << nu;
+        const long double radius = 2.0L / (1.0L + std::cos(static_cast<long double>(nu))); // r / q
+        EXPECT_NEAR(1.0 + D * D, static_cast<double>(radius), 8.0 * kEps * (1.0 + D * D)) << "nu=" << nu;
+    }
+    EXPECT_NEAR(parabolicToTrueAnomaly(1e300), kPi, 4.0 * kEps);
+    EXPECT_NEAR(parabolicToTrueAnomaly(-1e300), -kPi, 4.0 * kEps);
+}
+
+TEST(Elements, ConversionsRefuseStatesAndElementsWithoutAnOrbit) {
+    const double      r = 7000.0 * km, v = std::sqrt(constants::gmEarth / r);
+    const StateVector circular{
+        {r,   0.0, 0.0},
+        {0.0, v,   0.0}
+    };
+    // Rectilinear: r = 0, or r parallel to v.
+    EXPECT_THROW((void)stateToElements({Vec3{}, circular.v}), Error);
+    EXPECT_THROW((void)stateToElements({
+                     circular.r,
+                     Vec3{2.0 * v, 0.0, 0.0}
+    }),
+                 Error);
+    // Parabolic: escape speed exactly.
+    EXPECT_THROW((void)stateToElements({circular.r, circular.v * std::sqrt(2.0)}), Error);
+    // A semi-latus rectum that is not positive.
+    EXPECT_THROW((void)elementsToState({-7000.0 * km, 0.5, 0.5, 1.0, 2.0, 0.3}), Error);
+    EXPECT_THROW((void)elementsToState({7000.0 * km, 1.5, 0.5, 1.0, 2.0, 0.3}), Error);
+    const StateVector retrograde{
+        {r,   0.0, 0.0},
+        {0.0, -v,  0.0}
+    };
+    // Retrograde equatorial: the equinoctial elements are singular there, and the message says so.
+    const auto refusedAsRetrograde = [](auto&& convert) {
+        try {
+            convert();
+            ADD_FAILURE() << "no exception for a retrograde equatorial orbit";
+        } catch (const Error& e) {
+            EXPECT_NE(std::string(e.what()).find("retrograde"), std::string::npos) << e.what();
+        }
+    };
+    refusedAsRetrograde([&] { (void)stateToEquinoctial(retrograde); });
+    refusedAsRetrograde([&] { (void)stateToEquinoctialJacobian(retrograde); });
+    // ... while a slightly inclined retrograde orbit still converts.
+    EXPECT_NO_THROW((void)stateToEquinoctial({
+        circular.r,
+        Vec3{0.0, -v, 1e-3 * v}
+    }));
+}

@@ -158,6 +158,37 @@ TEST(SecularPropagator, StatesAreTheTwoBodyStatesOfTheDriftingMeanElements) {
     EXPECT_THROW(SecularPropagator(KeplerianElements{7000 * km, 1.2, 0.5, 0, 0, 0}), Error);
 }
 
+TEST(SecularPropagator, ElementsAreTheMeanElementsAtEachTime) {
+    // meanElements() is what the propagator was built from (or the osculating elements of the input
+    // state); elements(dt) has the same a, e and i and the angles drifted at the first-order J2
+    // rates, so the state it describes is the truth of the test above.
+    const ZonalParameters   zp;
+    const double            eps = std::numeric_limits<double>::epsilon();
+    const KeplerianElements el{7100 * km, 0.02, deg2rad(63.0), 1.0, 2.0, 3.0};
+    const SecularPropagator fromElements(el, zp, SecularOrder::J2);
+    const SecularPropagator fromState(elementsToState(el), zp, SecularOrder::J2);
+    EXPECT_EQ(fromElements.meanElements().a, el.a);
+    EXPECT_EQ(fromElements.meanElements().e, el.e);
+    EXPECT_EQ(fromElements.meanElements().nu, el.nu);
+    // From a state: the elements to rounding (stateToElements, accurate to a few eps).
+    const KeplerianElements m = fromState.meanElements();
+    EXPECT_NEAR(m.a, el.a, 16.0 * eps * el.a);
+    EXPECT_NEAR(m.e, el.e, 16.0 * eps);
+    EXPECT_NEAR(m.i, el.i, 16.0 * eps);
+    EXPECT_NEAR(m.raan, el.raan, 16.0 * eps);
+    EXPECT_NEAR(m.argp + m.nu, el.argp + el.nu, 16.0 * eps);
+    for (double dt : {0.0, -5000.0, 86400.0, 30 * 86400.0}) {
+        const KeplerianElements e1 = fromElements.elements(dt);
+        EXPECT_EQ(e1.a, el.a);
+        EXPECT_EQ(e1.e, el.e);
+        EXPECT_EQ(e1.i, el.i);
+        EXPECT_TRUE(e1.raan >= 0.0 && e1.raan < constants::twoPi && e1.argp >= 0.0 && e1.argp < constants::twoPi);
+        const StateVector truth = meanElementState(el, el.meanAnomaly(), dt, zp);
+        const double      turns = 1.0 + std::abs(meanMotion(el.a) * dt);
+        EXPECT_LT(norm(elementsToState(e1).r - truth.r), 16.0 * eps * turns * el.a / (1.0 - el.e)) << dt;
+    }
+}
+
 TEST(SecularPropagator, GridMatchesDirectEvaluation) {
     // The grid steps its angles incrementally; it must agree with propagate(dt) at every point,
     // across mean-anomaly wraps, for near-circular to very eccentric orbits, both directions, and
