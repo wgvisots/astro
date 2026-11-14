@@ -1,5 +1,6 @@
 # Build and test with GCC and Clang (warnings as errors); under the thread, address and
-# undefined-behaviour sanitizers; fuzz the parsers; measure line coverage; check formatting; and
+# undefined-behaviour sanitizers; fuzz the parsers; measure line coverage; build the .deb and .rpm
+# packages and use the installed one; check formatting; and
 # build the documentation (Doxygen warnings as errors; code in the docs must match the examples).
 name: CI
 
@@ -172,6 +173,50 @@ jobs:
       run: |
         python3 tools/coverage_report.py build --min 97 | tee coverage.md
         cat coverage.md >> "$GITHUB_STEP_SUMMARY"
+
+  packages:
+    name: Packages (.deb and .rpm)
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-dev rpm
+
+    - name: Build
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DASTRO_BUILD_TESTS=OFF -DASTRO_BUILD_EXAMPLES=OFF
+        cmake --build build -j 4
+
+    - name: Make both packages
+      working-directory: build
+      run: |
+        cpack -G DEB
+        cpack -G RPM
+        dpkg-deb --info astro_*.deb
+        rpm -qpi astro-*.rpm
+        rpm -qpR astro-*.rpm
+
+    # The Debian package must install with its dependencies and serve find_package(astro) to a
+    # program built outside this tree.
+    - name: Install the .deb and build a program against it
+      run: |
+        sudo apt-get install -y ./build/astro_*.deb
+        cmake -S tests/package -B build-consumer
+        cmake --build build-consumer
+        build-consumer/astro_consumer
+
+    - name: Upload the packages
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: packages
+        path: |
+          build/astro_*.deb
+          build/astro-*.rpm
 
   format:
     name: clang-format
