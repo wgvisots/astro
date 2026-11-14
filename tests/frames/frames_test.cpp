@@ -268,6 +268,34 @@ TEST_F(ValladoExample, TemeAndPef) {
     EXPECT_LT(norm(j2000 - gcrs), 1.5);
 }
 
+TEST_F(ValladoExample, OneOffConversionsBetweenTemeItrsAndGcrs) {
+    // The one-off functions against Vallado's published states in the three frames (the same values
+    // as above). Each tolerance covers the two published states it connects: GCRS 1.0 cm and
+    // 4.5e-6 m/s, TEME 6.7 mm and 4.7e-6 m/s from ITRS (measured above), so 2 cm and 1e-5 m/s
+    // throughout.
+    const StateVector gcrf{
+        {5102.508959e3,  6123.011403e3, 6378.136925e3},
+        {-4.743220156e3, 0.790536497e3, 5.533755724e3}
+    };
+    const StateVector teme{
+        {5094.18016210e3, 6127.64465950e3, 6380.34453270e3},
+        {-4.746131487e3,  0.785818041e3,   5.531931288e3  }
+    };
+    const auto expectState = [](const StateVector& got, const StateVector& want, const char* what) {
+        expectVecNear(got.r, want.r, 0.02, what);
+        expectVecNear(got.v, want.v, 1e-5, what);
+    };
+    expectState(temeToItrs(teme, utc, eop), itrf, "TEME to ITRS");
+    expectState(itrsToTeme(itrf, utc, eop), teme, "ITRS to TEME");
+    expectState(temeToGcrs(teme, utc, eop), gcrf, "TEME to GCRS");
+    expectState(gcrsToTeme(gcrf, utc, eop), teme, "GCRS to TEME");
+    expectState(eciToEcef(gcrf, utc, eop), itrf, "ECI to ECEF");
+    expectState(ecefToEci(itrf, utc, eop), gcrf, "ECEF to ECI");
+    // The position-only forms have no Earth-rotation term and give the same positions.
+    expectVecNear(eciToEcef(gcrf.r, utc, eop), itrf.r, 0.02, "ECI to ECEF, position");
+    expectVecNear(ecefToEci(itrf.r, utc, eop), gcrf.r, 0.02, "ECEF to ECI, position");
+}
+
 TEST(FrameTransformer, ConsistencyAndRoundTrips) {
     const Time             t = Time::fromIso8601("2021-07-04T12:34:56Z");
     const ConstantEop      eop(EopValues{.xp = arcsec2rad(0.2), .yp = arcsec2rad(0.4), .dut1 = -0.15, .lod = 0.001});
