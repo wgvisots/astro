@@ -46,7 +46,7 @@ const Tle        kIss = Tle::parse("1 25544U 98067A   08264.51782528 -.00002182 
 } // namespace
 
 TEST(Look, OverheadAndRangeRate) {
-    const Geodetic site{deg2rad(30.0), deg2rad(-90.0), 0.0};
+    const Geodetic site{degToRad(30.0), degToRad(-90.0), 0.0};
     const Vec3     up   = ecefToEnuMatrix(site.lat, site.lon).row(2);
     const Vec3     east = ecefToEnuMatrix(site.lat, site.lon).row(0);
     // Directly overhead, moving east: elevation 90, range rate 0.
@@ -68,10 +68,10 @@ TEST(Passes, IssOverSiteMatchesBruteForce) {
     const Sgp4        sgp4(kIss);
     const ConstantEop eop;
     const auto        sat = sgp4ItrsFunction(sgp4, eop);
-    const Geodetic    site{deg2rad(40.0), deg2rad(-105.0), 1600.0};
+    const Geodetic    site{degToRad(40.0), degToRad(-105.0), 1600.0};
     const Time        start  = kIss.epoch;
     const Time        end    = start + 86400.0;
-    const double      mask   = deg2rad(10.0);
+    const double      mask   = degToRad(10.0);
     const auto        passes = findPasses(sat, site, start, end, mask, 30.0);
     ASSERT_GE(passes.size(), 2u);
     for (const Pass& p : passes) {
@@ -105,7 +105,7 @@ TEST(Passes, IssOverSiteMatchesBruteForce) {
         for (double s = std::max(0.0, bestS - 1.0); s <= std::min(p.los - p.aos, bestS + 1.0); s += 0.01) {
             best = std::max(best, lookAngles(sat(p.aos + s), site).el);
         }
-        EXPECT_NEAR(p.maxElevation, best, deg2rad(0.001));
+        EXPECT_NEAR(p.maxElevation, best, degToRad(0.001));
         EXPECT_GE(p.maxElevation, best - 1e-9);
     }
 }
@@ -116,7 +116,7 @@ namespace {
 /// `offset` metres north of the zenith at time `peak`. `s` seconds after the peak its east, north, up
 /// position is (speed s, offset, height), so every quantity of the pass has a closed form.
 struct StraightPass {
-    Geodetic site{deg2rad(40.0), deg2rad(-105.0), 1600.0};
+    Geodetic site{degToRad(40.0), degToRad(-105.0), 1600.0};
     Time     peak   = Time::fromIso8601("2024-03-01T12:00:00Z");
     double   height = 400 * km, offset = 50 * km, speed = 7 * km;
 
@@ -146,7 +146,7 @@ constexpr double kAngleTolerance = 1e-13;
 
 TEST(Passes, WholePassMatchesClosedForm) {
     const StraightPass p;
-    const double       mask = deg2rad(10.0), half = p.crossing(mask); // 324 s
+    const double       mask = degToRad(10.0), half = p.crossing(mask); // 324 s
     const auto         passes = findPasses(p.state(), p.site, p.peak - 900.0, p.peak + 900.0, mask, 30.0);
     ASSERT_EQ(passes.size(), 1u);
     EXPECT_FALSE(passes[0].startsBeforeWindow);
@@ -166,7 +166,7 @@ TEST(Passes, PassAlreadyDescendingAtWindowStartPeaksAtTheStart) {
     // The window opens 100 s after the peak: within the window the elevation only falls, so its
     // maximum is at the window's start.
     const StraightPass p;
-    const double       mask   = deg2rad(10.0);
+    const double       mask   = degToRad(10.0);
     const Time         start  = p.peak + 100.0;
     const auto         passes = findPasses(p.state(), p.site, start, start + 900.0, mask, 30.0);
     ASSERT_EQ(passes.size(), 1u);
@@ -182,7 +182,7 @@ TEST(Passes, PassAlreadyDescendingAtWindowStartPeaksAtTheStart) {
 TEST(Passes, PassStillRisingAtWindowEndPeaksAtTheEnd) {
     // The window closes 100 s before the peak.
     const StraightPass p;
-    const double       mask   = deg2rad(10.0);
+    const double       mask   = degToRad(10.0);
     const Time         end    = p.peak - 100.0;
     const auto         passes = findPasses(p.state(), p.site, end - 900.0, end, mask, 30.0);
     ASSERT_EQ(passes.size(), 1u);
@@ -207,7 +207,7 @@ namespace {
 ///     k = (R cos^2 mask + sin mask sqrt(r^2 - R^2 cos^2 mask)) / r,
 /// the root of the quadratic (r k - R)^2 = sin^2 mask (r^2 + R^2 - 2 r R k) on the visible side.
 struct EquatorialPass {
-    double   R = 6371 * km, r = R + 1000 * km, lat = deg2rad(10.0), w = constants::twoPi / 6000.0;
+    double   R = 6371 * km, r = R + 1000 * km, lat = degToRad(10.0), w = constants::twoPi / 6000.0;
     Time     peak = Time::fromIso8601("2024-03-01T12:00:00Z");
     Geodetic site{lat, 0.0, 0.0};
 
@@ -262,7 +262,7 @@ TEST(Look, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
 TEST(Passes, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
     // Rise, set, culmination and the azimuths at rise and set of EquatorialPass, from the closed form.
     const EquatorialPass p;
-    const double         mask   = deg2rad(10.0);
+    const double         mask   = degToRad(10.0);
     const double         th     = p.setAngle(mask); // 0.228 rad: 218 s from the meridian
     const auto           passes = findPasses(p.state(), p.site, p.peak - 900.0, p.peak + 900.0, mask, 30.0, p.sphere());
     ASSERT_EQ(passes.size(), 1u);
@@ -288,7 +288,7 @@ TEST(Passes, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
 
 TEST(Look, SatelliteAtTheSiteHasNoDirectionAndNaNRangeRate) {
     // Documented: at zero range the range rate does not exist and is NaN.
-    const Geodetic   site{deg2rad(30.0), deg2rad(-90.0), 0.0};
+    const Geodetic   site{degToRad(30.0), degToRad(-90.0), 0.0};
     const LookAngles la = lookAngles(
         {
             geodeticToEcef(site),
@@ -322,7 +322,7 @@ TEST(Passes, MaximumInsideAWindowThatCutsThePassIsFound) {
     // The window opens 7 s before the peak, or closes 7 s after it: the pass is cut, and its maximum
     // is inside the window, in the first or the last sample interval.
     const StraightPass p;
-    const double       mask = deg2rad(10.0);
+    const double       mask = degToRad(10.0);
     const auto         late = findPasses(p.state(), p.site, p.peak - 7.0, p.peak + 893.0, mask, 30.0);
     ASSERT_EQ(late.size(), 1u);
     EXPECT_TRUE(late[0].startsBeforeWindow);
@@ -388,19 +388,19 @@ TEST(Eclipse, ShadowStatesAndBetaAngle) {
     const Vec3   sun{constants::au, 0, 0};
     const double r = 7000 * km;
     // Sunward: lit. Directly behind: umbra.
-    EXPECT_EQ(shadow({r, 0, 0}, sun).state, ShadowState::Sunlit);
-    EXPECT_EQ(shadow({r, 0, 0}, sun).illumination, 1.0);
-    EXPECT_EQ(shadow({-r, 0, 0}, sun).state, ShadowState::Umbra);
-    EXPECT_EQ(shadow({-r, 0, 0}, sun).illumination, 0.0);
-    EXPECT_EQ(shadow({-r, 0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Umbra);
+    EXPECT_EQ(earthShadow({r, 0, 0}, sun).state, ShadowState::Sunlit);
+    EXPECT_EQ(earthShadow({r, 0, 0}, sun).illumination, 1.0);
+    EXPECT_EQ(earthShadow({-r, 0, 0}, sun).state, ShadowState::Umbra);
+    EXPECT_EQ(earthShadow({-r, 0, 0}, sun).illumination, 0.0);
+    EXPECT_EQ(earthShadow({-r, 0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Umbra);
     // The cylinder's edge is the Earth's radius from the Sun line, whatever the distance behind.
-    EXPECT_EQ(shadow({-r, constants::wgs84A - 1.0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Umbra);
-    EXPECT_EQ(shadow({-r, constants::wgs84A + 1.0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Sunlit);
+    EXPECT_EQ(earthShadow({-r, constants::wgs84A - 1.0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Umbra);
+    EXPECT_EQ(earthShadow({-r, constants::wgs84A + 1.0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Sunlit);
     // Far beyond the umbra cone (~1.4e6 km), the Earth only partially covers the Sun: annular, with the
     // Earth's whole disk inside the Sun's, so the visible fraction is 1 - b^2 / a^2.
     const Vec3   far{-3.0e9, 0, 0};
     const Disks  d = disksSeenFrom(far, sun);
-    ShadowResult s = shadow(far, sun);
+    ShadowResult s = earthShadow(far, sun);
     EXPECT_EQ(s.state, ShadowState::Annular);
     EXPECT_NEAR(s.illumination, 1.0 - d.b * d.b / (d.a * d.a), 1e-12);
     // Beta angle.
@@ -433,10 +433,10 @@ TEST(Eclipse, PenumbraBoundariesAndIlluminationMatchTheDiskGeometry) {
     const double yUmbra    = bisect(inner, 6000 * km, 7000 * km);
     ASSERT_LT(yUmbra, yPenumbra); // the penumbra is about 61 km wide here
     // 1 m on either side of each edge (the edges move 1 m per 1.4e-7 rad of c, far above rounding).
-    EXPECT_EQ(shadow(point(yPenumbra + 1.0), sun).state, ShadowState::Sunlit);
-    EXPECT_EQ(shadow(point(yPenumbra - 1.0), sun).state, ShadowState::Penumbra);
-    EXPECT_EQ(shadow(point(yUmbra + 1.0), sun).state, ShadowState::Penumbra);
-    EXPECT_EQ(shadow(point(yUmbra - 1.0), sun).state, ShadowState::Umbra);
+    EXPECT_EQ(earthShadow(point(yPenumbra + 1.0), sun).state, ShadowState::Sunlit);
+    EXPECT_EQ(earthShadow(point(yPenumbra - 1.0), sun).state, ShadowState::Penumbra);
+    EXPECT_EQ(earthShadow(point(yUmbra + 1.0), sun).state, ShadowState::Penumbra);
+    EXPECT_EQ(earthShadow(point(yUmbra - 1.0), sun).state, ShadowState::Umbra);
     // Illumination at a quarter, half and three quarters of the way across, increasing outward. The
     // chords have square-root ends, so the midpoint rule converges as n^-1.5: measured differences
     // 1.5e-8 with 2e5 strips, 2e-10 with 4e6. With 1e6 strips (a few ms), tolerance 5e-9.
@@ -445,7 +445,7 @@ TEST(Eclipse, PenumbraBoundariesAndIlluminationMatchTheDiskGeometry) {
         const double y = yUmbra + f * (yPenumbra - yUmbra);
         const Disks  d = disksSeenFrom(point(y), sun);
         SCOPED_TRACE(testing::Message() << "fraction " << f << " of the way out");
-        const ShadowResult s = shadow(point(y), sun);
+        const ShadowResult s = earthShadow(point(y), sun);
         EXPECT_EQ(s.state, ShadowState::Penumbra);
         EXPECT_NEAR(s.illumination, uncoveredFraction(d.a, d.b, d.c), 5e-9);
         EXPECT_GT(s.illumination, previous);
@@ -555,7 +555,7 @@ TEST(Eclipse, IssWithRealSun) {
     EXPECT_GE(ecl.size(), 14u);
     EXPECT_LE(ecl.size(), 17u);
     const Time end   = start + 86400.0;
-    const auto state = [&](const Time& t) { return shadow(sat(t), sun(t)).state; };
+    const auto state = [&](const Time& t) { return earthShadow(sat(t), sun(t)).state; };
     for (const auto& e : ecl) {
         // An eclipse cut by the window starts (or ends) at the window's edge, where the satellite is
         // then in shadow, and is no longer than a whole one. One that is not cut has a sunlit moment
@@ -589,16 +589,16 @@ TEST(Ground, SubpointFootprintAndLineOfSight) {
     EXPECT_NEAR(g.lon, 0.0, 1e-12);
     EXPECT_NEAR(g.h, 42164.17 * km - constants::wgs84A, 1e-6);
     // GEO coverage to the horizon: acos(R / r) ~ 81.3 deg.
-    EXPECT_NEAR(rad2deg(coverageHalfAngle(42164.17 * km - constants::wgs84A)), 81.30, 0.01);
-    EXPECT_LT(coverageHalfAngle(500 * km, deg2rad(10.0)), coverageHalfAngle(500 * km));
+    EXPECT_NEAR(radToDeg(coverageHalfAngle(42164.17 * km - constants::wgs84A)), 81.30, 0.01);
+    EXPECT_LT(coverageHalfAngle(500 * km, degToRad(10.0)), coverageHalfAngle(500 * km));
     EXPECT_NEAR(maxSlantRange(500 * km) / km,
                 std::sqrt(std::pow(constants::wgs84A + 500 * km, 2) - std::pow(constants::wgs84A, 2)) / km,
                 1e-6);
     // Footprint points are all at the requested central angle.
-    const double lam = deg2rad(20.0);
-    for (const Geodetic& p : footprint(deg2rad(45.0), deg2rad(10.0), lam, 36)) {
-        const double c = std::acos(std::sin(deg2rad(45.0)) * std::sin(p.lat)
-                                   + std::cos(deg2rad(45.0)) * std::cos(p.lat) * std::cos(p.lon - deg2rad(10.0)));
+    const double lam = degToRad(20.0);
+    for (const Geodetic& p : coverageFootprint(degToRad(45.0), degToRad(10.0), lam, 36)) {
+        const double c = std::acos(std::sin(degToRad(45.0)) * std::sin(p.lat)
+                                   + std::cos(degToRad(45.0)) * std::cos(p.lat) * std::cos(p.lon - degToRad(10.0)));
         EXPECT_NEAR(c, lam, 1e-12);
     }
     // Line of sight.
@@ -618,12 +618,12 @@ TEST(Ground, FootprintAboutAPoleIsAnEvenlySpacedParallel) {
     // the one reached is the limit for a center just short of the pole on the meridian `lon0`. So from
     // the north pole azimuth 180 deg (south) runs down `lon0` itself and azimuth 0 down the opposite
     // meridian, and from the south pole azimuth 0 (north) runs up `lon0`.
-    const double lam = deg2rad(20.0), lon0 = deg2rad(10.0);
+    const double lam = degToRad(20.0), lon0 = degToRad(10.0);
     const int    n = 12;
     for (double pole : {constants::halfPi, -constants::halfPi}) {
-        const auto ring = footprint(pole, lon0, lam, n);
+        const auto ring = coverageFootprint(pole, lon0, lam, n);
         // The same circle about a center 1e-9 rad (6 mm) short of the pole.
-        const auto nearby = footprint(pole > 0.0 ? pole - 1e-9 : pole + 1e-9, lon0, lam, n);
+        const auto nearby = coverageFootprint(pole > 0.0 ? pole - 1e-9 : pole + 1e-9, lon0, lam, n);
         ASSERT_EQ(ring.size(), 12u);
         ASSERT_EQ(nearby.size(), 12u);
         for (std::size_t i = 0; i < ring.size(); ++i) {
@@ -693,7 +693,7 @@ TEST(Eclipse, BadWindowOrStepThrows) {
     auto              sat = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
     auto              sun = [](const Time&) { return Vec3{constants::au, 0, 0}; };
     const Time        mid = t0 + 0.5 * orbitalPeriod(r); // behind the Earth: in eclipse
-    ASSERT_EQ(shadow(sat(mid), sun(mid)).state, ShadowState::Umbra);
+    ASSERT_EQ(earthShadow(sat(mid), sun(mid)).state, ShadowState::Umbra);
     EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, mid, t0); }, "findEclipses", "end"));
     for (double step : {0.0, -30.0, kNan, kInf}) {
         EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, t0, mid, step); }, "findEclipses", "step")) << step;
@@ -775,17 +775,17 @@ TEST(OrbitalFrames, RelativeStateOfADeputyOnTheSameCircularOrbit) {
     // 1e-12 m/s (measured 9e-13 m/s). Tolerances 2e-9 m and 3e-12 m/s.
     expectVecNear(rel.r, {r * (std::cos(du) - 1.0), r * std::sin(du), 0.0}, 2e-9, "position"); // x is -0.035 m
     expectVecNear(rel.v, {0.0, 0.0, 0.0}, 3e-12, "velocity");
-    expectVecNear(deputyFromRelativeRic(chief, rel).r, deputy.r, 2e-9, "back r");
-    expectVecNear(deputyFromRelativeRic(chief, rel).v, deputy.v, 3e-12, "back v");
+    expectVecNear(relativeRicToDeputy(chief, rel).r, deputy.r, 2e-9, "back r");
+    expectVecNear(relativeRicToDeputy(chief, rel).v, deputy.v, 3e-12, "back v");
 
     // A deputy given an extra 0.1 m/s along the orbit normal moves at 0.1 m/s along cross-track.
     StateVector pushed = deputy;
     pushed.v           = deputy.v + 0.1 * Vec3{0.0, -s, c};
     expectVecNear(relativeStateRic(chief, pushed).v, {0.0, 0.0, 0.1}, 3e-12, "cross-track velocity");
-    expectVecNear(deputyFromRelativeRic(chief,
-                                        {
-                                            rel.r,
-                                            {0.0, 0.0, 0.1}
+    expectVecNear(relativeRicToDeputy(chief,
+                                      {
+                                          rel.r,
+                                          {0.0, 0.0, 0.1}
     })
                       .v,
                   pushed.v,
@@ -872,7 +872,7 @@ TEST(Eclipse, GrazingPassThroughThePenumbraOnlyIsAPenumbralEclipse) {
     ASSERT_LT(betaUmbra, betaPenumbra);
     const double beta = 0.5 * (betaUmbra + betaPenumbra);
     auto         sun  = [&](const Time&) { return sunAt(beta); };
-    ASSERT_EQ(shadow(behind, sunAt(beta)).state, ShadowState::Penumbra);
+    ASSERT_EQ(earthShadow(behind, sunAt(beta)).state, ShadowState::Penumbra);
     const auto ecl = findEclipses(sat, sun, t0, t0 + period, 20.0);
     ASSERT_EQ(ecl.size(), 1u);
     EXPECT_FALSE(ecl[0].umbral);

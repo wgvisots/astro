@@ -40,7 +40,7 @@ any scale; the reader converts to TDB.
 
 <!-- snippet: examples/sun_moon.cpp#rise_set -->
 ```cpp
-const Geodetic site{deg2rad(51.4779), 0.0, 45.0}; // Greenwich
+const Geodetic site{degToRad(51.4779), 0.0, 45.0}; // Greenwich
 for (const SkyEvent& e : sunRiseSet(site, t, t + 86400.0, ConstantEop{}, *eph)) {
     const char* what = e.type == SkyEventType::Rise ? "sunrise "
                      : e.type == SkyEventType::Set  ? "sunset  "
@@ -53,7 +53,7 @@ std::cout << "Moon " << std::setprecision(0) << phase.illuminatedFraction * 100 
 ```
 
 `sunRiseSet` uses the conventional -0.8333 deg altitude of the Sun's centre (refraction plus the
-semi-diameter); `twilight` takes `Twilight::Civil`, `Nautical` or `Astronomical` (-6, -12, -18 deg).
+semi-diameter); `twilightEvents` takes `Twilight::Civil`, `Nautical` or `Astronomical` (-6, -12, -18 deg).
 `moonRiseSet` uses the Moon's upper limb with 34' of refraction, as seen from the site (so the
 parallax is included). `sunRiseSet` and `moonRiseSet` also return the transits.
 `findElevationEvents` finds rises, sets and transits of any elevation function: it samples it and
@@ -87,6 +87,6 @@ conventional refraction: at a true elevation of 0 it gives about 11' where the u
 34', and below about 5 deg its two directions are not exact inverses of each other (27" apart
 at 0-2 deg). Use the simple formulas near the horizon.
 
-Coordinates: `raDecFromVector`, `angularSeparation`, `positionAngle`, ecliptic conversions with the
+Coordinates: `vectorToRaDec`, `angularSeparation`, `positionAngle`, ecliptic conversions with the
 IAU 2006 obliquity, and ICRS <-> galactic with the Hipparcos matrix [ESA (1997)](https://ui.adsabs.harvard.edu/abs/1997ESASP1200.....E).
 Sidereal time: `localMeanSiderealTime`, `localApparentSiderealTime`, `hourAngle`.

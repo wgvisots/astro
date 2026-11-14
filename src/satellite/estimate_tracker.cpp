@@ -66,7 +66,7 @@ double chiSquareSurvival6(double x) noexcept {
     return e * (1.0 + h + 0.5 * h * h);
 }
 
-NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions& options) {
+NumericalPropagator trackerPropagator(const StateEstimate& e, const TrackerOptions& options) {
     const Mat3 pole = poleOfDateMatrix(options.frame, e.epoch);
     return NumericalPropagator(e.epoch,
                                e.state,
@@ -252,7 +252,7 @@ checkConsistency(const StateEstimate& prior, const StateEstimate& next, const Tr
     const StateEstimate   priorG = toGcrs(prior, options.frame);
     const double          dt     = next.epoch - prior.epoch;
     const StateCovariance pred =
-        propagateTo(makePropagator(priorG, gcrs), priorG.covariance, dt, options.accelerationNoisePsd);
+        propagateTo(trackerPropagator(priorG, gcrs), priorG.covariance, dt, options.accelerationNoisePsd);
     // Compare in the delivery frame at the new epoch.
     const StateCovariance predF =
         options.frame == Frame::GCRS ? pred : rotated(pred, gcrsToCelestialMatrix(options.frame, next.epoch));
@@ -298,7 +298,7 @@ std::optional<ConsistencyCheck> EstimateTracker::update(const StateEstimate& nex
     }
     current_     = next;
     currentGcrs_ = nextG;
-    prop_        = makePropagator(nextG, gcrs);
+    prop_        = trackerPropagator(nextG, gcrs);
     return check;
 }
 

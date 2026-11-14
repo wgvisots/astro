@@ -25,18 +25,18 @@
 
 namespace astro {
 
-RaDec raDecFromVector(const Vec3& v) noexcept {
+RaDec vectorToRaDec(const Vec3& v) noexcept {
     const double rho = std::hypot(v.x, v.y);
     return {rho == 0.0 ? 0.0 : wrapTwoPi(std::atan2(v.y, v.x)), std::atan2(v.z, rho), norm(v)};
 }
 
-Vec3 vectorFromRaDec(const RaDec& rd) noexcept {
+Vec3 raDecToVector(const RaDec& rd) noexcept {
     const double cd = std::cos(rd.dec);
     return {rd.distance * cd * std::cos(rd.ra), rd.distance * cd * std::sin(rd.ra), rd.distance * std::sin(rd.dec)};
 }
 
 double angularSeparation(double ra1, double dec1, double ra2, double dec2) noexcept {
-    return angleBetween(unitVectorFromRaDec(ra1, dec1), unitVectorFromRaDec(ra2, dec2));
+    return angleBetween(raDecToUnitVector(ra1, dec1), raDecToUnitVector(ra2, dec2));
 }
 
 double positionAngle(double ra1, double dec1, double ra2, double dec2) noexcept {
@@ -51,11 +51,11 @@ Mat3 equatorialToEclipticMatrix(double eps) noexcept {
 }
 
 RaDec equatorialToEcliptic(const Vec3& eq, double eps) noexcept {
-    return raDecFromVector(R1(eps) * eq);
+    return vectorToRaDec(R1(eps) * eq);
 }
 
 Vec3 eclipticToEquatorial(const RaDec& ecl, double eps) noexcept {
-    return R1(-eps) * vectorFromRaDec(ecl);
+    return R1(-eps) * raDecToVector(ecl);
 }
 
 const Mat3& icrsToGalacticMatrix() noexcept {
@@ -70,11 +70,11 @@ const Mat3& icrsToGalacticMatrix() noexcept {
 }
 
 RaDec icrsToGalactic(double ra, double dec) noexcept {
-    return raDecFromVector(icrsToGalacticMatrix() * unitVectorFromRaDec(ra, dec));
+    return vectorToRaDec(icrsToGalacticMatrix() * raDecToUnitVector(ra, dec));
 }
 
 RaDec galacticToIcrs(double l, double b) noexcept {
-    return raDecFromVector(icrsToGalacticMatrix().transpose() * unitVectorFromRaDec(l, b));
+    return vectorToRaDec(icrsToGalacticMatrix().transpose() * raDecToUnitVector(l, b));
 }
 
 } // namespace astro

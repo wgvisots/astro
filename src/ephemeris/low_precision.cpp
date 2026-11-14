@@ -29,21 +29,18 @@
 
 namespace astro {
 
-using constants::arcsecToRad;
-using constants::degToRad;
-
 std::string_view toString(Body b) noexcept {
     return detail::enumName(b, "?");
 }
 
 Vec3 sunPositionLowPrecision(const Time& time) {
     const double T  = time.to(TimeScale::TT).centuriesSinceJ2000();
-    const double L0 = (280.46646 + T * (36000.76983 + T * 0.0003032)) * degToRad;
-    const double M  = (357.52911 + T * (35999.05029 - T * 0.0001537)) * degToRad;
+    const double L0 = (280.46646 + T * (36000.76983 + T * 0.0003032)) * constants::degToRad;
+    const double M  = (357.52911 + T * (35999.05029 - T * 0.0001537)) * constants::degToRad;
     const double e  = 0.016708634 - T * (0.000042037 + T * 0.0000001267);
     const double Cc = ((1.914602 - T * (0.004817 + T * 0.000014)) * std::sin(M)
                        + (0.019993 - T * 0.000101) * std::sin(2.0 * M) + 0.000289 * std::sin(3.0 * M))
-                    * degToRad;
+                    * constants::degToRad;
     const double lon = L0 + Cc; // geometric longitude, mean equinox of date
     const double nu  = M + Cc;
     const double R   = 1.000001018 * (1.0 - e * e) / (1.0 + e * std::cos(nu)) * constants::au;
@@ -57,12 +54,12 @@ Vec3 sunPositionLowPrecision(const Time& time) {
 Vec3 moonPositionLowPrecision(const Time& time) {
     const double T = time.to(TimeScale::TT).centuriesSinceJ2000();
     // Mean elements (deg); L0 includes -1.3972 T to refer longitudes to the J2000 equinox.
-    const double L0 = (218.31617 + 481267.88088 * T - 1.3972 * T) * degToRad;
-    const double l  = (134.96292 + 477198.86753 * T) * degToRad;
-    const double lp = (357.52543 + 35999.04944 * T) * degToRad;
-    const double F  = (93.27283 + 483202.01873 * T) * degToRad;
-    const double D  = (297.85027 + 445267.11135 * T) * degToRad;
-    const double as = arcsecToRad;
+    const double L0 = (218.31617 + 481267.88088 * T - 1.3972 * T) * constants::degToRad;
+    const double l  = (134.96292 + 477198.86753 * T) * constants::degToRad;
+    const double lp = (357.52543 + 35999.04944 * T) * constants::degToRad;
+    const double F  = (93.27283 + 483202.01873 * T) * constants::degToRad;
+    const double D  = (297.85027 + 445267.11135 * T) * constants::degToRad;
+    const double as = constants::arcsecToRad;
     const double lambda =
         L0
         + as

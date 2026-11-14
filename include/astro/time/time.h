@@ -56,7 +56,7 @@ std::ostream& operator<<(std::ostream& os, TimeScale value);
 /// Short name of a time scale ("UTC", "TT", ...), or "?" for an invalid value.
 [[nodiscard]] std::string_view toString(TimeScale scale) noexcept;
 /// Parse "UTC", "TAI", "TT", ... (case-insensitive). Throws astro::Error for an unknown name.
-[[nodiscard]] TimeScale timeScaleFromString(std::string_view name);
+[[nodiscard]] TimeScale parseTimeScale(std::string_view name);
 
 /// Global navigation satellite systems with their own time scale and week count.
 enum class GnssSystem {
@@ -187,7 +187,7 @@ public:
     /// std::chrono::system_clock time point from the Unix time (converts to
     /// UTC), rounded to the nearest nanosecond. Throws astro::Error as
     /// unixSeconds() does.
-    [[nodiscard]] std::chrono::system_clock::time_point toSysTime() const;
+    [[nodiscard]] std::chrono::system_clock::time_point sysTime() const;
     /// Seconds since the GPS epoch (converts to GPS time). Throws astro::Error
     /// as to(TimeScale::GPS) does: for a UTC time before 1960, and for a UT1
     /// time (convert that with to() and an EopProvider first).

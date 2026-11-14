@@ -121,10 +121,10 @@ TEST(Elements, ValladoExample2_5) {
     EXPECT_NEAR(el.semiLatusRectum() / km, 11067.790, 0.01);
     EXPECT_NEAR(el.a / km, 36127.343, 0.01);
     EXPECT_NEAR(el.e, 0.832853, 1e-6);
-    EXPECT_NEAR(rad2deg(el.i), 87.870, 1e-3);
-    EXPECT_NEAR(rad2deg(el.raan), 227.89, 0.01);
-    EXPECT_NEAR(rad2deg(el.argp), 53.38, 0.01);
-    EXPECT_NEAR(rad2deg(el.nu), 92.335, 1e-3);
+    EXPECT_NEAR(radToDeg(el.i), 87.870, 1e-3);
+    EXPECT_NEAR(radToDeg(el.raan), 227.89, 0.01);
+    EXPECT_NEAR(radToDeg(el.argp), 53.38, 0.01);
+    EXPECT_NEAR(radToDeg(el.nu), 92.335, 1e-3);
 }
 
 TEST(Elements, RandomStatesSurviveTheRoundTripsToRounding) {
@@ -169,7 +169,7 @@ TEST(Elements, PeriodAndMeanMotionFollowKeplersThirdLaw) {
         const double n = meanMotion(a);
         EXPECT_NEAR(n * n * a * a * a / constants::gmEarth, 1.0, 8.0 * eps);
         EXPECT_NEAR(orbitalPeriod(a) * n, constants::twoPi, 8.0 * eps * constants::twoPi);
-        EXPECT_NEAR(semiMajorAxisFromMeanMotion(n), a, 4.0 * eps * a);
+        EXPECT_NEAR(meanMotionToSemiMajorAxis(n), a, 4.0 * eps * a);
     }
 }
 
@@ -277,7 +277,7 @@ TEST(Secular, RatesMatchAnAveragedNumericalIntegration) {
     // of order J2^3 and the long-period terms, which leave the node and the argument of latitude
     // (perigee plus mean anomaly) within 1e-6 of their rates and the perigee within 2e-4 at e = 0.05.
     // The second-order terms (J2^2, J4) are 1e-3 of the first-order ones, so this checks them too.
-    const KeplerianElements el{7500 * km, 0.05, deg2rad(50.0), 0.3, 0.5, 0.0};
+    const KeplerianElements el{7500 * km, 0.05, degToRad(50.0), 0.3, 0.5, 0.0};
     const double            span = 20.0 * 86400.0;
     const std::size_t       n    = 20 * 1440;
     for (const double J4 : {0.0, constants::J4}) {
@@ -330,7 +330,7 @@ TEST(Secular, RatesMatchAnAveragedNumericalIntegration) {
 
 TEST(Secular, BrouwerReducesToSgp4FormForCircularOrbits) {
     // SGP4's secular rates (Kozai/Brouwer) for e -> 0, written out from sgp4init.
-    const double      a = 7000 * km, i = deg2rad(63.0);
+    const double      a = 7000 * km, i = degToRad(63.0);
     const CentralBody body;
     const double      n = std::sqrt(body.mu / (a * a * a));
     const double      p = a / body.re, pinvsq = 1.0 / (p * p), th = std::cos(i), th2 = th * th, th4 = th2 * th2;
@@ -357,18 +357,18 @@ TEST(Secular, MissionDesignHelpers) {
         {0.0, 0.0, 1.08263e-3}
     };
     // Sun-synchronous at 700 km: ~98.19 deg.
-    EXPECT_NEAR(rad2deg(sunSynchronousInclination(constants::wgs84A + 700 * km, 0.0, body)), 98.19, 0.02);
+    EXPECT_NEAR(radToDeg(sunSynchronousInclination(constants::wgs84A + 700 * km, 0.0, body)), 98.19, 0.02);
     EXPECT_THROW((void)sunSynchronousInclination(constants::wgs84A + 7000 * km, 0.0, body), Error);
     // Landsat-8: 233 revolutions in 16 days, i = 98.2 deg; published semi-major axis 7077.7 km
     // (the "705 km" nominal altitude is measured above the ellipsoid at mid latitudes).
-    const double a = repeatGroundTrackSemiMajorAxis(233, 16, 0.0, deg2rad(98.2), body);
+    const double a = repeatGroundTrackSemiMajorAxis(233, 16, 0.0, degToRad(98.2), body);
     EXPECT_NEAR(a / km, 7077.7, 1.0);
 }
 
 TEST(Secular, CriticalInclinationIsWhereTheJ2ApsidalRateVanishes) {
     // acos(1 / sqrt(5)) = atan(2): the root of 5 cos^2 i - 1 = 0.
-    EXPECT_NEAR(kCriticalInclination, std::atan(2.0), 2.0 * std::numeric_limits<double>::epsilon());
-    const SecularRates r = secularRates(7000 * km, 0.1, kCriticalInclination, {}, SecularOrder::J2);
+    EXPECT_NEAR(constants::criticalInclination, std::atan(2.0), 2.0 * std::numeric_limits<double>::epsilon());
+    const SecularRates r = secularRates(7000 * km, 0.1, constants::criticalInclination, {}, SecularOrder::J2);
     EXPECT_LT(std::abs(r.argpDot), 1e-15 * r.meanAnomalyDot);
 }
 
@@ -384,7 +384,7 @@ TEST(Secular, RatesMatchBrouwersFormulasForEccentricOrbits) {
             if (a * (1.0 - e) < 6400 * km) {
                 continue;
             }
-            for (double i : {0.0, 0.3, kCriticalInclination, 1.5, 2.5, constants::pi}) {
+            for (double i : {0.0, 0.3, constants::criticalInclination, 1.5, 2.5, constants::pi}) {
                 for (SecularOrder order : {SecularOrder::J2, SecularOrder::J2SquaredJ4}) {
                     const SecularRates ref   = brouwerRates(a, e, i, body, order == SecularOrder::J2SquaredJ4);
                     const SecularRates first = brouwerRates(a, e, i, body, false);
@@ -430,7 +430,7 @@ TEST(Secular, RetrogradeEquatorialNodeMovesEastwardAsFastAsThePrograde) {
 }
 
 TEST(Numerical, J2J4PropagatorConservesEnergyAndFollowsSecularRates) {
-    const KeplerianElements   el{7200 * km, 0.08, deg2rad(40.0), 0.1, 1.0, 0.0};
+    const KeplerianElements   el{7200 * km, 0.08, degToRad(40.0), 0.1, 1.0, 0.0};
     const StateVector         s0   = elementsToState(el);
     const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0, Frame::TOD);
     const std::vector<double> J{0, 0, constants::J2, 0, constants::J4};

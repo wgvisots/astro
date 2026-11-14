@@ -42,12 +42,12 @@ struct Orbit {
 };
 
 const Orbit kOrbits[] = {
-    {"LEO 400 km i=51.6",     {6778e3, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7}},
-    {"SSO 800 km e=0.01",     {7178e3, 0.01, deg2rad(98.6), 1.3, 2.5, 0.2}  },
-    {"HEO 1000 x 20000 km",   {16878e3, 0.56, deg2rad(63.4), 0.1, 4.7, 0.0} },
-    {"near-equatorial i=0.5", {7000e3, 0.002, deg2rad(0.5), 0.0, 0.0, 1.0}  },
-    {"polar i=90",            {7000e3, 0.001, deg2rad(90.0), 2.0, 0.3, 0.1} },
-    {"retrograde i=140",      {7000e3, 0.001, deg2rad(140.0), 0.5, 1.0, 2.0}},
+    {"LEO 400 km i=51.6",     {6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7}},
+    {"SSO 800 km e=0.01",     {7178e3, 0.01, degToRad(98.6), 1.3, 2.5, 0.2}  },
+    {"HEO 1000 x 20000 km",   {16878e3, 0.56, degToRad(63.4), 0.1, 4.7, 0.0} },
+    {"near-equatorial i=0.5", {7000e3, 0.002, degToRad(0.5), 0.0, 0.0, 1.0}  },
+    {"polar i=90",            {7000e3, 0.001, degToRad(90.0), 2.0, 0.3, 0.1} },
+    {"retrograde i=140",      {7000e3, 0.001, degToRad(140.0), 0.5, 1.0, 2.0}},
 };
 
 /// Reference ("truth") propagator: J2 + J4 with a tight tolerance.
@@ -98,7 +98,7 @@ void falseAlarms(int samples) {
         }) {
             for (double dt : {1800.0, 7200.0, 14400.0}) {
                 const StateEstimate truth{kEpoch + dt,
-                                          makePropagator({kEpoch, s0, Mat6{}}, tightOptions()).propagate(dt),
+                                          trackerPropagator({kEpoch, s0, Mat6{}}, tightOptions()).propagate(dt),
                                           tiny};
                 std::mt19937_64     rng(11);
                 double              m6 = 0, m3 = 0, me = 0;
@@ -145,12 +145,12 @@ void detection(int samples) {
         for (double dv : {0.02, 0.1, 0.5}) {
             for (double before : {20.0, 900.0}) {
                 for (int dir = 0; dir < 3; ++dir) {
-                    StateVector b  = makePropagator({kEpoch, s0, Mat6{}}, tightOptions()).propagate(gap - before);
+                    StateVector b  = trackerPropagator({kEpoch, s0, Mat6{}}, tightOptions()).propagate(gap - before);
                     const Mat3  R  = ricMatrix(b);
                     b.v           += Vec3{R(dir, 0), R(dir, 1), R(dir, 2)} * dv;
                     const StateEstimate next{
                         kEpoch + gap,
-                        makePropagator({kEpoch + gap - before, b, Mat6{}}, tightOptions()).propagate(before),
+                        trackerPropagator({kEpoch + gap - before, b, Mat6{}}, tightOptions()).propagate(before),
                         tiny};
                     std::mt19937_64 rng(5);
                     int             d6 = 0, d3 = 0, de = 0;

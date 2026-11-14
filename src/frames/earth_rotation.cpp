@@ -57,7 +57,7 @@ double equationOfOrigins(const Mat3& r, double s) noexcept {
 double gast06(const JulianDate& ut1, const JulianDate& tt, PrecessionNutationModel model) noexcept {
     const double t   = tt.centuriesSinceJ2000();
     const Mat3   npb = npbMatrix06(t, model);
-    const double s   = cioLocatorS06(t, cipXYFromMatrix(npb));
+    const double s   = cioLocatorS06(t, matrixToCipXY(npb));
     return wrapTwoPi(earthRotationAngle(ut1) - equationOfOrigins(npb, s));
 }
 

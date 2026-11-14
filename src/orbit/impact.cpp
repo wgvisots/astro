@@ -106,7 +106,7 @@ std::optional<Impact> impact(const Time&          epoch,
     }
 
     const auto height = [&](double dt, const StateVector& s) {
-        return ecefToGeodetic(rot->gcrsToItrs(offset + dt, s.r), o.ellipsoid).h - o.surfaceHeight;
+        return ecefToGeodetic(rot->gcrsToItrs(s.r, offset + dt), o.ellipsoid).h - o.surfaceHeight;
     };
     const auto event = prop.propagateToEvent(height, o.maxFlightTime, Crossing::Falling, o.timeTolerance);
     if (!event) {
@@ -116,7 +116,7 @@ std::optional<Impact> impact(const Time&          epoch,
     Impact out;
     out.flightTime     = event->dt;
     out.time           = epoch + event->dt;
-    out.itrs           = rot->gcrsToItrs(offset + event->dt, event->state);
+    out.itrs           = rot->gcrsToItrs(event->state, offset + event->dt);
     out.point          = ecefToGeodetic(out.itrs.r, o.ellipsoid);
     const Mat3 enu     = ecefToEnuMatrix(out.point.lat, out.point.lon); // rows: east, north, up
     const Vec3 v       = enu * out.itrs.v;

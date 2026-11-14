@@ -33,24 +33,24 @@ int main() {
 
     //! [ecef]
     // WGS84 latitude, longitude (radians) and height above the ellipsoid (m) -> ECEF (m), and back.
-    const Geodetic site{deg2rad(38.8895), deg2rad(-77.0353), 100.0};
+    const Geodetic site{degToRad(38.8895), degToRad(-77.0353), 100.0};
     const Vec3     ecef = geodeticToEcef(site);
     const Geodetic back = ecefToGeodetic(ecef);
     std::cout << "ECEF " << ecef << " m\n";
-    std::cout << "lat " << rad2deg(back.lat) << " deg, lon " << rad2deg(back.lon) << " deg, h " << back.h << " m\n";
+    std::cout << "lat " << radToDeg(back.lat) << " deg, lon " << radToDeg(back.lon) << " deg, h " << back.h << " m\n";
     //! [ecef]
 
     //! [aer]
     // Where is a point 10 km east, 5 km north and 3 km up, as seen from the site?
     const Vec3 target = enuToEcef({10e3, 5e3, 3e3}, site);
     const Aer  aer    = enuToAer(ecefToEnu(target, site));
-    std::cout << "az " << rad2deg(aer.az) << " deg, el " << rad2deg(aer.el) << " deg, range " << aer.range << " m\n";
+    std::cout << "az " << radToDeg(aer.az) << " deg, el " << radToDeg(aer.el) << " deg, range " << aer.range << " m\n";
     //! [aer]
 
     //! [geodesic]
     // Ellipsoidal distance and initial azimuth from Washington to Paris (Vincenty).
-    const GeodesicInverseResult g = geodesicInverse(site.lat, site.lon, deg2rad(48.8566), deg2rad(2.3522));
-    std::cout << "distance " << g.distance / 1e3 << " km, initial azimuth " << rad2deg(g.azimuth1) << " deg\n";
+    const GeodesicInverseResult g = geodesicInverse(site.lat, site.lon, degToRad(48.8566), degToRad(2.3522));
+    std::cout << "distance " << g.distance / 1e3 << " km, initial azimuth " << radToDeg(g.azimuth1) << " deg\n";
     //! [geodesic]
     return 0;
 }

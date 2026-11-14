@@ -256,9 +256,9 @@ TEST(Geodetic, InsideTheEvoluteMatchesExtendedPrecision) {
 }
 
 TEST(Geodetic, Latitudes) {
-    const double phi = deg2rad(45.0);
+    const double phi = degToRad(45.0);
     const double psi = geodeticToGeocentricLatitude(phi);
-    EXPECT_NEAR(rad2deg(phi - psi) * 3600.0, 692.7, 0.1); // ~11.5 arcmin at 45 deg
+    EXPECT_NEAR(radToDeg(phi - psi) * 3600.0, 692.7, 0.1); // ~11.5 arcmin at 45 deg
     EXPECT_NEAR(geocentricToGeodeticLatitude(psi), phi, 1e-15);
     EXPECT_NEAR(reducedToGeodeticLatitude(geodeticToReducedLatitude(phi)), phi, 1e-15);
     // The definitions, on WGS84 and on a strongly flattened ellipsoid: tan(geocentric) = (1 - f)^2
@@ -281,8 +281,8 @@ TEST(Geodetic, Latitudes) {
         }
     }
     const Spherical s = cartesianToSpherical({1, 1, std::sqrt(2.0)});
-    EXPECT_NEAR(s.lat, deg2rad(45.0), 1e-15);
-    EXPECT_NEAR(s.lon, deg2rad(45.0), 1e-15);
+    EXPECT_NEAR(s.lat, degToRad(45.0), 1e-15);
+    EXPECT_NEAR(s.lon, degToRad(45.0), 1e-15);
     EXPECT_NEAR(s.r, 2.0, 1e-15);
     expectVecNear(sphericalToCartesian(s), {1, 1, std::sqrt(2.0)}, 1e-15);
 }
@@ -297,7 +297,7 @@ TEST(LocalFrames, EnuNedAer) {
              Ellipsoid{6.4e6, 1.0 / 150.0}
     }) {
         SCOPED_TRACE(testing::Message() << "f = " << ell.f);
-        const Geodetic o{deg2rad(40.0), deg2rad(-105.0), 1600.0};
+        const Geodetic o{degToRad(40.0), degToRad(-105.0), 1600.0};
         const Vec3     foot  = geodeticToEcef({o.lat, o.lon, 0.0}, ell);
         const Vec3     base  = geodeticToEcef(o, ell);
         const double   b     = ell.b();
@@ -335,7 +335,7 @@ TEST(LocalFrames, EnuNedAer) {
     // enuToAer and aerToEnu with the angles written out.
     EXPECT_NEAR(enuToAer({10, 0, 0}).az, constants::halfPi, 1e-15);
     EXPECT_NEAR(enuToAer({-10, 0, 0}).az, 1.5 * constants::pi, 1e-15);
-    const Aer x{deg2rad(123.0), deg2rad(17.0), 1.2e6};
+    const Aer x{degToRad(123.0), degToRad(17.0), 1.2e6};
     expectVecNear(aerToEnu(x),
                   {x.range * std::cos(x.el) * std::sin(x.az),
                    x.range * std::cos(x.el) * std::cos(x.az),
@@ -365,8 +365,8 @@ TEST(Geodesic, VincentyFlindersPeakToBuninyong) {
     const double    lat2 = -dmsToRad(37, 39, 10.15610), lon2 = dmsToRad(143, 55, 35.38390);
     const auto      inv = geodesicInverse(lat1, lon1, lat2, lon2, grs80);
     EXPECT_NEAR(inv.distance, 54972.271, 1e-3);
-    EXPECT_NEAR(rad2arcsec(inv.azimuth1 - dmsToRad(306, 52, 5.37)), 0.0, 0.01);
-    EXPECT_NEAR(rad2arcsec(inv.azimuth2 - dmsToRad(307, 10, 25.07)), 0.0, 0.01);
+    EXPECT_NEAR(radToArcsec(inv.azimuth1 - dmsToRad(306, 52, 5.37)), 0.0, 0.01);
+    EXPECT_NEAR(radToArcsec(inv.azimuth2 - dmsToRad(307, 10, 25.07)), 0.0, 0.01);
     const auto dir = geodesicDirect(lat1, lon1, inv.azimuth1, inv.distance, grs80);
     EXPECT_NEAR(dir.lat, lat2, 1e-11);
     EXPECT_NEAR(dir.lon, lon2, 1e-11);
@@ -593,28 +593,28 @@ TEST(Geodesic, NearlyAntipodalOrNotFiniteInverseThrows) {
     // On the equator Vincenty's iteration does not converge within about 0.6 deg of the antipode
     // (from 179.40 deg of longitude); the header promises astro::Error, and the same for input that
     // is not finite.
-    EXPECT_THROW((void)geodesicInverse(0.0, 0.0, 0.0, deg2rad(179.7)), Error);
+    EXPECT_THROW((void)geodesicInverse(0.0, 0.0, 0.0, degToRad(179.7)), Error);
     EXPECT_THROW((void)geodesicInverse(0.0, 0.0, 0.0, std::numeric_limits<double>::quiet_NaN()), Error);
     EXPECT_THROW((void)geodesicInverse(std::numeric_limits<double>::infinity(), 0.0, 0.1, 0.2), Error);
-    EXPECT_NO_THROW((void)geodesicInverse(0.0, 0.0, 0.0, deg2rad(179.0)));
+    EXPECT_NO_THROW((void)geodesicInverse(0.0, 0.0, 0.0, degToRad(179.0)));
 }
 
 TEST(Helmert, TransformAndInverse) {
     // Pure translation + scale + small rotation about z.
     HelmertParams p{
-        {1.0, -2.0, 3.0              },
-        {0.0, 0.0,  arcsec2rad(0.001)},
+        {1.0, -2.0, 3.0               },
+        {0.0, 0.0,  arcsecToRad(0.001)},
         1e-9
     };
     const Vec3   x{4.0e6, 3.0e6, 3.5e6};
     const Vec3   y  = helmertTransform(x, p);
-    const double rz = arcsec2rad(0.001);
+    const double rz = arcsecToRad(0.001);
     expectVecNear(y,
                   {x.x + 1.0 + 1e-9 * x.x - rz * x.y, x.y - 2.0 + 1e-9 * x.y + rz * x.x, x.z + 3.0 + 1e-9 * x.z},
                   1e-9);
     // inverse() negates the parameters, which undoes the transformation to first order; what is left
     // is second order (s t, r t, s^2 x, r^2 x, r s x), about 2e-8 m here (measured 1.1e-8 m).
-    expectVecNear(helmertTransform(y, inverse(p)), x, 5e-8);
+    expectVecNear(helmertTransform(y, p.inverse()), x, 5e-8);
     // Coordinate-frame convention flips rotation sign only.
     HelmertParams cf = p;
     cf.convention    = HelmertConvention::CoordinateFrame;
@@ -646,9 +646,9 @@ TEST(Helmert, VelocityIsTheTimeDerivativeOfThePositionInMetresPerSecond) {
     // and every rate non-zero. Positions are in m, velocities in m/s, rates per Julian year.
     constexpr double           secondsPerYear = 365.25 * 86400.0;
     const HelmertTimeDependent h{
-        {{0.1, -0.2, 0.3}, {mas2rad(1.0), mas2rad(-2.0), mas2rad(3.0)}, 5e-9        },
-        {0.01,             -0.02,                                       0.03        },
-        {mas2rad(0.1),     mas2rad(-0.2),                               mas2rad(0.3)},
+        {{0.1, -0.2, 0.3}, {masToRad(1.0), masToRad(-2.0), masToRad(3.0)}, 5e-9         },
+        {0.01,             -0.02,                                          0.03         },
+        {masToRad(0.1),    masToRad(-0.2),                                 masToRad(0.3)},
         1e-10,
         2010.0
     };
@@ -689,7 +689,7 @@ TEST(Helmert, VelocityIsTheTimeDerivativeOfThePositionInMetresPerSecond) {
     // transformation, WGS 72 to WGS 84: tZ = 4.5 m, rZ = 0.554 arcsec, dS = 0.219 ppm. The result is
     // published to 1 cm.
     const HelmertTimeDependent wgs72{
-        {{0.0, 0.0, 4.5}, {0.0, 0.0, arcsec2rad(0.554)}, 0.219e-6},
+        {{0.0, 0.0, 4.5}, {0.0, 0.0, arcsecToRad(0.554)}, 0.219e-6},
         {},
         {},
         0.0,

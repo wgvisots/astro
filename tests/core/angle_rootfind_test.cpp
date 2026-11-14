@@ -138,27 +138,27 @@ TEST(Angle, WrapPiAnd180SubtractWholeTurnsExactly) {
 // same angle written as a decimal, -(5 + 30/60) = -5.5 degrees; both sides round the same way, so the
 // comparison is for equality.
 TEST(Angle, DmsAndHmsToRadTakeTheSignOfTheFirstArgument) {
-    EXPECT_EQ(dmsToRad(-5, 30, 0.0), deg2rad(-5.5));
-    EXPECT_EQ(hmsToRad(-1, 30, 0.0), deg2rad(-22.5));
+    EXPECT_EQ(dmsToRad(-5, 30, 0.0), degToRad(-5.5));
+    EXPECT_EQ(hmsToRad(-1, 30, 0.0), degToRad(-22.5));
     // `negative` is still how to write an angle between 0 and -1: an int has no negative zero.
-    EXPECT_EQ(dmsToRad(0, 30, 0.0, true), deg2rad(-0.5));
-    EXPECT_EQ(hmsToRad(0, 30, 0.0, true), deg2rad(-7.5));
+    EXPECT_EQ(dmsToRad(0, 30, 0.0, true), degToRad(-0.5));
+    EXPECT_EQ(hmsToRad(0, 30, 0.0, true), degToRad(-7.5));
     // The two ways of giving the sign agree; they do not cancel.
-    EXPECT_EQ(dmsToRad(-5, 30, 0.0, true), deg2rad(-5.5));
-    EXPECT_EQ(hmsToRad(-1, 30, 0.0, true), deg2rad(-22.5));
+    EXPECT_EQ(dmsToRad(-5, 30, 0.0, true), degToRad(-5.5));
+    EXPECT_EQ(hmsToRad(-1, 30, 0.0, true), degToRad(-22.5));
     // Positive angles, and the flag alone, are as before.
-    EXPECT_EQ(dmsToRad(5, 30, 0.0), deg2rad(5.5));
-    EXPECT_EQ(dmsToRad(5, 30, 0.0, true), deg2rad(-5.5));
+    EXPECT_EQ(dmsToRad(5, 30, 0.0), degToRad(5.5));
+    EXPECT_EQ(dmsToRad(5, 30, 0.0, true), degToRad(-5.5));
     // Minutes and seconds are magnitudes: their signs do not change the sign of the angle.
-    EXPECT_EQ(dmsToRad(5, -30, -0.0), deg2rad(5.5));
-    EXPECT_EQ(dmsToRad(-5, -30, -0.0), deg2rad(-5.5));
+    EXPECT_EQ(dmsToRad(5, -30, -0.0), degToRad(5.5));
+    EXPECT_EQ(dmsToRad(-5, -30, -0.0), degToRad(-5.5));
 }
 
 // Every form the grammar in angle.h allows. Truth: the same angle written as a decimal number of hours or
 // degrees. The parser adds the fields in the same order, so the two agree to a rounding error or two
 // (EXPECT_DOUBLE_EQ allows four).
 TEST(Angle, ParseAcceptsTheDocumentedSexagesimalForms) {
-    const double hms = deg2rad(15.0 * (12.0 + 34.0 / 60.0 + 56.7 / 3600.0));
+    const double hms = degToRad(15.0 * (12.0 + 34.0 / 60.0 + 56.7 / 3600.0));
     for (const char* text : {"12:34:56.7",
                              "12 34 56.7",
                              "12h34m56.7s",
@@ -174,7 +174,7 @@ TEST(Angle, ParseAcceptsTheDocumentedSexagesimalForms) {
                              "012:034:056.700"}) {
         EXPECT_DOUBLE_EQ(parseHms(text), hms) << text;
     }
-    const double dms = deg2rad(-(5.0 + 6.0 / 60.0 + 7.25 / 3600.0));
+    const double dms = degToRad(-(5.0 + 6.0 / 60.0 + 7.25 / 3600.0));
     for (const char* text : {"-5:06:07.25",
                              "-05 06 07.25",
                              "- 5  6  7.25",
@@ -189,20 +189,20 @@ TEST(Angle, ParseAcceptsTheDocumentedSexagesimalForms) {
         EXPECT_DOUBLE_EQ(parseDms(text), dms) << text;
     }
     // One or two fields; only the last may have a fraction, and it may end or begin with the point.
-    EXPECT_DOUBLE_EQ(parseDms("12.5"), deg2rad(12.5));
-    EXPECT_DOUBLE_EQ(parseDms("12.5d"), deg2rad(12.5));
-    EXPECT_DOUBLE_EQ(parseDms("12."), deg2rad(12.0));
-    EXPECT_DOUBLE_EQ(parseDms(".5"), deg2rad(0.5));
-    EXPECT_DOUBLE_EQ(parseDms("12:30.5"), deg2rad(12.0 + 30.5 / 60.0));
-    EXPECT_DOUBLE_EQ(parseDms("12d30'"), deg2rad(12.5));
-    EXPECT_DOUBLE_EQ(parseHms("12.5h"), deg2rad(187.5));
-    EXPECT_DOUBLE_EQ(parseHms("12h30"), deg2rad(187.5));
+    EXPECT_DOUBLE_EQ(parseDms("12.5"), degToRad(12.5));
+    EXPECT_DOUBLE_EQ(parseDms("12.5d"), degToRad(12.5));
+    EXPECT_DOUBLE_EQ(parseDms("12."), degToRad(12.0));
+    EXPECT_DOUBLE_EQ(parseDms(".5"), degToRad(0.5));
+    EXPECT_DOUBLE_EQ(parseDms("12:30.5"), degToRad(12.0 + 30.5 / 60.0));
+    EXPECT_DOUBLE_EQ(parseDms("12d30'"), degToRad(12.5));
+    EXPECT_DOUBLE_EQ(parseHms("12.5h"), degToRad(187.5));
+    EXPECT_DOUBLE_EQ(parseHms("12h30"), degToRad(187.5));
     // The first field has no upper limit; minutes and seconds just below 60 are in range.
-    EXPECT_DOUBLE_EQ(parseDms("360:00:00"), deg2rad(360.0));
+    EXPECT_DOUBLE_EQ(parseDms("360:00:00"), degToRad(360.0));
     EXPECT_DOUBLE_EQ(parseHms("24:00:00"), twoPi);
-    EXPECT_DOUBLE_EQ(parseDms("0:59:59.999"), deg2rad(59.0 / 60.0 + 59.999 / 3600.0));
+    EXPECT_DOUBLE_EQ(parseDms("0:59:59.999"), degToRad(59.0 / 60.0 + 59.999 / 3600.0));
     // The sign applies to the whole angle, including an angle between 0 and -1.
-    EXPECT_DOUBLE_EQ(parseDms("-0:30"), deg2rad(-0.5));
+    EXPECT_DOUBLE_EQ(parseDms("-0:30"), degToRad(-0.5));
     EXPECT_TRUE(sameBits(parseDms("-0"), -0.0));
 }
 
@@ -271,36 +271,36 @@ TEST(Angle, FormatAndDecomposeOfNonFiniteAnglesAreDefined) {
 // and is reported like infinity, as angle.h says.
 TEST(Angle, FormatAndDecomposeAtTheLargestWholePart) {
     const double      largest = std::numeric_limits<int>::max(); // 2147483647, exact in a double
-    const Sexagesimal fits    = radToDms(deg2rad(-largest));
+    const Sexagesimal fits    = radToDms(degToRad(-largest));
     EXPECT_TRUE(fits.negative);
     EXPECT_EQ(fits.whole, std::numeric_limits<int>::max());
     EXPECT_EQ(fits.minutes, 0);
     EXPECT_EQ(fits.seconds, 0.0);
-    EXPECT_EQ(formatDms(deg2rad(largest)), "+2147483647:00:00.00");
+    EXPECT_EQ(formatDms(degToRad(largest)), "+2147483647:00:00.00");
 
-    const Sexagesimal tooLarge = radToDms(deg2rad(-(largest + 1.0)));
+    const Sexagesimal tooLarge = radToDms(degToRad(-(largest + 1.0)));
     EXPECT_TRUE(tooLarge.negative);
     EXPECT_EQ(tooLarge.whole, 0);
     EXPECT_EQ(tooLarge.minutes, 0);
     EXPECT_EQ(tooLarge.seconds, kInf);
-    EXPECT_EQ(formatDms(deg2rad(largest + 1.0)), "+inf");
+    EXPECT_EQ(formatDms(degToRad(largest + 1.0)), "+inf");
     EXPECT_EQ(formatHms(-1e300), "-inf");
 }
 
 TEST(Angle, Sexagesimal) {
     EXPECT_NEAR(parseHms("12:00:00"), pi, 1e-15);
-    EXPECT_NEAR(parseHms("06h30m"), deg2rad(97.5), 1e-15);
-    EXPECT_NEAR(parseDms("-00 30 00"), deg2rad(-0.5), 1e-15);
-    EXPECT_NEAR(parseDms("+45d15'36\""), deg2rad(45.26), 1e-15);
-    EXPECT_NEAR(parseDms("45\xC2\xB0 15' 36\""), deg2rad(45.26), 1e-15);
-    EXPECT_NEAR(parseDms("12.5"), deg2rad(12.5), 1e-15);
+    EXPECT_NEAR(parseHms("06h30m"), degToRad(97.5), 1e-15);
+    EXPECT_NEAR(parseDms("-00 30 00"), degToRad(-0.5), 1e-15);
+    EXPECT_NEAR(parseDms("+45d15'36\""), degToRad(45.26), 1e-15);
+    EXPECT_NEAR(parseDms("45\xC2\xB0 15' 36\""), degToRad(45.26), 1e-15);
+    EXPECT_NEAR(parseDms("12.5"), degToRad(12.5), 1e-15);
     EXPECT_THROW((void)parseDms("12:61:00"), Error);
     EXPECT_THROW((void)parseDms("abc"), Error);
     EXPECT_THROW((void)parseDms("1:2:3:4"), Error);
 
     EXPECT_EQ(formatHms(parseHms("01:02:03.456")), "01:02:03.456");
-    EXPECT_EQ(formatDms(deg2rad(-0.5)), "-00:30:00.00");
-    EXPECT_EQ(formatDms(deg2rad(10.0)), "+10:00:00.00");
+    EXPECT_EQ(formatDms(degToRad(-0.5)), "-00:30:00.00");
+    EXPECT_EQ(formatDms(degToRad(10.0)), "+10:00:00.00");
     // Rounding carries: 59.9999 s rounds up to the next minute.
     EXPECT_EQ(formatDms(dmsToRad(10, 59, 59.9999), 2), "+11:00:00.00");
 }
@@ -325,14 +325,14 @@ TEST(Angle, UnitConversionsAgainstPi) {
     const auto        near = [&](double got, long double want) {
         return static_cast<double>(std::abs(got - want) / std::abs(want));
     };
-    EXPECT_LE(near(deg2rad(180.0), piL), 2.3e-16);
-    EXPECT_LE(near(arcsec2rad(648000.0), piL), 2.3e-16);
-    EXPECT_LE(near(mas2rad(648.0e6), piL), 2.3e-16);
-    EXPECT_LE(near(rad2deg(pi), 180.0L), 2.3e-16);
-    EXPECT_LE(near(rad2arcsec(pi), 648000.0L), 2.3e-16);
-    EXPECT_LE(near(rad2mas(pi), 648.0e6L), 2.3e-16);
-    EXPECT_LE(near(deg2rad(-45.0), -piL / 4), 2.3e-16);
-    EXPECT_LE(near(mas2rad(1.0), piL / 648.0e6L), 2.3e-16);
+    EXPECT_LE(near(degToRad(180.0), piL), 2.3e-16);
+    EXPECT_LE(near(arcsecToRad(648000.0), piL), 2.3e-16);
+    EXPECT_LE(near(masToRad(648.0e6), piL), 2.3e-16);
+    EXPECT_LE(near(radToDeg(pi), 180.0L), 2.3e-16);
+    EXPECT_LE(near(radToArcsec(pi), 648000.0L), 2.3e-16);
+    EXPECT_LE(near(radToMas(pi), 648.0e6L), 2.3e-16);
+    EXPECT_LE(near(degToRad(-45.0), -piL / 4), 2.3e-16);
+    EXPECT_LE(near(masToRad(1.0), piL / 648.0e6L), 2.3e-16);
 }
 
 // radToHms and radToDms against angles built in long double from known hours (or degrees), minutes and

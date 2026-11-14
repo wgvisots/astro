@@ -56,12 +56,12 @@ struct Orbit {
 };
 
 const Orbit kOrbits[] = {
-    {"LEO 400 km i=51.6",     {6778e3, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7}},
-    {"SSO 800 km e=0.01",     {7178e3, 0.01, deg2rad(98.6), 1.3, 2.5, 0.2}  },
-    {"HEO 1000 x 20000 km",   {16878e3, 0.56, deg2rad(63.4), 0.1, 4.7, 0.0} },
-    {"near-equatorial i=0.5", {7000e3, 0.002, deg2rad(0.5), 0.0, 0.0, 1.0}  },
-    {"polar i=90",            {7000e3, 0.001, deg2rad(90.0), 2.0, 0.3, 0.1} },
-    {"retrograde i=140",      {7000e3, 0.001, deg2rad(140.0), 0.5, 1.0, 2.0}},
+    {"LEO 400 km i=51.6",     {6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7}},
+    {"SSO 800 km e=0.01",     {7178e3, 0.01, degToRad(98.6), 1.3, 2.5, 0.2}  },
+    {"HEO 1000 x 20000 km",   {16878e3, 0.56, degToRad(63.4), 0.1, 4.7, 0.0} },
+    {"near-equatorial i=0.5", {7000e3, 0.002, degToRad(0.5), 0.0, 0.0, 1.0}  },
+    {"polar i=90",            {7000e3, 0.001, degToRad(90.0), 2.0, 0.3, 0.1} },
+    {"retrograde i=140",      {7000e3, 0.001, degToRad(140.0), 0.5, 1.0, 2.0}},
 };
 
 /// Reference ("truth") propagator: J2 + J4 with a tight tolerance.
@@ -112,7 +112,7 @@ double maxRateInconsistency(const std::vector<StateVector>& g, double step) {
 }
 
 std::vector<StateVector> truthGrid(const StateVector& s0, double step, std::size_t n) {
-    return makePropagator({kEpoch, s0, Mat6{}}, tightOptions()).propagateGrid(0.0, step, n);
+    return trackerPropagator({kEpoch, s0, Mat6{}}, tightOptions()).propagateGrid(0.0, step, n);
 }
 
 void toleranceStudy() {
@@ -131,7 +131,7 @@ void toleranceStudy() {
         double        e4 = 0.0, eDay = 0.0;
         AdaptiveStats st;
         for (int i = 0; i < 3; ++i) {
-            const auto    prop = makePropagator({kEpoch, elementsToState(kOrbits[i].el), Mat6{}}, o);
+            const auto    prop = trackerPropagator({kEpoch, elementsToState(kOrbits[i].el), Mat6{}}, o);
             AdaptiveStats s;
             e4   = std::max(e4, maxDistance(prop.propagateGrid(0.0, 10.0, 1441, &s), truth4[i]));
             eDay = std::max(eDay, maxDistance(prop.propagateGrid(0.0, 60.0, 1441), truthDay[i]));
@@ -146,7 +146,7 @@ void toleranceStudy() {
 void interpolationStudy() {
     std::printf("\n2. Grid interpolation vs the integrator's own error (LEO, default tolerance, 1 day)\n\n");
     const StateVector   s0    = elementsToState(kOrbits[0].el);
-    const auto          prop  = makePropagator({kEpoch, s0, Mat6{}}, [] {
+    const auto          prop  = trackerPropagator({kEpoch, s0, Mat6{}}, [] {
         TrackerOptions o;
         o.integrator = AdaptiveOptions{};
         return o;
@@ -235,7 +235,7 @@ void secularStudy() {
         const StateVector s0           = elementsToState(kOrbits[i].el);
         TrackerOptions    tod          = tightOptions();
         tod.frame                      = Frame::TOD; // the secular theory needs z = pole
-        const auto              truth  = makePropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
+        const auto              truth  = trackerPropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
         const auto              direct = SecularPropagator(s0).propagateGrid(0.0, 30.0, 481);
         const double            period = orbitalPeriod(stateToElements(s0).a);
         const std::size_t       nFit   = std::min<std::size_t>(481, static_cast<std::size_t>(2.0 * period / 30.0) + 1);
@@ -315,7 +315,7 @@ void secularStartStudy() {
         const StateVector s0  = elementsToState(o.el);
         TrackerOptions    tod = tightOptions();
         tod.frame             = Frame::TOD;
-        const auto truth      = makePropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
+        const auto truth      = trackerPropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
         const auto osc        = SecularPropagator(s0).propagateGrid(0.0, 30.0, 481);
         const auto matched    = SecularPropagatorCorrected(matchCorrectedVelocity(s0)).propagateGrid(0.0, 30.0, 481);
         std::printf("%-24s %13.1f km %19.1f km\n",
@@ -331,12 +331,12 @@ void poleStudy() {
     const StateVector s0 = elementsToState(kOrbits[0].el);
     TrackerOptions    o  = tightOptions();
     o.integrator.maxStep = 1e30;
-    const auto right     = makePropagator({t0, s0, Mat6{}}, o).propagateGrid(0.0, 60.0, 241); // pole aligned
+    const auto right     = trackerPropagator({t0, s0, Mat6{}}, o).propagateGrid(0.0, 60.0, 241); // pole aligned
     const auto wrong =
         NumericalPropagator(t0, s0, {std::make_shared<GravityField>(CentralBody::earthJ2J4())}, o.integrator)
             .propagateGrid(0.0, 60.0, 241);
     const Vec3 pole = poleOfDateMatrix(Frame::GCRS, t0).transpose() * Vec3{0, 0, 1};
-    std::printf("  true pole vs GCRS z on 2026-11-02: %.4f deg\n", rad2deg(std::acos(pole.z)));
+    std::printf("  true pole vs GCRS z on 2026-11-02: %.4f deg\n", radToDeg(std::acos(pole.z)));
     std::printf("  J2/J4 about GCRS z: %.0f m after 1 h, %.0f m after 4 h\n",
                 maxDistance({wrong.begin(), wrong.begin() + 61}, {right.begin(), right.begin() + 61}),
                 maxDistance(wrong, right));
@@ -406,11 +406,11 @@ void covarianceStudy() {
         double      dt;
     };
     const Case twoBody[] = {
-        {"LEO 400 km",          elementsToState(kOrbits[0].el),                                  86400.0       },
-        {"LEO 400 km",          elementsToState(kOrbits[0].el),                                  7 * 86400.0   },
-        {"HEO 1000 x 20000 km", elementsToState(kOrbits[2].el),                                  86400.0       },
-        {"e = 0.9",             elementsToState({60000e3, 0.9, deg2rad(30.0), 1.0, 2.0, 0.1}),   1.5 * 146000.0},
-        {"hyperbola e = 1.5",   elementsToState({-20000e3, 1.5, deg2rad(30.0), 1.0, 2.0, -0.5}), 20000.0       },
+        {"LEO 400 km",          elementsToState(kOrbits[0].el),                                   86400.0       },
+        {"LEO 400 km",          elementsToState(kOrbits[0].el),                                   7 * 86400.0   },
+        {"HEO 1000 x 20000 km", elementsToState(kOrbits[2].el),                                   86400.0       },
+        {"e = 0.9",             elementsToState({60000e3, 0.9, degToRad(30.0), 1.0, 2.0, 0.1}),   1.5 * 146000.0},
+        {"hyperbola e = 1.5",   elementsToState({-20000e3, 1.5, degToRad(30.0), 1.0, 2.0, -0.5}), 20000.0       },
     };
     AdaptiveOptions tight;
     tight.relTol = 1e-14;
@@ -453,7 +453,7 @@ void covarianceStudy() {
         }
         std::printf("\n");
     }
-    const StateVector gto = elementsToState({26560e3, 0.74, deg2rad(63.4), 0.3, 4.7, 0.2});
+    const StateVector gto = elementsToState({26560e3, 0.74, degToRad(63.4), 0.3, 4.7, 0.2});
     std::printf("| e = 0.74 |");
     for (double dt : {14400.0, 86400.0, 7 * 86400.0}) {
         std::printf(" %.1e |",
@@ -475,7 +475,7 @@ void covarianceStudy() {
         const StateVector s0                       = elementsToState(o.el); // TOD
         TrackerOptions    tod                      = tightOptions();
         tod.frame                                  = Frame::TOD;
-        const auto                       numerical = makePropagator({kEpoch, s0, Mat6{}}, tod);
+        const auto                       numerical = trackerPropagator({kEpoch, s0, Mat6{}}, tod);
         const SecularPropagatorCorrected secular(s0);
         for (double dt : {14400.0, 86400.0}) {
             const Vec3 n = ricSigmas(numerical.propagateWithCovariance(dt, P0));

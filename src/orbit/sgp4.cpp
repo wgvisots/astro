@@ -34,17 +34,17 @@
 namespace astro {
 
 namespace {
-constexpr double pi      = 3.14159265358979323846;
-constexpr double twopi   = 2.0 * pi;
-constexpr double x2o3    = 2.0 / 3.0;
-constexpr double deg2rad = pi / 180.0;
-constexpr double xpdotp  = 1440.0 / twopi; // rev/day -> rad/min
+constexpr double pi       = 3.14159265358979323846;
+constexpr double twopi    = 2.0 * pi;
+constexpr double x2o3     = 2.0 / 3.0;
+constexpr double degToRad = pi / 180.0;
+constexpr double xpdotp   = 1440.0 / twopi; // rev/day -> rad/min
 
 double gstime(double jdut1) {
     const double tut1 = (jdut1 - 2451545.0) / 36525.0;
     double temp = -6.2e-6 * tut1 * tut1 * tut1 + 0.093104 * tut1 * tut1 + (876600.0 * 3600.0 + 8640184.812866) * tut1
                 + 67310.54841; // seconds
-    temp = std::fmod(temp * deg2rad / 240.0, twopi);
+    temp = std::fmod(temp * degToRad / 240.0, twopi);
     if (temp < 0.0) {
         temp += twopi;
     }

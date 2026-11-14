@@ -47,7 +47,7 @@ constexpr int kThreads = 6;
 const Time kEpoch = Time::fromIso8601("2024-02-01T00:00:00Z"); // inside the DE440s test kernel
 
 StateVector leo() {
-    return elementsToState({6778e3, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    return elementsToState({6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
 }
 
 /// Runs work(i) for i = 0 .. kThreads-1 concurrently.

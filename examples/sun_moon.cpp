@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
     //! [ephemeris]
 
     //! [rise_set]
-    const Geodetic site{deg2rad(51.4779), 0.0, 45.0}; // Greenwich
+    const Geodetic site{degToRad(51.4779), 0.0, 45.0}; // Greenwich
     for (const SkyEvent& e : sunRiseSet(site, t, t + 86400.0, ConstantEop{}, *eph)) {
         const char* what = e.type == SkyEventType::Rise ? "sunrise "
                          : e.type == SkyEventType::Set  ? "sunset  "
@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
 
     //! [shadow]
     // A satellite 7000 km from the Earth's center, directly behind it as seen from the Sun.
-    const ShadowResult s = shadow(-normalized(sun) * 7000e3, sun);
+    const ShadowResult s = earthShadow(-normalized(sun) * 7000e3, sun);
     std::cout << "satellite: " << s.state << ", illumination " << s.illumination << '\n';
     //! [shadow]
     return 0;

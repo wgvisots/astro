@@ -35,9 +35,9 @@ int main() {
     // comes from your tracker in an ECI frame.
     const Time        epoch = Time::fromIso8601("2026-03-01T12:00:00Z");
     const ConstantEop eop; // in real use: EopTable::loadFinals2000A("finals2000A.all")
-    const Geodetic    site{deg2rad(30.0), deg2rad(-100.0), 0.0};
+    const Geodetic    site{degToRad(30.0), degToRad(-100.0), 0.0};
     const Mat3        enu = ecefToEnuMatrix(site.lat, site.lon);
-    const double      V = 5000.0, gamma = deg2rad(35.0), azimuth = deg2rad(45.0);
+    const double      V = 5000.0, gamma = degToRad(35.0), azimuth = degToRad(45.0);
     const Vec3        vEnu{V * std::cos(gamma) * std::sin(azimuth),
                     V * std::cos(gamma) * std::cos(azimuth),
                     V * std::sin(gamma)};
@@ -63,13 +63,13 @@ int main() {
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "impact time      " << impact->time.iso8601() << '\n';
     std::cout << "flight time      " << impact->flightTime << " s\n";
-    std::cout << "latitude         " << rad2deg(impact->point.lat) << " deg\n";
-    std::cout << "longitude        " << rad2deg(impact->point.lon) << " deg\n";
-    std::cout << "impact angle     " << rad2deg(impact->angle) << " deg below horizontal\n";
+    std::cout << "latitude         " << radToDeg(impact->point.lat) << " deg\n";
+    std::cout << "longitude        " << radToDeg(impact->point.lon) << " deg\n";
+    std::cout << "impact angle     " << radToDeg(impact->angle) << " deg below horizontal\n";
     std::cout << "speed            " << impact->speed << " m/s (relative to the ground)\n";
     std::cout << std::setprecision(1);
-    std::cout << "1-sigma ellipse  " << e1.semiMajor << " x " << e1.semiMinor << " m, rotation " << rad2deg(e1.rotation)
-              << " deg (clockwise from north)\n";
+    std::cout << "1-sigma ellipse  " << e1.semiMajor << " x " << e1.semiMinor << " m, rotation "
+              << radToDeg(e1.rotation) << " deg (clockwise from north)\n";
     std::cout << "95 % ellipse     " << e95.semiMajor << " x " << e95.semiMinor << " m\n";
     std::cout << std::setprecision(3) << "time sigma       " << impact->uncertainty->timeSigma << " s\n";
     //! [print]
@@ -84,7 +84,7 @@ int main() {
         const StateVector s = itrsToGcrs(StateVector{geodeticToEcef(site), enu.transpose() * v}, epoch, eop);
         if (const auto hit = predictImpact(epoch, s, Frame::GCRS, eop, options)) {
             std::cout << std::setprecision(0) << speed << std::setprecision(3) << " m/s -> latitude "
-                      << rad2deg(hit->point.lat) << ", longitude " << rad2deg(hit->point.lon) << " deg\n";
+                      << radToDeg(hit->point.lat) << ", longitude " << radToDeg(hit->point.lon) << " deg\n";
         }
     }
     //! [shared]

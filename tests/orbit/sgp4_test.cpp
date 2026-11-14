@@ -40,7 +40,7 @@ TEST(Tle, ParseIssExample) {
     EXPECT_EQ(t.epoch.iso8601(3), "2008-09-20T12:25:40.104Z");
     EXPECT_NEAR(t.meanMotionDot, -0.00002182, 1e-15);
     EXPECT_NEAR(t.bstar, -0.11606e-4, 1e-15);
-    EXPECT_NEAR(rad2deg(t.inclination), 51.6416, 1e-12);
+    EXPECT_NEAR(radToDeg(t.inclination), 51.6416, 1e-12);
     EXPECT_NEAR(t.eccentricity, 0.0006703, 1e-15);
     EXPECT_NEAR(t.meanMotion, 15.72125391, 1e-12);
     EXPECT_EQ(t.revolutionNumber, 56353);

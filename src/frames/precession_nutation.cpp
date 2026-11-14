@@ -30,7 +30,6 @@
 
 namespace astro {
 
-using constants::arcsecToRad;
 using constants::twoPi;
 using constants::uasToRad;
 
@@ -39,7 +38,7 @@ namespace {
 constexpr double kTurnArcsec = 1296000.0;
 
 double delaunay(double c0, double c1, double c2, double c3, double c4, double t) {
-    return std::fmod(c0 + t * (c1 + t * (c2 + t * (c3 + t * c4))), kTurnArcsec) * arcsecToRad;
+    return std::fmod(c0 + t * (c1 + t * (c2 + t * (c3 + t * c4))), kTurnArcsec) * constants::arcsecToRad;
 }
 
 // Evaluate a Poisson series: returns sum over powers of (sum of terms) * t^p, in the table's units.
@@ -91,11 +90,11 @@ Nutation nutationIau2000A(double t) noexcept {
 
 Nutation nutationIau2000B(double t) noexcept {
     // Simon et al. (1994) linear Delaunay arguments, as used by IAU 2000B.
-    const double el  = std::fmod(485868.249036 + 1717915923.2178 * t, kTurnArcsec) * arcsecToRad;
-    const double elp = std::fmod(1287104.79305 + 129596581.0481 * t, kTurnArcsec) * arcsecToRad;
-    const double f   = std::fmod(335779.526232 + 1739527262.8478 * t, kTurnArcsec) * arcsecToRad;
-    const double d   = std::fmod(1072260.70369 + 1602961601.2090 * t, kTurnArcsec) * arcsecToRad;
-    const double om  = std::fmod(450160.398036 - 6962890.5431 * t, kTurnArcsec) * arcsecToRad;
+    const double el  = std::fmod(485868.249036 + 1717915923.2178 * t, kTurnArcsec) * constants::arcsecToRad;
+    const double elp = std::fmod(1287104.79305 + 129596581.0481 * t, kTurnArcsec) * constants::arcsecToRad;
+    const double f   = std::fmod(335779.526232 + 1739527262.8478 * t, kTurnArcsec) * constants::arcsecToRad;
+    const double d   = std::fmod(1072260.70369 + 1602961601.2090 * t, kTurnArcsec) * constants::arcsecToRad;
+    const double om  = std::fmod(450160.398036 - 6962890.5431 * t, kTurnArcsec) * constants::arcsecToRad;
     double       dp = 0.0, de = 0.0;
     for (int i = 76; i >= 0; --i) {
         const auto&  x   = detail::kNut2000B[i];
@@ -104,7 +103,7 @@ Nutation nutationIau2000B(double t) noexcept {
         dp += (x.ps + x.pst * t) * s + x.pc * c;
         de += (x.ec + x.ect * t) * c + x.es * s;
     }
-    constexpr double u2r    = arcsecToRad / 1e7;
+    constexpr double u2r    = constants::arcsecToRad / 1e7;
     constexpr double dpplan = -0.135 * constants::masToRad;
     constexpr double deplan = 0.388 * constants::masToRad;
     return {dp * u2r + dpplan, de * u2r + deplan};
@@ -116,20 +115,20 @@ Nutation nutation(double t, PrecessionNutationModel model) noexcept {
 
 double meanObliquity06(double t) noexcept {
     return (84381.406 + t * (-46.836769 + t * (-0.0001831 + t * (0.00200340 + t * (-0.000000576 + t * -0.0000000434)))))
-         * arcsecToRad;
+         * constants::arcsecToRad;
 }
 
 FukushimaWilliams fukushimaWilliams06(double t) noexcept {
     FukushimaWilliams fw;
     fw.gammaBar =
         (-0.052928 + t * (10.556378 + t * (0.4932044 + t * (-0.00031238 + t * (-0.000002788 + t * 0.0000000260)))))
-        * arcsecToRad;
+        * constants::arcsecToRad;
     fw.phiBar =
         (84381.412819 + t * (-46.811016 + t * (0.0511268 + t * (0.00053289 + t * (-0.000000440 + t * -0.0000000176)))))
-        * arcsecToRad;
+        * constants::arcsecToRad;
     fw.psiBar =
         (-0.041775 + t * (5038.481484 + t * (1.5584175 + t * (-0.00018522 + t * (-0.000026452 + t * -0.0000000148)))))
-        * arcsecToRad;
+        * constants::arcsecToRad;
     fw.epsA = meanObliquity06(t);
     return fw;
 }
@@ -168,12 +167,12 @@ CipXY cipXY06(double t) noexcept {
             (evalPoly(detail::kCipYPoly, t) + evalSeries(detail::kCipY, detail::kCipYCount, fa, t)) * uasToRad};
 }
 
-CipXY cipXYFromMatrix(const Mat3& npb) noexcept {
+CipXY matrixToCipXY(const Mat3& npb) noexcept {
     return {npb(2, 0), npb(2, 1)};
 }
 
 CipXY cipXY(double t, PrecessionNutationModel model) noexcept {
-    return model == PrecessionNutationModel::IAU2006_2000A ? cipXY06(t) : cipXYFromMatrix(npbMatrix06(t, model));
+    return model == PrecessionNutationModel::IAU2006_2000A ? cipXY06(t) : matrixToCipXY(npbMatrix06(t, model));
 }
 
 double cioLocatorS06(double t, const CipXY& xy) noexcept {
@@ -184,7 +183,7 @@ double cioLocatorS06(double t, const CipXY& xy) noexcept {
 }
 
 double tioLocatorSp(double t) noexcept {
-    return -47e-6 * t * arcsecToRad;
+    return -47e-6 * t * constants::arcsecToRad;
 }
 
 Mat3 celestialToIntermediateMatrix(const CipXY& xy, double s) noexcept {
@@ -196,9 +195,9 @@ Mat3 celestialToIntermediateMatrix(const CipXY& xy, double s) noexcept {
 
 Nutation poleOffsetsToNutation(double t, double dX, double dY) noexcept {
     // dX = dpsi sin(epsA) + c deps,  dY = deps - c dpsi sin(epsA),  c = psiA cos(eps0) - chiA
-    const double psiA       = (5038.481507 * t - 1.0790069 * t * t) * arcsecToRad;
-    const double chiA       = (10.556403 * t - 2.3814292 * t * t) * arcsecToRad;
-    const double eps0       = 84381.406 * arcsecToRad;
+    const double psiA       = (5038.481507 * t - 1.0790069 * t * t) * constants::arcsecToRad;
+    const double chiA       = (10.556403 * t - 2.3814292 * t * t) * constants::arcsecToRad;
+    const double eps0       = 84381.406 * constants::arcsecToRad;
     const double c          = psiA * std::cos(eps0) - chiA;
     const double k          = 1.0 + c * c;
     const double dpsiSinEps = (dX - c * dY) / k;

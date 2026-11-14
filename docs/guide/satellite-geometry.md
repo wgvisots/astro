@@ -47,12 +47,12 @@ Brent's method:
 <!-- snippet: examples/sgp4_passes.cpp#passes -->
 ```cpp
 // Passes above 10 deg over a station during the day after the epoch.
-const Geodetic station{deg2rad(38.8895), deg2rad(-77.0353), 100.0};
+const Geodetic station{degToRad(38.8895), degToRad(-77.0353), 100.0};
 const auto     passes =
-    findPasses(sgp4ItrsFunction(sgp4, eop), station, sgp4.epoch(), sgp4.epoch() + 86400.0, deg2rad(10.0));
+    findPasses(sgp4ItrsFunction(sgp4, eop), station, sgp4.epoch(), sgp4.epoch() + 86400.0, degToRad(10.0));
 for (const Pass& p : passes) {
     std::cout << "  AOS " << p.aos.iso8601(0) << "  max el " << std::fixed << std::setprecision(1)
-              << rad2deg(p.maxElevation) << " deg  LOS " << p.los.iso8601(0) << '\n';
+              << radToDeg(p.maxElevation) << " deg  LOS " << p.los.iso8601(0) << '\n';
 }
 ```
 
@@ -76,18 +76,18 @@ if (!passes.empty()) {
 <!-- snippet: examples/sun_moon.cpp#shadow -->
 ```cpp
 // A satellite 7000 km from the Earth's center, directly behind it as seen from the Sun.
-const ShadowResult s = shadow(-normalized(sun) * 7000e3, sun);
+const ShadowResult s = earthShadow(-normalized(sun) * 7000e3, sun);
 std::cout << "satellite: " << s.state << ", illumination " << s.illumination << '\n';
 ```
 
-`shadow` uses a cylindrical or conical (umbra, penumbra, annular, with the visible fraction of the
+`earthShadow` uses a cylindrical or conical (umbra, penumbra, annular, with the visible fraction of the
 solar disk) model [Montenbruck & Gill (2000), sec. 3.4](https://doi.org/10.1007/978-3-642-58351-3); `findEclipses` finds the
 entry and exit times over a span; `betaAngle` is the Sun's elevation above the orbit plane.
 
 ## Ground track, footprint, line of sight
 
 `subSatellitePoint` and `groundTrack` give the point below the satellite; `coverageHalfAngle` and
-`maxSlantRange` give the coverage for an altitude and minimum elevation, and `footprint` the circle
+`maxSlantRange` give the coverage for an altitude and minimum elevation, and `coverageFootprint` the circle
 of that half angle as latitude/longitude points; `lineOfSight` says whether the Earth's ellipsoid
 blocks the line between two points. All are in `satellite/ground.h`.
 
@@ -95,7 +95,7 @@ blocks the line between two points. All are in `satellite/ground.h`.
 
 `ricMatrix` (radial, in-track, cross-track; also called RSW), `lvlhMatrix`, `vncMatrix` and
 `ntwMatrix` rotate inertial vectors into frames attached to a state; `rotateCovariance` rotates a
-6x6 covariance. `relativeStateRic` and `deputyFromRelativeRic` give the relative state of a deputy
+6x6 covariance. `relativeStateRic` and `relativeRicToDeputy` give the relative state of a deputy
 in the chief's rotating RIC frame, the coordinates in which the Clohessy-Wiltshire equations
 [Clohessy & Wiltshire (1960)](https://doi.org/10.2514/8.8704) are usually written today (check the axis order when
 comparing with a particular text). The frame definitions are those of the CCSDS navigation

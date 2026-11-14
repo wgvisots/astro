@@ -42,7 +42,7 @@ const CentralBody kJ2J4 = CentralBody::earthJ2J4();
 
 // An eccentric, inclined LEO orbit.
 StateVector leo() {
-    return elementsToState({7200 * km, 0.05, deg2rad(51.6), 0.3, 1.2, 0.4});
+    return elementsToState({7200 * km, 0.05, degToRad(51.6), 0.3, 1.2, 0.4});
 }
 
 StateVector12 pointMassState(const StateVector& s) {
@@ -176,7 +176,7 @@ TEST(State12, KeplerUnmodeledForceDoesWorkOnOrbit) {
 }
 
 TEST(State12, SecularStateVersionMatchesElementVersion) {
-    const KeplerianElements el{7000 * km, 0.01, deg2rad(98.0), 0.5, 1.0, 2.0};
+    const KeplerianElements el{7000 * km, 0.01, degToRad(98.0), 0.5, 1.0, 2.0};
     const double            dt       = 5 * 86400.0;
     const StateVector       expected = elementsToState(propagateSecular(el, dt));
     const StateVector       s        = propagateSecular(elementsToState(el), dt);

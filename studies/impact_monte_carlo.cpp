@@ -49,9 +49,9 @@ struct Shot {
 };
 
 StateVector launch(const Shot& s, const EopProvider& eop) {
-    const Geodetic site{deg2rad(30.0), deg2rad(-100.0), 0.0};
+    const Geodetic site{degToRad(30.0), degToRad(-100.0), 0.0};
     const Mat3     enu = ecefToEnuMatrix(site.lat, site.lon);
-    const double   g = deg2rad(s.gamma), a = deg2rad(s.azimuth);
+    const double   g = degToRad(s.gamma), a = degToRad(s.azimuth);
     const Vec3     v{s.speed * std::cos(g) * std::sin(a), s.speed * std::cos(g) * std::cos(a), s.speed * std::sin(g)};
     return itrsToGcrs(StateVector{geodeticToEcef(site), enu.transpose() * v}, kEpoch, eop);
 }
@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
         const auto        imp   = predictImpact(kEpoch, s0, Frame::GCRS, eop);
         const double      range = constants::wgs84A
                            * std::acos(dot(normalized(imp->itrs.r),
-                                           normalized(geodeticToEcef({deg2rad(30.0), deg2rad(-100.0), 0.0}))));
+                                           normalized(geodeticToEcef({degToRad(30.0), degToRad(-100.0), 0.0}))));
         std::printf("%-16s %10.1f %12.1f %10.4f\n",
                     s.name,
                     imp->flightTime,
@@ -165,8 +165,8 @@ int main(int argc, char** argv) {
                         mc.semiMajor,
                         u.ellipse.semiMinor,
                         mc.semiMinor,
-                        rad2deg(u.ellipse.rotation),
-                        rad2deg(mc.rotation),
+                        radToDeg(u.ellipse.rotation),
+                        radToDeg(mc.rotation),
                         100.0 * inside / samples);
         }
     }

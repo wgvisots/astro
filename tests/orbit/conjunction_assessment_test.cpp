@@ -56,10 +56,10 @@ struct Crossing60 {
     StateVector second; // at the epoch
 
     Crossing60() {
-        first                = elementsToState({7000 * km, 0.0, deg2rad(51.6), 0.3, 0.0, 0.0});
+        first                = elementsToState({7000 * km, 0.0, degToRad(51.6), 0.3, 0.0, 0.0});
         const StateVector a  = propagateKepler(first, kLead);
         const Vec3        up = normalized(a.r), along = normalized(a.v), across = cross(up, along);
-        const Vec3        v2 = norm(a.v) * (std::cos(deg2rad(60.0)) * along + std::sin(deg2rad(60.0)) * across);
+        const Vec3        v2 = norm(a.v) * (std::cos(degToRad(60.0)) * along + std::sin(degToRad(60.0)) * across);
         second               = propagateKepler({a.r + kMiss * normalized(cross(a.v, v2)), v2}, -kLead);
     }
 };

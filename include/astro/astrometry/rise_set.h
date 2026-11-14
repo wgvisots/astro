@@ -44,9 +44,9 @@ std::ostream& operator<<(std::ostream& os, SkyEventType value);
 
 /// A rise, set or transit event.
 struct SkyEvent {
-    SkyEventType type;      ///< kind of event
-    Time         time;      ///< time of the event, in the time scale of the search start
-    double       elevation; ///< elevation function value at the event (rad)
+    SkyEventType type{SkyEventType::Rise}; ///< kind of event
+    Time         time;                     ///< time of the event, in the time scale of the search start
+    double       elevation{0.0};           ///< elevation function value at the event (rad)
 };
 
 /// Find upward/downward crossings of `threshold` by `elevation(t)` and its local
@@ -75,9 +75,6 @@ struct SkyEvent {
                                                         double                                    threshold,
                                                         double                                    step = 600.0);
 
-/// Standard horizon for sunrise/sunset: upper limb with 34' refraction (-0.8333 deg).
-inline constexpr double kSunriseElevation = -0.8333 * constants::degToRad;
-
 /// Twilight definitions, by the Sun's elevation.
 enum class Twilight {
     Civil,       ///< Sun 6 deg below the horizon
@@ -101,7 +98,7 @@ bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider&
 
 /// Sunrise/sunset (and solar transits) in [start, end] for a horizon elevation.
 /// The window is treated as by findElevationEvents(): empty gives no event, and
-/// `end` before `start` throws astro::Error. The same holds for twilight() and
+/// `end` before `start` throws astro::Error. The same holds for twilightEvents() and
 /// moonRiseSet(). All three also throw as bodyElevation() does, for any time
 /// in the window, and sunRiseSet() for a `horizon` that is NaN.
 [[nodiscard]] std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
@@ -109,15 +106,15 @@ bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider&
                                                const Time&        end,
                                                const EopProvider& eop,
                                                const Ephemeris&   eph,
-                                               double             horizon = kSunriseElevation);
+                                               double             horizon = constants::sunriseElevation);
 /// Twilight begin (Rise) / end (Set) events. Throws astro::Error as
 /// sunRiseSet() does.
-[[nodiscard]] std::vector<SkyEvent> twilight(Twilight           tw,
-                                             const Geodetic&    site,
-                                             const Time&        start,
-                                             const Time&        end,
-                                             const EopProvider& eop,
-                                             const Ephemeris&   eph);
+[[nodiscard]] std::vector<SkyEvent> twilightEvents(Twilight           tw,
+                                                   const Geodetic&    site,
+                                                   const Time&        start,
+                                                   const Time&        end,
+                                                   const EopProvider& eop,
+                                                   const Ephemeris&   eph);
 /// Moonrise/moonset of the upper limb with 34' refraction (topocentric, so parallax is included).
 /// Like sunRiseSet(), it also returns the transits.
 /// Throws astro::Error as sunRiseSet() does.

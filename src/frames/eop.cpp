@@ -32,9 +32,6 @@
 
 namespace astro {
 
-using constants::arcsecToRad;
-using constants::masToRad;
-
 namespace {
 
 std::string readFile(const std::string& path) {
@@ -163,7 +160,12 @@ EopTable EopTable::parseFinals2000A(std::string_view content, EopInterpolation i
         if (!hasMjd || !hasXp || !hasYp || !hasDut1) {
             continue;
         }
-        r.values = {xp * arcsecToRad, yp * arcsecToRad, dut1, lod * 1e-3, dX * masToRad, dY * masToRad};
+        r.values = {xp * constants::arcsecToRad,
+                    yp * constants::arcsecToRad,
+                    dut1,
+                    lod * 1e-3,
+                    dX * constants::masToRad,
+                    dY * constants::masToRad};
         recs.push_back(r);
     }
     if (recs.empty()) {
@@ -216,20 +218,20 @@ EopTable EopTable::parseC04(std::string_view content, EopInterpolation interp) {
                 failField("C04", lineNumber, "LOD", "");
             }
             r.mjd    = number(4, "MJD");
-            r.values = {number(5, "polar motion x") * arcsecToRad,
-                        number(6, "polar motion y") * arcsecToRad,
+            r.values = {number(5, "polar motion x") * constants::arcsecToRad,
+                        number(6, "polar motion y") * constants::arcsecToRad,
                         number(7, "UT1-UTC"),
                         number(12, "LOD"),
-                        number(8, "dX") * arcsecToRad,
-                        number(9, "dY") * arcsecToRad};
+                        number(8, "dX") * constants::arcsecToRad,
+                        number(9, "dY") * constants::arcsecToRad};
         } else { // YYYY MM DD MJD x y UT1-UTC LOD dX dY
             r.mjd    = number(3, "MJD");
-            r.values = {number(4, "polar motion x") * arcsecToRad,
-                        number(5, "polar motion y") * arcsecToRad,
+            r.values = {number(4, "polar motion x") * constants::arcsecToRad,
+                        number(5, "polar motion y") * constants::arcsecToRad,
                         number(6, "UT1-UTC"),
                         number(7, "LOD"),
-                        number(8, "dX") * arcsecToRad,
-                        number(9, "dY") * arcsecToRad};
+                        number(8, "dX") * constants::arcsecToRad,
+                        number(9, "dY") * constants::arcsecToRad};
         }
         recs.push_back(r);
     }

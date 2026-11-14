@@ -291,11 +291,11 @@ TEST(LowPrecision, SunAndMoonAgainstDe440) {
         const Time t      = tdb(jd);
         const Vec3 sunRef = spk.position(Body::Sun, Body::Earth, t);
         const Vec3 sun    = sunPositionLowPrecision(t);
-        EXPECT_LT(rad2deg(angleBetween(sun, sunRef)), 0.01) << jd;
+        EXPECT_LT(radToDeg(angleBetween(sun, sunRef)), 0.01) << jd;
         EXPECT_NEAR(norm(sun) / norm(sunRef), 1.0, 6e-5) << jd;
         const Vec3 moonRef = spk.position(Body::Moon, Body::Earth, t);
         const Vec3 moon    = moonPositionLowPrecision(t);
-        EXPECT_LT(rad2deg(angleBetween(moon, moonRef)), 0.1) << jd;
+        EXPECT_LT(radToDeg(angleBetween(moon, moonRef)), 0.1) << jd;
         EXPECT_NEAR(norm(moon) / norm(moonRef), 1.0, 2e-3) << jd;
         // Ephemeris interface + numerical velocity.
         const StateVector m = lp.state(Body::Moon, Body::Earth, t);

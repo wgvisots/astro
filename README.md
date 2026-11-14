@@ -70,7 +70,7 @@ cd build && cpack -G DEB     # astro_<version>_<arch>.deb; or -G RPM (needs rpmb
 using namespace astro;
 
 // WGS84 latitude, longitude (rad) and height (m) -> ECEF (m) and back.
-const Vec3     ecef = geodeticToEcef({deg2rad(38.8895), deg2rad(-77.0353), 100.0});
+const Vec3     ecef = geodeticToEcef({degToRad(38.8895), degToRad(-77.0353), 100.0});
 const Geodetic g    = ecefToGeodetic(ecef);
 
 // Time scales.

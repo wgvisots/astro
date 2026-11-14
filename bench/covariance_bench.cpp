@@ -56,7 +56,7 @@ double microseconds(F&& run, double minSeconds = 0.5) {
 
 int main() {
     const Time        t0 = Time::fromIso8601("2026-03-01T00:00:00Z");
-    const StateVector s0 = elementsToState({6778e3, 0.0005, deg2rad(51.6), 0.3, 0.5, 0.7});
+    const StateVector s0 = elementsToState({6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
     Mat6              P0{};
     for (std::size_t i = 0; i < 3; ++i) {
         P0[i][i]         = 100.0;
@@ -105,7 +105,7 @@ int main() {
     std::printf("\nConsistency check (propagate the previous estimate with covariance, compare)\n\n");
     for (double gap : {600.0, 1800.0, 14400.0}) {
         const StateEstimate prior{t0, s0, P0};
-        const StateEstimate next{t0 + gap, makePropagator(prior).propagate(gap), P0};
+        const StateEstimate next{t0 + gap, trackerPropagator(prior).propagate(gap), P0};
         std::printf("  gap %6.0f s: %7.1f us\n", gap, microseconds([&] {
                         sink += checkConsistency(prior, next).mahalanobis2;
                     }));

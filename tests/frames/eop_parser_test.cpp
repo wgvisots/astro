@@ -88,12 +88,12 @@ TEST(EopParser, FinalsFieldsAreReadFromTheirColumns) {
     const EopValues v     = table.at(60311.0);
     EXPECT_EQ(table.firstMjd(), 60310.0);
     EXPECT_EQ(table.lastMjd(), 60312.0);
-    EXPECT_NEAR(v.xp, arcsec2rad(0.131), 1e-18);
-    EXPECT_NEAR(v.yp, arcsec2rad(0.198), 1e-18);
+    EXPECT_NEAR(v.xp, arcsecToRad(0.131), 1e-18);
+    EXPECT_NEAR(v.yp, arcsecToRad(0.198), 1e-18);
     EXPECT_NEAR(v.dut1, -0.0103, 1e-15);
     EXPECT_NEAR(v.lod, 0.3e-3, 1e-18);
-    EXPECT_NEAR(v.dX, arcsec2rad(0.1e-3), 1e-21);
-    EXPECT_NEAR(v.dY, arcsec2rad(-0.05e-3), 1e-21);
+    EXPECT_NEAR(v.dX, arcsecToRad(0.1e-3), 1e-21);
+    EXPECT_NEAR(v.dY, arcsecToRad(-0.05e-3), 1e-21);
 }
 
 TEST(EopParser, FinalsRowsWithoutDataAreSkippedNotRejected) {
@@ -142,7 +142,7 @@ TEST(EopParser, C04DataLineWithADamagedNumberIsReportedWithItsLine) {
     };
     const EopTable good = EopTable::parseC04(header + line(1, "0.130000") + line(2, "0.131000") + line(3, "0.132000"));
     EXPECT_EQ(good.firstMjd(), 60310.0);
-    EXPECT_NEAR(good.at(60311.0).xp, arcsec2rad(0.131), 1e-18);
+    EXPECT_NEAR(good.at(60311.0).xp, arcsecToRad(0.131), 1e-18);
     for (const char* damaged : {"0.13l000", "nan", "inf", "1.3e-1", "--0.13"}) {
         const std::string message =
             errorOf(parseC04, header + line(1, "0.130000") + line(2, damaged) + line(3, "0.132000"));

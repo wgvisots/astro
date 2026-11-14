@@ -43,7 +43,7 @@ struct Circular {
     double              a{7000 * km};
     double              period{constants::twoPi * std::sqrt(a * a * a / constants::gmEarth)};
     NumericalPropagator prop{Time(),
-                             elementsToState({a, 0.0, deg2rad(51.6), 0.3, 0.0, 0.0}),
+                             elementsToState({a, 0.0, degToRad(51.6), 0.3, 0.0, 0.0}),
                              {std::make_shared<GravityField>(CentralBody::pointMass())}};
 };
 
@@ -109,7 +109,7 @@ TEST(PropagationEvent, AscendingNodesOnAJ2OrbitFollowTheSecularRates) {
         {0.0, 0.0, constants::J2}
     };
     const auto                field = std::make_shared<GravityField>(j2);
-    const StateVector         s0    = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 2.0});
+    const StateVector         s0    = elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 2.0});
     const NumericalPropagator start(Time(), s0, {field});
     std::vector<double>       times, nodes;
     double                    offset = 0.0; // epoch of the current search, seconds after Time()

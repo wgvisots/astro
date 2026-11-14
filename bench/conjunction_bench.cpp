@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     // Two LEO objects, and a LEO object against a GTO.
     const KeplerianElements leo1{7000e3, 0.001, 0.9, 0.3, 0.0, 0.0};
     const KeplerianElements leo2{7100e3, 0.002, 1.7, 2.0, 1.0, 2.0};
-    const KeplerianElements gto{24400e3, 0.73, deg2rad(27.0), 1.0, 3.0, 0.5};
+    const KeplerianElements gto{24400e3, 0.73, degToRad(27.0), 1.0, 3.0, 0.5};
 
     std::printf("Window %.0f s\n\n", window);
     std::printf("%-58s %13s\n", "call", "time");

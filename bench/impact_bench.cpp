@@ -51,7 +51,7 @@ double microseconds(F&& run, double minSeconds = 0.5) {
 int main() {
     const Time        epoch = Time::fromIso8601("2026-03-01T12:00:00Z");
     const ConstantEop eop;
-    const Geodetic    site{deg2rad(30.0), deg2rad(-100.0), 0.0};
+    const Geodetic    site{degToRad(30.0), degToRad(-100.0), 0.0};
     const Mat3        enu = ecefToEnuMatrix(site.lat, site.lon);
     Mat6              P{};
     for (std::size_t i = 0; i < 3; ++i) {
@@ -79,7 +79,7 @@ int main() {
                 "shared (us)",
                 "+ covariance (us)");
     for (const double V : {3000.0, 5000.0, 7000.0}) {
-        const double      g = deg2rad(35.0), a = deg2rad(45.0);
+        const double      g = degToRad(35.0), a = degToRad(45.0);
         const Vec3        v{V * std::cos(g) * std::sin(a), V * std::cos(g) * std::cos(a), V * std::sin(g)};
         const StateVector s0  = itrsToGcrs(StateVector{geodeticToEcef(site), enu.transpose() * v}, epoch, eop);
         const double      own = microseconds([&] { sink += predictImpact(epoch, s0, Frame::GCRS, eop)->flightTime; });

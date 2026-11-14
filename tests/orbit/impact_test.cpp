@@ -56,7 +56,7 @@ StateVector launch(const Geodetic& site, double V, double gamma, double az, cons
     return itrsToGcrs(StateVector{geodeticToEcef(site), enu.transpose() * v}, kEpoch, eop);
 }
 
-const Geodetic kSite{deg2rad(30.0), deg2rad(-100.0), 0.0};
+const Geodetic kSite{degToRad(30.0), degToRad(-100.0), 0.0};
 
 /// Brute-force reference: tight tolerance, the full IAU 2006/2000A transformation at every
 /// evaluation, Brent's method on the propagated height; optionally with further forces.
@@ -103,7 +103,7 @@ private:
 TEST(ErrorEllipse, AxesAndRotationFromCovariance) {
     // C = a^2 u u^T + b^2 w w^T with u the major-axis direction at azimuth alpha (east = sin, north = cos).
     for (double alphaDeg : {0.0, 30.0, 90.0, 120.0, 179.0}) {
-        const double       a = 300.0, b = 100.0, alpha = deg2rad(alphaDeg);
+        const double       a = 300.0, b = 100.0, alpha = degToRad(alphaDeg);
         const double       ue = std::sin(alpha), un = std::cos(alpha), we = std::cos(alpha), wn = -std::sin(alpha);
         const ErrorEllipse e = errorEllipse(a * a * ue * ue + b * b * we * we,
                                             a * a * un * un + b * b * wn * wn,
@@ -130,7 +130,7 @@ TEST(Impact, MatchesBruteForceReference) {
     // about a centimetre.
     const ConstantEop eop = someEop();
     for (const double V : {3000.0, 5000.0, 7000.0}) {
-        const StateVector s0  = launch(kSite, V, deg2rad(35.0), deg2rad(45.0), eop);
+        const StateVector s0  = launch(kSite, V, degToRad(35.0), degToRad(45.0), eop);
         const auto        imp = predictImpact(kEpoch, s0, Frame::GCRS, eop);
         ASSERT_TRUE(imp.has_value()) << V;
         const Reference ref = referenceImpact(s0, imp->flightTime, eop);
@@ -139,7 +139,7 @@ TEST(Impact, MatchesBruteForceReference) {
         EXPECT_NEAR(imp->point.h, 0.0, 1e-3) << V;
         EXPECT_NEAR(imp->time - kEpoch, imp->flightTime, 1e-6);
         // Ballistic symmetry over a nearly spherical Earth: impact angle and speed close to launch.
-        EXPECT_NEAR(rad2deg(imp->angle), 35.0, 0.5) << V;
+        EXPECT_NEAR(radToDeg(imp->angle), 35.0, 0.5) << V;
         EXPECT_NEAR(imp->speed / V, 1.0, 0.01) << V;
         // The ECI and ECEF results describe the same point.
         test::expectVecNear(gcrsToItrs(imp->state.r, imp->time, eop), imp->itrs.r, 0.05);
@@ -148,7 +148,7 @@ TEST(Impact, MatchesBruteForceReference) {
 
 TEST(Impact, FramesSurfaceHeightAndSharedRotations) {
     const ConstantEop eop  = someEop();
-    const StateVector s0   = launch(kSite, 5000.0, deg2rad(40.0), deg2rad(300.0), eop);
+    const StateVector s0   = launch(kSite, 5000.0, degToRad(40.0), degToRad(300.0), eop);
     const auto        gcrs = predictImpact(kEpoch, s0, Frame::GCRS, eop);
     ASSERT_TRUE(gcrs.has_value());
     EXPECT_GT(gcrs->flightTime, 600.0); // the launch point (h = 0 at the epoch) is not the impact
@@ -188,7 +188,7 @@ TEST(Impact, FramesSurfaceHeightAndSharedRotations) {
 TEST(Impact, NoImpactAndInvalidInput) {
     const ConstantEop eop;
     // A 400 km circular orbit never comes down.
-    const StateVector orbit = elementsToState({6778e3, 0.0, deg2rad(51.6), 0.3, 0.5, 0.7});
+    const StateVector orbit = elementsToState({6778e3, 0.0, degToRad(51.6), 0.3, 0.5, 0.7});
     EXPECT_FALSE(predictImpact(kEpoch, orbit, Frame::GCRS, eop).has_value());
     // Earth-fixed frames are refused, with a message that says so.
     for (Frame f : {Frame::ITRS, Frame::TIRS, Frame::PEF}) {
@@ -229,7 +229,7 @@ TEST(Impact, GroundVelocityHeadingAngleAndSpeedMatchTheReference) {
     // in the heading and 6e-9 rad in the angle (the reference uses IAU 2000A, the default 2000B).
     const ConstantEop eop = someEop();
     for (const double az : {45.0, 200.0, 300.0}) {
-        const StateVector s0  = launch(kSite, 6000.0, deg2rad(35.0), deg2rad(az), eop);
+        const StateVector s0  = launch(kSite, 6000.0, degToRad(35.0), degToRad(az), eop);
         const auto        imp = predictImpact(kEpoch, s0, Frame::GCRS, eop);
         ASSERT_TRUE(imp.has_value()) << az;
         const Reference ref = referenceImpact(s0, imp->flightTime, eop);
@@ -246,7 +246,7 @@ TEST(Impact, GroundVelocityHeadingAngleAndSpeedMatchTheReference) {
 
 TEST(Impact, AdditionalForcesAreAppliedInGcrsAtTheirTime) {
     const ConstantEop eop     = someEop();
-    const StateVector s0      = launch(kSite, 5000.0, deg2rad(40.0), deg2rad(60.0), eop);
+    const StateVector s0      = launch(kSite, 5000.0, degToRad(40.0), degToRad(60.0), eop);
     const auto        nominal = predictImpact(kEpoch, s0, Frame::GCRS, eop);
     ASSERT_TRUE(nominal.has_value());
     // The zonal field moved from the built-in model into additionalForces: the same physics, so
@@ -277,7 +277,7 @@ TEST(Impact, SphericalSurfaceIsMetWhereTheRadiusEqualsItsRadius) {
     // radius falls to R. Measured: 1.2e-7 s and 7e-5 m.
     const ConstantEop eop = someEop();
     const double      R   = 6371.0e3;
-    const StateVector s0  = launch(kSite, 5000.0, deg2rad(40.0), deg2rad(120.0), eop);
+    const StateVector s0  = launch(kSite, 5000.0, degToRad(40.0), degToRad(120.0), eop);
     ImpactOptions     sphere;
     sphere.ellipsoid = Ellipsoid::sphere(R);
     const auto imp   = predictImpact(kEpoch, s0, Frame::GCRS, eop, sphere);
@@ -311,7 +311,7 @@ TEST(Impact, UncertaintyMatchesFiniteDifferences) {
     // the impact point, with a correlated covariance given in TOD.
     const ConstantEop eop = someEop();
     const Mat3        M   = gcrsToCelestialMatrix(Frame::TOD, kEpoch);
-    const StateVector g0  = launch(kSite, 6000.0, deg2rad(30.0), deg2rad(70.0), eop);
+    const StateVector g0  = launch(kSite, 6000.0, degToRad(30.0), degToRad(70.0), eop);
     const StateVector s0{M * g0.r, M * g0.v};
     Mat6              L{}; // P0 = L L^T, correlated
     const double      sr[3] = {80.0, 120.0, 60.0}, sv[3] = {0.05, 0.08, 0.03};

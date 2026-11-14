@@ -26,14 +26,19 @@
 namespace astro::constants {
 
 // ------------------------------------------------------------ math
-inline constexpr double pi          = std::numbers::pi;       ///< pi
-inline constexpr double twoPi       = 2.0 * std::numbers::pi; ///< 2 pi (one turn, rad)
-inline constexpr double halfPi      = 0.5 * std::numbers::pi; ///< pi / 2 (90 degrees, rad)
-inline constexpr double degToRad    = pi / 180.0;             ///< Degrees to radians (multiply).
-inline constexpr double radToDeg    = 180.0 / pi;             ///< Radians to degrees (multiply).
-inline constexpr double arcsecToRad = pi / 648000.0;          ///< Arcseconds to radians (multiply).
-inline constexpr double masToRad    = arcsecToRad / 1000.0;   ///< Milliarcseconds to radians (multiply).
-inline constexpr double uasToRad    = arcsecToRad / 1.0e6;    ///< Microarcseconds to radians (multiply).
+inline constexpr double pi     = std::numbers::pi;       ///< pi
+inline constexpr double twoPi  = 2.0 * std::numbers::pi; ///< 2 pi (one turn, rad)
+inline constexpr double halfPi = 0.5 * std::numbers::pi; ///< pi / 2 (90 degrees, rad)
+/// @name Angle factors
+/// The `...ToRad` and `radTo...` constants are factors to multiply an angle by. The functions of the
+/// same names in namespace astro (astro::degToRad(), astro::radToDeg(), ...) apply them to an angle.
+/// @{
+inline constexpr double degToRad    = pi / 180.0;           ///< Degrees to radians (a factor, not a function).
+inline constexpr double radToDeg    = 180.0 / pi;           ///< Radians to degrees (a factor, not a function).
+inline constexpr double arcsecToRad = pi / 648000.0;        ///< Arcseconds to radians (a factor, not a function).
+inline constexpr double masToRad    = arcsecToRad / 1000.0; ///< Milliarcseconds to radians (a factor, not a function).
+inline constexpr double uasToRad    = arcsecToRad / 1.0e6;  ///< Microarcseconds to radians (a factor, not a function).
+/// @}
 /// Turns (revolutions) to radians.
 inline constexpr double turnToRad = twoPi;
 
@@ -88,10 +93,11 @@ inline constexpr double earthMoonMassRatio = 81.3005682214972154;
 inline constexpr double gmEarth = 3.986004418e14;
 /// Nominal mean angular velocity of the Earth, rad/s (IERS 2010 / WGS84).
 inline constexpr double earthRotationRate = 7.292115e-5;
-/// Earth equatorial radius used by EGM2008, m.
+/// Nominal Earth rotation rate implied by the definition of the Earth Rotation Angle (ERA): radians
+/// per second of UT1.
+inline constexpr double earthRotationRateEra = 7.292115146706979e-5;
+/// Earth equatorial radius used by EGM2008, m. (The IERS 2010 conventional radius is iers2010A.)
 inline constexpr double earthRadiusEgm2008 = 6378136.3;
-/// Earth equatorial radius, IERS 2010 conventional, m.
-inline constexpr double earthRadiusIers2010 = 6378136.6;
 /// Unnormalized zonal harmonics from EGM2008 (tide-free), Jn = -sqrt(2n+1) * Cbar_n0.
 inline constexpr double J2 = 1.0826261738522227e-3;
 inline constexpr double J3 = -2.5324105185677225e-6; ///< Unnormalized zonal harmonic J3 (EGM2008, tide-free).
@@ -115,5 +121,11 @@ inline constexpr double iers2010F    = 1.0 / iers2010InvF; ///< IERS 2010 conven
 inline constexpr double sunRadius = 6.957e8;
 /// IAU mean lunar radius, m.
 inline constexpr double moonRadius = 1.7374e6;
+
+// ------------------------------------------------------------ orbits and the sky
+/// Critical inclination (rad) where the J2 apsidal rotation vanishes: acos(1/sqrt(5)).
+inline constexpr double criticalInclination = 1.1071487177940904;
+/// Standard horizon for sunrise/sunset: upper limb with 34' refraction (-0.8333 deg), rad.
+inline constexpr double sunriseElevation = -0.8333 * degToRad;
 
 } // namespace astro::constants

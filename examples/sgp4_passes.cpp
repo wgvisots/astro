@@ -46,12 +46,12 @@ int main() {
 
     //! [passes]
     // Passes above 10 deg over a station during the day after the epoch.
-    const Geodetic station{deg2rad(38.8895), deg2rad(-77.0353), 100.0};
+    const Geodetic station{degToRad(38.8895), degToRad(-77.0353), 100.0};
     const auto     passes =
-        findPasses(sgp4ItrsFunction(sgp4, eop), station, sgp4.epoch(), sgp4.epoch() + 86400.0, deg2rad(10.0));
+        findPasses(sgp4ItrsFunction(sgp4, eop), station, sgp4.epoch(), sgp4.epoch() + 86400.0, degToRad(10.0));
     for (const Pass& p : passes) {
         std::cout << "  AOS " << p.aos.iso8601(0) << "  max el " << std::fixed << std::setprecision(1)
-                  << rad2deg(p.maxElevation) << " deg  LOS " << p.los.iso8601(0) << '\n';
+                  << radToDeg(p.maxElevation) << " deg  LOS " << p.los.iso8601(0) << '\n';
     }
     //! [passes]
 

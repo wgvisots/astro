@@ -128,10 +128,10 @@ public:
                                SecularOrder       order = SecularOrder::J2SquaredJ4);
     /// From a 12-component state; `mode` is as for propagateSecular(const StateVector12&, ...).
     /// Throws astro::Error as the constructor from a StateVector does.
-    SecularPropagator(const StateVector12& s0,
-                      const CentralBody&   body  = CentralBody::earth(),
-                      SecularOrder         order = SecularOrder::J2SquaredJ4,
-                      HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
+    explicit SecularPropagator(const StateVector12& s0,
+                               const CentralBody&   body  = CentralBody::earth(),
+                               SecularOrder         order = SecularOrder::J2SquaredJ4,
+                               HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
 
     /// Mean elements dt seconds after the epoch.
     [[nodiscard]] KeplerianElements elements(double dt) const;
@@ -297,10 +297,10 @@ public:
                                         SecularOrder       order = SecularOrder::J2SquaredJ4);
     /// From a 12-component state; `mode` is as for SecularPropagator. Throws astro::Error as
     /// SecularPropagator does: unless s0 is on an elliptic orbit.
-    SecularPropagatorCorrected(const StateVector12& s0,
-                               const CentralBody&   body  = CentralBody::earth(),
-                               SecularOrder         order = SecularOrder::J2SquaredJ4,
-                               HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
+    explicit SecularPropagatorCorrected(const StateVector12& s0,
+                                        const CentralBody&   body  = CentralBody::earth(),
+                                        SecularOrder         order = SecularOrder::J2SquaredJ4,
+                                        HigherOrderMode      mode  = HigherOrderMode::ModelOnly);
 };
 
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;
@@ -315,8 +315,5 @@ sunSynchronousInclination(double a, double e = 0.0, const CentralBody& body = Ce
 /// 1e-13 of a): there is then no such orbit in the J2 model, e.g. 2 revolutions a day at e = 0.99.
 [[nodiscard]] double
 repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, const CentralBody& body = CentralBody::earth());
-
-/// Critical inclination (rad) where the J2 apsidal rotation vanishes: acos(1/sqrt(5)).
-inline constexpr double kCriticalInclination = 1.1071487177940904;
 
 } // namespace astro

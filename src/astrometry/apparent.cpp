@@ -98,7 +98,7 @@ Vec3 starApparentDirection(const CatalogStar& star, const Time& t, const Observe
 }
 
 RaDec starApparentGcrs(const CatalogStar& star, const Time& t, const Ephemeris& eph) {
-    return raDecFromVector(starApparentDirection(star, t, observerEphemeris(t, eph)));
+    return vectorToRaDec(starApparentDirection(star, t, observerEphemeris(t, eph)));
 }
 
 Aer starObserved(const CatalogStar& star,
@@ -139,7 +139,7 @@ Aer bodyObserved(Body               body,
     return a;
 }
 
-Aer topocentricFromGcrs(const Vec3& rGcrs, const FrameTransformer& ft, const Geodetic& site, const Ellipsoid& ell) {
+Aer gcrsToTopocentric(const Vec3& rGcrs, const FrameTransformer& ft, const Geodetic& site, const Ellipsoid& ell) {
     const Vec3 rItrs = ft.gcrsTo(Frame::ITRS) * rGcrs;
     return ecefToAer(rItrs, site, ell);
 }

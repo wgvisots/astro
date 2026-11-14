@@ -35,7 +35,7 @@ constexpr long long floorDiv(long long a, long long b) noexcept {
     return q;
 }
 
-// Largest size of either part of a Julian date that toCalendar accepts, in days (270 million years). The
+// Largest size of either part of a Julian date that calendar() accepts, in days (270 million years). The
 // Gregorian year stops fitting an int near 7.8e11 days; the limit is the power of ten below that.
 constexpr double kMaxCalendarJd = 1.0e11;
 } // namespace
@@ -48,7 +48,7 @@ long long julianDayNumber(int year, int month, int day) noexcept {
     return day + floorDiv(153 * m + 2, 5) + 365 * y + floorDiv(y, 4) - floorDiv(y, 100) + floorDiv(y, 400) - 32045;
 }
 
-void dateFromJulianDayNumber(long long jdn, int& year, int& month, int& day) noexcept {
+void julianDayNumberToDate(long long jdn, int& year, int& month, int& day) noexcept {
     const long long a = jdn + 32044;
     const long long b = floorDiv(4 * a + 3, 146097);
     const long long c = a - floorDiv(146097 * b, 4);
@@ -72,13 +72,13 @@ int dayOfYear(int year, int month, int day) {
     return static_cast<int>(julianDayNumber(year, month, day) - julianDayNumber(year, 1, 1)) + 1;
 }
 
-void monthDayFromDayOfYear(int year, int doy, int& month, int& day) {
+void dayOfYearToMonthDay(int year, int doy, int& month, int& day) {
     const int ndays = isLeapYear(year) ? 366 : 365;
     if (doy < 1 || doy > ndays) {
         throw Error("day of year out of range: " + std::to_string(doy));
     }
     int y;
-    dateFromJulianDayNumber(julianDayNumber(year, 1, 1) + doy - 1, y, month, day);
+    julianDayNumberToDate(julianDayNumber(year, 1, 1) + doy - 1, y, month, day);
 }
 
 int dayOfWeek(int year, int month, int day) {
@@ -133,14 +133,14 @@ JulianDate JulianDate::addSeconds(double seconds) const noexcept {
     return JulianDate{jd1 + wholeDays, jd2 + rem / constants::secondsPerDay}.normalized();
 }
 
-CalendarDate JulianDate::toCalendar(int decimals) const {
+CalendarDate JulianDate::calendar(int decimals) const {
     // The day number becomes an integer below, which is undefined for a NaN, an infinity or a value that does
     // not fit; so those are refused first.
     if (!std::isfinite(jd1) || !std::isfinite(jd2)) {
-        throw Error("JulianDate::toCalendar: the Julian date is not finite");
+        throw Error("JulianDate::calendar: the Julian date is not finite");
     }
     if (std::abs(jd1) > kMaxCalendarJd || std::abs(jd2) > kMaxCalendarJd) {
-        throw Error("JulianDate::toCalendar: the Julian date is out of range (more than 1e11 days from JD 0)");
+        throw Error("JulianDate::calendar: the Julian date is out of range (more than 1e11 days from JD 0)");
     }
     const JulianDate n           = normalized();
     const double     scale       = std::pow(10.0, decimals);
@@ -152,7 +152,7 @@ CalendarDate JulianDate::toCalendar(int decimals) const {
         ++jdn;
     }
     CalendarDate c;
-    dateFromJulianDayNumber(jdn, c.year, c.month, c.day);
+    julianDayNumberToDate(jdn, c.year, c.month, c.day);
     const double secs = ticks / scale;
     c.hour            = static_cast<int>(secs / 3600.0);
     c.minute          = static_cast<int>((secs - c.hour * 3600.0) / 60.0);

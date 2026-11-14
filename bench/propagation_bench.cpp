@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
     // LEO states spread over node, perigee and anomaly.
     std::vector<StateVector> states;
     for (int k = 0; k < nStates; ++k) {
-        states.push_back(elementsToState({7000e3, 0.001, deg2rad(51.6), 0.1 * k, 0.3 * k, 0.05 * k}));
+        states.push_back(elementsToState({7000e3, 0.001, degToRad(51.6), 0.1 * k, 0.3 * k, 0.05 * k}));
     }
     const std::size_t   count = static_cast<std::size_t>(X / Y) + 1;
     std::vector<double> dts(count);

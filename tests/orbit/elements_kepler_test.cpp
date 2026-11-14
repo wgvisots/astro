@@ -701,9 +701,9 @@ TEST(Secular, RepeatGroundTrackSatisfiesTheRepeatCondition) {
         double e, i;
     };
     // clang-format off
-    const Case cases[] = {{233, 16, 0.0,   deg2rad(98.2)},
-                          {15,  1,  0.001, deg2rad(51.6)},
-                          {2,   1,  0.72,  deg2rad(63.4)},
+    const Case cases[] = {{233, 16, 0.0,   degToRad(98.2)},
+                          {15,  1,  0.001, degToRad(51.6)},
+                          {2,   1,  0.72,  degToRad(63.4)},
                           {1,   1,  0.0,   0.0          }};
     // clang-format on
     for (const Case& c : cases) {

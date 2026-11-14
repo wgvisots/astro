@@ -76,7 +76,7 @@ TEST(JulianDayNumber, PublishedDates) {
     for (const Case& c : cases) {
         EXPECT_EQ(julianDayNumber(c.year, c.month, c.day), c.jdn) << c.year << "-" << c.month << "-" << c.day;
         int y = 0, m = 0, d = 0;
-        dateFromJulianDayNumber(c.jdn, y, m, d);
+        julianDayNumberToDate(c.jdn, y, m, d);
         EXPECT_EQ(y, c.year) << c.jdn;
         EXPECT_EQ(m, c.month) << c.jdn;
         EXPECT_EQ(d, c.day) << c.jdn;
@@ -91,7 +91,7 @@ TEST(JulianDayNumber, EveryDayFromJdZeroToTheYear2200) {
     long long wrong = 0;
     for (long long jdn = 0; year < 2200; ++jdn) {
         int y = 0, m = 0, d = 0;
-        dateFromJulianDayNumber(jdn, y, m, d);
+        julianDayNumberToDate(jdn, y, m, d);
         if (julianDayNumber(year, month, day) != jdn || y != year || m != month || d != day) {
             if (++wrong <= 5) {
                 ADD_FAILURE() << "JDN " << jdn << " should be " << year << "-" << month << "-" << day << "; got "
@@ -134,7 +134,7 @@ TEST(Calendar, DayOfYearBothWays) {
                 ++doy;
                 EXPECT_EQ(dayOfYear(year, month, day), doy) << year << "-" << month << "-" << day;
                 int m = 0, d = 0;
-                monthDayFromDayOfYear(year, doy, m, d);
+                dayOfYearToMonthDay(year, doy, m, d);
                 EXPECT_EQ(m, month) << year << " day " << doy;
                 EXPECT_EQ(d, day) << year << " day " << doy;
             }
@@ -143,7 +143,7 @@ TEST(Calendar, DayOfYearBothWays) {
         const int last = gregorianLeap(year) ? 366 : 365;
         for (int bad : {0, -1, last + 1}) {
             int m = 0, d = 0;
-            expectErrorSaying([&] { monthDayFromDayOfYear(year, bad, m, d); },
+            expectErrorSaying([&] { dayOfYearToMonthDay(year, bad, m, d); },
                               "day of year",
                               std::to_string(year) + " day " + std::to_string(bad));
         }

@@ -65,7 +65,7 @@ double umbraFunction(const Vec3& sat, const Vec3& sun, ShadowModel model, double
 
 } // namespace
 
-ShadowResult shadow(const Vec3& sat, const Vec3& sun, ShadowModel model, double re, double rs) noexcept {
+ShadowResult earthShadow(const Vec3& sat, const Vec3& sun, ShadowModel model, double re, double rs) noexcept {
     if (model == ShadowModel::Cylindrical) {
         return penumbraFunction(sat, sun, model, re, rs) < 0.0 ? ShadowResult{ShadowState::Umbra, 0.0}
                                                                : ShadowResult{ShadowState::Sunlit, 1.0};

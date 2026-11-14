@@ -179,7 +179,7 @@ Time parseEpoch(std::string_view yearField, std::string_view dayField) {
     // module could only report that TAI - UTC is undefined, which does not tell the caller what is wrong with the
     // element set.
     int month = 0, dayOfMonth = 0;
-    monthDayFromDayOfYear(year, static_cast<int>(wholeDay), month, dayOfMonth);
+    dayOfYearToMonthDay(year, static_cast<int>(wholeDay), month, dayOfMonth);
     const auto             table = leapSecondTable();
     const LeapSecondEntry& first = table->entries().front();
     if (year < first.year || (year == first.year && month < first.month)) {
@@ -269,7 +269,7 @@ std::string angleField(double rad, const char* what) {
     if (!std::isfinite(rad)) {
         cannotWrite("Tle::line2", what, rad, "is not finite");
     }
-    const std::string text = fixedField(rad2deg(wrapTwoPi(rad)), 8, 4, "Tle::line2", what);
+    const std::string text = fixedField(radToDeg(wrapTwoPi(rad)), 8, 4, "Tle::line2", what);
     return text == "360.0000" ? "  0.0000" : text;
 }
 
@@ -299,7 +299,7 @@ std::string epochField(const Time& epoch) {
     }
     const JulianDate utc  = epoch.to(TimeScale::UTC).jd();
     int              year = 0, month = 0, dayOfMonth = 0;
-    dateFromJulianDayNumber(std::llround(utc.jd1 + 0.5), year, month, dayOfMonth);
+    julianDayNumberToDate(std::llround(utc.jd1 + 0.5), year, month, dayOfMonth);
     const double perUtcDay = detail::tleDayPerUtcDay(utc.jd1);
     const double fraction  = utc.jd2 / perUtcDay; // of 86400 s; it reaches 1 and goes on during a leap second
     int          day       = dayOfYear(year, month, dayOfMonth);
@@ -456,13 +456,13 @@ Tle Tle::parse(std::string_view l1, std::string_view l2, std::string_view name, 
     t.bstar            = parseExpField(cols(a, 54, 61), "B*");
     t.ephemerisType    = toInt(cols(a, 63, 63), "ephemeris type");
     t.elementSetNumber = toInt(cols(a, 65, 68), "element set number");
-    t.inclination      = deg2rad(toDouble(cols(b, 9, 16), "inclination"));
-    t.raan             = deg2rad(toDouble(cols(b, 18, 25), "RAAN"));
+    t.inclination      = degToRad(toDouble(cols(b, 9, 16), "inclination"));
+    t.raan             = degToRad(toDouble(cols(b, 18, 25), "RAAN"));
     if (!toImpliedDecimal(cols(b, 27, 33), t.eccentricity)) {
         badField("eccentricity", cols(b, 27, 33));
     }
-    t.argPerigee       = deg2rad(toDouble(cols(b, 35, 42), "argument of perigee"));
-    t.meanAnomaly      = deg2rad(toDouble(cols(b, 44, 51), "mean anomaly"));
+    t.argPerigee       = degToRad(toDouble(cols(b, 35, 42), "argument of perigee"));
+    t.meanAnomaly      = degToRad(toDouble(cols(b, 44, 51), "mean anomaly"));
     t.meanMotion       = toDouble(cols(b, 53, 63), "mean motion");
     t.revolutionNumber = toInt(cols(b, 64, 68), "revolution number");
     return t;
@@ -554,7 +554,7 @@ std::string Tle::line2() const {
                   sizeof(buf),
                   "2 %s %s %s %07ld %s %s %s%5d",
                   encodeAlpha5(satnum).c_str(),
-                  fixedField(rad2deg(inclination), 8, 4, "Tle::line2", "inclination").c_str(),
+                  fixedField(radToDeg(inclination), 8, 4, "Tle::line2", "inclination").c_str(),
                   angleField(raan, "RAAN").c_str(),
                   static_cast<long>(eccentricityDigits),
                   angleField(argPerigee, "argument of perigee").c_str(),

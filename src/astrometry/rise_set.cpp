@@ -110,7 +110,7 @@ double twilightElevation(Twilight tw) noexcept {
 double bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider& eop, const Ephemeris& eph) {
     // The 2000B model (1 mas) is ample here and ~20x faster.
     const FrameTransformer ft(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
-    return topocentricFromGcrs(eph.position(body, Body::Earth, t), ft, site).el;
+    return gcrsToTopocentric(eph.position(body, Body::Earth, t), ft, site).el;
 }
 
 std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
@@ -125,12 +125,12 @@ std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
                                horizon);
 }
 
-std::vector<SkyEvent> twilight(Twilight           tw,
-                               const Geodetic&    site,
-                               const Time&        start,
-                               const Time&        end,
-                               const EopProvider& eop,
-                               const Ephemeris&   eph) {
+std::vector<SkyEvent> twilightEvents(Twilight           tw,
+                                     const Geodetic&    site,
+                                     const Time&        start,
+                                     const Time&        end,
+                                     const EopProvider& eop,
+                                     const Ephemeris&   eph) {
     auto ev = sunRiseSet(site, start, end, eop, eph, twilightElevation(tw));
     std::erase_if(ev, [](const SkyEvent& e) { return e.type == SkyEventType::Transit; });
     return ev;
@@ -141,7 +141,7 @@ moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopP
     constexpr double refr = 34.0 / 60.0 * constants::degToRad;
     auto             f    = [&](const Time& t) {
         const FrameTransformer ft(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
-        const Aer              a = topocentricFromGcrs(eph.position(Body::Moon, Body::Earth, t), ft, site);
+        const Aer              a = gcrsToTopocentric(eph.position(Body::Moon, Body::Earth, t), ft, site);
         const double           semidiameter = std::asin(constants::moonRadius / a.range);
         return a.el + semidiameter + refr; // upper limb, refracted
     };

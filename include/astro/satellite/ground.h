@@ -63,7 +63,7 @@ maxSlantRange(double altitude, double minElevation = 0.0, double radius = consta
 /// `halfAngle` from it, placed as for a point just short of the pole on the
 /// meridian `lon`: longitude lon + pi - azimuth at the north pole, lon + azimuth at
 /// the south pole.
-[[nodiscard]] std::vector<Geodetic> footprint(double lat, double lon, double halfAngle, int n = 72);
+[[nodiscard]] std::vector<Geodetic> coverageFootprint(double lat, double lon, double halfAngle, int n = 72);
 
 /// True if the straight segment between two positions does not intersect the
 /// ellipsoid (optionally inflated by `margin` meters, e.g. for the atmosphere).
