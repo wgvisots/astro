@@ -20,6 +20,7 @@
 
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
+#include "astro/export.h"
 
 /// \file
 /// Satellite-centered orbital frames. Each function returns the rotation from
@@ -28,19 +29,20 @@
 namespace astro {
 
 /// RIC / RSW: Radial (r), In-track (completes the triad), Cross-track (angular momentum).
-[[nodiscard]] Mat3 ricMatrix(const StateVector& s) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 ricMatrix(const StateVector& s) noexcept;
 /// LVLH (CCSDS/NASA convention): z = -r (nadir), y = -h (negative orbit normal), x = y cross z.
-[[nodiscard]] Mat3 lvlhMatrix(const StateVector& s) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 lvlhMatrix(const StateVector& s) noexcept;
 /// VNC: Velocity, Normal (angular momentum), Co-normal (V cross N).
-[[nodiscard]] Mat3 vncMatrix(const StateVector& s) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 vncMatrix(const StateVector& s) noexcept;
 /// NTW: in-plane Normal to velocity (N = T cross W), Tangential (velocity), W (angular momentum).
-[[nodiscard]] Mat3 ntwMatrix(const StateVector& s) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 ntwMatrix(const StateVector& s) noexcept;
 
 /// Position and velocity of `deputy` relative to `chief`, expressed in the chief's
 /// rotating RIC frame (velocity includes the frame rotation, omega = h / r^2).
-[[nodiscard]] StateVector relativeStateRic(const StateVector& chief, const StateVector& deputy) noexcept;
+[[nodiscard]] ASTRO_EXPORT StateVector relativeStateRic(const StateVector& chief, const StateVector& deputy) noexcept;
 /// Inverse of relativeStateRic: inertial deputy state from a relative RIC state.
-[[nodiscard]] StateVector relativeRicToDeputy(const StateVector& chief, const StateVector& relRic) noexcept;
+[[nodiscard]] ASTRO_EXPORT StateVector relativeRicToDeputy(const StateVector& chief,
+                                                           const StateVector& relRic) noexcept;
 
 // rotateCovariance(P, R), which rotates a 6x6 covariance into an orbital frame, is in core/mat6.h.
 

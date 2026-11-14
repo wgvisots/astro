@@ -25,6 +25,7 @@
 
 #include "astro/core/constants.h"
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/orbit/trajectory.h"
 #include "astro/time/time.h"
 
@@ -42,7 +43,7 @@ enum class ShadowModel {
 BOOST_DESCRIBE_ENUM(ShadowModel, Cylindrical, Conical)
 
 /// Writes "ShadowModel::<enumerator>", or "ShadowModel::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, ShadowModel value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, ShadowModel value);
 
 /// Where a satellite is relative to the Earth's shadow.
 enum class ShadowState {
@@ -55,7 +56,7 @@ enum class ShadowState {
 BOOST_DESCRIBE_ENUM(ShadowState, Sunlit, Penumbra, Umbra, Annular)
 
 /// Writes "ShadowState::<enumerator>", or "ShadowState::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, ShadowState value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, ShadowState value);
 
 /// Result of earthShadow().
 struct ShadowResult {
@@ -67,14 +68,14 @@ struct ShadowResult {
 /// The conical model follows Montenbruck & Gill (2000), sec. 3.4.2, with a
 /// spherical Earth of radius `earthRadius`. A satellite at the Earth's centre or
 /// at the Sun's position has no shadow geometry: the illumination is then NaN.
-[[nodiscard]] ShadowResult earthShadow(const Vec3& sat,
-                                       const Vec3& sun,
-                                       ShadowModel model       = ShadowModel::Conical,
-                                       double      earthRadius = constants::wgs84A,
-                                       double      sunRadius   = constants::sunRadius) noexcept;
+[[nodiscard]] ASTRO_EXPORT ShadowResult earthShadow(const Vec3& sat,
+                                                    const Vec3& sun,
+                                                    ShadowModel model       = ShadowModel::Conical,
+                                                    double      earthRadius = constants::wgs84A,
+                                                    double      sunRadius   = constants::sunRadius) noexcept;
 
 /// Solar beta angle (rad): elevation of the Sun above the orbit plane.
-[[nodiscard]] double betaAngle(const StateVector& sat, const Vec3& sun) noexcept;
+[[nodiscard]] ASTRO_EXPORT double betaAngle(const StateVector& sat, const Vec3& sun) noexcept;
 
 /// One eclipse found by findEclipses().
 struct EclipseInterval {
@@ -95,12 +96,12 @@ struct EclipseInterval {
 /// either time is NaN, if `step` is not positive and finite, or if the window holds more than 2e9
 /// steps. Also throws if `end - start` does (one of the two in UT1, or a UTC time before 1960; see
 /// Time). An exception thrown by `sat` or `sun` passes through.
-[[nodiscard]] std::vector<EclipseInterval> findEclipses(const Trajectory& sat,
-                                                        const Trajectory& sun,
-                                                        const Time&       start,
-                                                        const Time&       end,
-                                                        double            step        = 30.0,
-                                                        ShadowModel       model       = ShadowModel::Conical,
-                                                        double            earthRadius = constants::wgs84A);
+[[nodiscard]] ASTRO_EXPORT std::vector<EclipseInterval> findEclipses(const Trajectory& sat,
+                                                                     const Trajectory& sun,
+                                                                     const Time&       start,
+                                                                     const Time&       end,
+                                                                     double            step  = 30.0,
+                                                                     ShadowModel       model = ShadowModel::Conical,
+                                                                     double            earthRadius = constants::wgs84A);
 
 } // namespace astro

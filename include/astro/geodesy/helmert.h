@@ -23,6 +23,7 @@
 #include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 
 /// \file
 /// Seven- and fourteen-parameter Helmert (similarity) transformations between
@@ -42,10 +43,10 @@ enum class HelmertConvention {
 BOOST_DESCRIBE_ENUM(HelmertConvention, PositionVector, CoordinateFrame)
 
 /// Writes "HelmertConvention::<enumerator>", or "HelmertConvention::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, HelmertConvention value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, HelmertConvention value);
 
 /// Seven-parameter Helmert transformation (translation, rotation, scale).
-struct HelmertParams {
+struct ASTRO_EXPORT HelmertParams {
     Vec3              t;                                             ///< translation (m)
     Vec3              r;                                             ///< rotation angles (rad)
     double            s{0.0};                                        ///< scale (unitless, e.g. 1.5 ppb -> 1.5e-9)
@@ -57,7 +58,7 @@ struct HelmertParams {
 
 /// Time-dependent (14-parameter) Helmert transformation: parameters at epoch
 /// `epoch` (decimal years) plus their rates per year.
-struct HelmertTimeDependent {
+struct ASTRO_EXPORT HelmertTimeDependent {
     HelmertParams p;             ///< parameters at `epoch`
     Vec3          tRate;         ///< m / yr
     Vec3          rRate;         ///< rad / yr
@@ -69,12 +70,13 @@ struct HelmertTimeDependent {
 };
 
 /// Transform a position (m): X2 = X1 + T + s X1 + R X1.
-[[nodiscard]] Vec3 helmertTransform(const Vec3& x, const HelmertParams& p) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 helmertTransform(const Vec3& x, const HelmertParams& p) noexcept;
 /// Transform position (m) and velocity (m/s) with a time-dependent Helmert at the given epoch
 /// (decimal years). The velocity returned is the time derivative of the transformed position, in
 /// m/s like the one given: the rates of `h`, which are per year, are converted with the Julian year
 /// of 365.25 days of 86400 s.
-[[nodiscard]] StateVector
-helmertTransform(const StateVector& x, const HelmertTimeDependent& h, double decimalYear) noexcept;
+[[nodiscard]] ASTRO_EXPORT StateVector ASTRO_EXPORT helmertTransform(const StateVector&          x,
+                                                                     const HelmertTimeDependent& h,
+                                                                     double                      decimalYear) noexcept;
 
 } // namespace astro

@@ -21,6 +21,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "astro/export.h"
+
 /// \file
 /// astro::Error, the exception thrown for bad input and missing data, and the error policy of the library.
 ///
@@ -51,7 +53,7 @@ namespace astro {
 
 /// Base exception for all errors raised by the astro library: invalid input,
 /// missing data (e.g. no EOP for the requested epoch) or non-convergence.
-class Error : public std::runtime_error {
+class ASTRO_EXPORT Error : public std::runtime_error {
 public:
     /// Error with message `what` (returned by what()).
     explicit Error(const std::string& what)

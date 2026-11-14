@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "astro/export.h"
 #include "astro/geodesy/ellipsoid.h"
 
 /// \file
@@ -43,14 +44,15 @@ struct GeodesicDirectResult {
 
 /// Distance and azimuths between two points (lat/lon in radians). Throws astro::Error if the
 /// iteration does not converge: for nearly antipodal points, and for an input that is not finite.
-[[nodiscard]] GeodesicInverseResult
+[[nodiscard]] ASTRO_EXPORT GeodesicInverseResult ASTRO_EXPORT
 geodesicInverse(double lat1, double lon1, double lat2, double lon2, const Ellipsoid& ell = Ellipsoid::wgs84());
 
 /// Destination after travelling `distance` meters from (lat1, lon1) along initial azimuth `azimuth1`.
-[[nodiscard]] GeodesicDirectResult
+[[nodiscard]] ASTRO_EXPORT GeodesicDirectResult ASTRO_EXPORT
 geodesicDirect(double lat1, double lon1, double azimuth1, double distance, const Ellipsoid& ell = Ellipsoid::wgs84());
 
 /// Great-circle (haversine) distance on a sphere of radius r.
-[[nodiscard]] double haversineDistance(double lat1, double lon1, double lat2, double lon2, double r) noexcept;
+[[nodiscard]] ASTRO_EXPORT double
+haversineDistance(double lat1, double lon1, double lat2, double lon2, double r) noexcept;
 
 } // namespace astro

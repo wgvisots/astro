@@ -21,6 +21,7 @@
 #include <compare>
 
 #include "astro/core/constants.h"
+#include "astro/export.h"
 
 /// \file
 /// Two-part Julian dates and calendar conversions.
@@ -54,7 +55,7 @@ struct YearMonthDay {
 /// (integer + 0.5) and jd2 is the fraction of the day in [0, 1), which gives
 /// ~10 picosecond resolution. The scale (UTC, TT, ...) is not stored here; see
 /// astro::Time.
-struct JulianDate {
+struct ASTRO_EXPORT JulianDate {
     double jd1{constants::jdJ2000}; ///< first part, days (a midnight, integer + 0.5, after normalized())
     double jd2{0.0};                ///< second part, days (fraction of day in [0, 1) after normalized())
 
@@ -125,18 +126,18 @@ struct JulianDate {
 }
 /// Number of days in a month (1-12) of a Gregorian year. Throws astro::Error
 /// if `month` is out of range.
-[[nodiscard]] int daysInMonth(int year, int month);
+[[nodiscard]] ASTRO_EXPORT int daysInMonth(int year, int month);
 /// Day of year, 1-based (Jan 1 = 1).
-[[nodiscard]] int dayOfYear(int year, int month, int day);
+[[nodiscard]] ASTRO_EXPORT int dayOfYear(int year, int month, int day);
 /// Date of the 1-based day of year `doy` (January 1 = 1) of a Gregorian `year`.
 /// Throws astro::Error if `doy` is outside 1-365 (1-366 in a leap year).
-[[nodiscard]] YearMonthDay dayOfYearToDate(int year, int doy);
+[[nodiscard]] ASTRO_EXPORT YearMonthDay dayOfYearToDate(int year, int doy);
 /// Day of week, 0 = Sunday ... 6 = Saturday.
-[[nodiscard]] int dayOfWeek(int year, int month, int day);
+[[nodiscard]] ASTRO_EXPORT int dayOfWeek(int year, int month, int day);
 
 /// Julian Day Number (integer, noon-based) for a Gregorian date.
-[[nodiscard]] long long julianDayNumber(int year, int month, int day) noexcept;
+[[nodiscard]] ASTRO_EXPORT long long julianDayNumber(int year, int month, int day) noexcept;
 /// Gregorian date of a Julian Day Number (integer, noon-based), the inverse of julianDayNumber.
-[[nodiscard]] YearMonthDay julianDayNumberToDate(long long jdn) noexcept;
+[[nodiscard]] ASTRO_EXPORT YearMonthDay julianDayNumberToDate(long long jdn) noexcept;
 
 } // namespace astro

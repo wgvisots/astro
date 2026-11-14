@@ -24,6 +24,7 @@
 #include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 
 /// \file
 /// IAU 2006 precession and IAU 2000A/2000B nutation (IERS Conventions 2010, Ch. 5).
@@ -41,12 +42,12 @@ enum class PrecessionNutationModel {
 BOOST_DESCRIBE_ENUM(PrecessionNutationModel, IAU2006_2000A, IAU2006_2000B)
 
 /// Writes "PrecessionNutationModel::<enumerator>", or "PrecessionNutationModel::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, PrecessionNutationModel value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, PrecessionNutationModel value);
 
 /// The 14 fundamental arguments of nutation theory (IERS Conventions 2010, eq. 5.43 for the five
 /// Delaunay arguments and eq. 5.44 for the planetary longitudes and the general precession),
 /// radians: l, l', F, D, Om, L_Me, L_Ve, L_E, L_Ma, L_J, L_Sa, L_U, L_Ne, p_A.
-[[nodiscard]] std::array<double, 14> fundamentalArguments(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT std::array<double, 14> fundamentalArguments(double t) noexcept;
 
 /// Nutation in longitude and obliquity (rad).
 struct Nutation {
@@ -55,14 +56,14 @@ struct Nutation {
 };
 
 /// IAU 2000A nutation with the IAU 2006 (R06) adjustments: 1358 + 1056 terms.
-[[nodiscard]] Nutation nutationIau2000A(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT Nutation nutationIau2000A(double t) noexcept;
 /// IAU 2000B nutation: 77 luni-solar terms plus fixed planetary offsets.
-[[nodiscard]] Nutation nutationIau2000B(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT Nutation nutationIau2000B(double t) noexcept;
 /// Nutation from the selected model: nutationIau2000A() or nutationIau2000B().
-[[nodiscard]] Nutation nutation(double t, PrecessionNutationModel model) noexcept;
+[[nodiscard]] ASTRO_EXPORT Nutation nutation(double t, PrecessionNutationModel model) noexcept;
 
 /// IAU 2006 mean obliquity of the ecliptic.
-[[nodiscard]] double meanObliquity06(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT double meanObliquity06(double t) noexcept;
 
 /// IAU 2006 Fukushima-Williams bias-precession angles (rad).
 struct FukushimaWilliams {
@@ -72,24 +73,24 @@ struct FukushimaWilliams {
     double epsA{0.0};     ///< mean obliquity of date
 };
 /// IAU 2006 Fukushima-Williams bias-precession angles at `t`.
-[[nodiscard]] FukushimaWilliams fukushimaWilliams06(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT FukushimaWilliams fukushimaWilliams06(double t) noexcept;
 /// Rotation matrix from Fukushima-Williams angles: R1(-eps) R3(-psi) R1(phi) R3(gamma).
-[[nodiscard]] Mat3 fwToMatrix(double gamma, double phi, double psi, double eps) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 fwToMatrix(double gamma, double phi, double psi, double eps) noexcept;
 
 /// GCRS -> mean J2000.0 (EME2000) frame bias matrix (IAU 2006).
-[[nodiscard]] Mat3 frameBiasMatrix06() noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 frameBiasMatrix06() noexcept;
 /// GCRS -> mean equator and equinox of date (bias + precession).
-[[nodiscard]] Mat3 biasPrecessionMatrix06(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 biasPrecessionMatrix06(double t) noexcept;
 /// Mean J2000.0 -> mean of date (precession only).
-[[nodiscard]] Mat3 precessionMatrix06(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 precessionMatrix06(double t) noexcept;
 /// Nutation matrix: mean of date -> true of date.
-[[nodiscard]] Mat3 nutationMatrix(double epsA, const Nutation& n) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 nutationMatrix(double epsA, const Nutation& n) noexcept;
 /// GCRS -> true equator and equinox of date (bias-precession-nutation), with
 /// optional extra nutation corrections (rad) added to dpsi/deps.
-[[nodiscard]] Mat3 npbMatrix06(double                  t,
-                               PrecessionNutationModel model = PrecessionNutationModel::IAU2006_2000A,
-                               double                  ddpsi = 0.0,
-                               double                  ddeps = 0.0) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 npbMatrix06(double                  t,
+                                            PrecessionNutationModel model = PrecessionNutationModel::IAU2006_2000A,
+                                            double                  ddpsi = 0.0,
+                                            double                  ddeps = 0.0) noexcept;
 
 /// Coordinates of the Celestial Intermediate Pole in the GCRS (rad).
 struct CipXY {
@@ -97,21 +98,21 @@ struct CipXY {
     double y{0.0}; ///< CIP Y (rad)
 };
 /// CIP X, Y from the IAU 2006/2000A series (IERS Tables 5.2a/b).
-[[nodiscard]] CipXY cipXY06(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT CipXY cipXY06(double t) noexcept;
 /// CIP X, Y extracted from a bias-precession-nutation matrix (used for 2000B).
-[[nodiscard]] CipXY matrixToCipXY(const Mat3& npb) noexcept;
+[[nodiscard]] ASTRO_EXPORT CipXY matrixToCipXY(const Mat3& npb) noexcept;
 /// CIP X, Y for the selected model: cipXY06() for 2000A, or from the
 /// npbMatrix06() matrix for 2000B.
-[[nodiscard]] CipXY cipXY(double t, PrecessionNutationModel model) noexcept;
+[[nodiscard]] ASTRO_EXPORT CipXY cipXY(double t, PrecessionNutationModel model) noexcept;
 /// CIO locator s, given the CIP X, Y (IERS Table 5.2d).
-[[nodiscard]] double cioLocatorS06(double t, const CipXY& xy) noexcept;
+[[nodiscard]] ASTRO_EXPORT double cioLocatorS06(double t, const CipXY& xy) noexcept;
 /// TIO locator s' (IERS 2010 eq. 5.13).
-[[nodiscard]] double tioLocatorSp(double t) noexcept;
+[[nodiscard]] ASTRO_EXPORT double tioLocatorSp(double t) noexcept;
 /// GCRS -> CIRS matrix from X, Y, s.
-[[nodiscard]] Mat3 celestialToIntermediateMatrix(const CipXY& xy, double s) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 celestialToIntermediateMatrix(const CipXY& xy, double s) noexcept;
 
 /// Convert celestial pole offsets dX, dY to nutation corrections ddpsi, ddeps
 /// (first-order, IERS 2010 eq. 5.25 inverse).
-[[nodiscard]] Nutation poleOffsetsToNutation(double t, double dX, double dY) noexcept;
+[[nodiscard]] ASTRO_EXPORT Nutation poleOffsetsToNutation(double t, double dX, double dY) noexcept;
 
 } // namespace astro

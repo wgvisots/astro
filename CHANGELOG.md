@@ -88,6 +88,21 @@ if (r.status == Sgp4Status::Decayed) { /* decayed */ }
 keplerianToEquinoctial(hyperbola);                   // throws astro::Error
 ```
 
+### Build and packaging
+
+- **The shared library exports only the public API.** It is built with hidden visibility; public
+  functions and classes are marked `ASTRO_EXPORT`, from the generated header `astro/export.h`.
+  - No source changes for users.
+  - Internal symbols (`detail` namespaces, implementation classes) are no longer exported: 501
+    symbols instead of 625.
+  - `tools/check_exports.py` (a test in shared builds) fails if an internal symbol leaks.
+- **The soname carries the minor version**, `libastro.so.MAJOR.MINOR` (`libastro.so.0.3` for this
+  release), because a minor release may change the binary interface (see the compatibility policy).
+  Programs linked against a shared 0.2 build must be relinked.
+- **`astro/astro.h`** includes every public header, for convenience. A test checks that it is
+  complete, and the build checks that every public header compiles on its own.
+- CI builds and tests a shared library too, and builds a program against the installed result.
+
 ## [0.2.0] - unreleased
 
 The first tagged release. It follows a top-to-bottom review of the library (November 2026), which

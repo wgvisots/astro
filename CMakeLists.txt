@@ -65,14 +65,32 @@ add_library(astro ${ASTRO_SOURCES} ${ASTRO_HEADERS})
 add_library(astro::astro ALIAS astro)
 
 target_compile_features(astro PUBLIC cxx_std_20)
+# The soname carries the major and minor version (libastro.so.0.3). astro promises source compatibility
+# within a major version, not binary compatibility: a minor release may change the application binary
+# interface (ABI), so it gets a new soname and a program built against 0.3 never loads 0.4 by mistake.
+# A patch release keeps the ABI, and keeps the soname.
 set_target_properties(astro PROPERTIES
         CXX_EXTENSIONS OFF
         POSITION_INDEPENDENT_CODE ON
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
         VERSION ${PROJECT_VERSION}
-        SOVERSION ${PROJECT_VERSION_MAJOR})
+        SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
 
 # astro/version.h is generated from include/astro/version.h.in.
 configure_file(include/astro/version.h.in ${PROJECT_BINARY_DIR}/include/astro/version.h @ONLY)
+
+# astro/export.h defines ASTRO_EXPORT, which marks the public API. The library is built with hidden
+# visibility, so a shared build exports only what is marked. In a static build ASTRO_STATIC_DEFINE
+# makes ASTRO_EXPORT empty, for the library and for every program that links it.
+include(GenerateExportHeader)
+generate_export_header(astro
+        BASE_NAME astro
+        EXPORT_FILE_NAME ${PROJECT_BINARY_DIR}/include/astro/export.h)
+get_target_property(ASTRO_LIBRARY_TYPE astro TYPE)
+if(ASTRO_LIBRARY_TYPE STREQUAL "STATIC_LIBRARY")
+    target_compile_definitions(astro PUBLIC ASTRO_STATIC_DEFINE)
+endif()
 target_include_directories(astro PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
@@ -106,7 +124,8 @@ install(TARGETS astro EXPORT astroTargets
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY include/astro DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} PATTERN "*.in" EXCLUDE)
-install(FILES ${PROJECT_BINARY_DIR}/include/astro/version.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/astro)
+install(FILES ${PROJECT_BINARY_DIR}/include/astro/version.h ${PROJECT_BINARY_DIR}/include/astro/export.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/astro)
 install(EXPORT astroTargets
         NAMESPACE astro::
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/astro)
@@ -181,4 +200,13 @@ endif()
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND AND (ASTRO_BUILD_TESTS OR ASTRO_BUILD_EXAMPLES))
     add_test(NAME docs.snippets COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_doc_snippets.py ${PROJECT_SOURCE_DIR})
+endif()
+if(Python3_FOUND AND ASTRO_BUILD_TESTS)
+    # astro/astro.h includes every public header.
+    add_test(NAME headers.astro_h COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_astro_header.py ${PROJECT_SOURCE_DIR})
+    # A shared build exports no internal symbol (detail namespaces, anonymous namespaces).
+    if(ASTRO_LIBRARY_TYPE STREQUAL "SHARED_LIBRARY" AND CMAKE_NM)
+        add_test(NAME exports.internal
+                 COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_exports.py $<TARGET_FILE:astro> --nm ${CMAKE_NM})
+    endif()
 endif()

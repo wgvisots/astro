@@ -22,6 +22,7 @@
 #include <string_view>
 
 #include "astro/core/constants.h"
+#include "astro/export.h"
 
 /// \file
 /// Angle units and wrapping, and sexagesimal (HMS/DMS) parsing and formatting.
@@ -57,16 +58,16 @@ namespace astro {
 
 /// Wrap an angle to [0, 2*pi). A value already in that range is returned unchanged, bit for bit.
 /// Not-a-number (NaN) and infinity give NaN.
-[[nodiscard]] double wrapTwoPi(double rad) noexcept;
+[[nodiscard]] ASTRO_EXPORT double wrapTwoPi(double rad) noexcept;
 /// Wrap an angle to [-pi, pi). A value already in that range is returned unchanged, bit for bit.
 /// NaN and infinity give NaN.
-[[nodiscard]] double wrapPi(double rad) noexcept;
+[[nodiscard]] ASTRO_EXPORT double wrapPi(double rad) noexcept;
 /// Wrap an angle to [0, 360) degrees. A value already in that range is returned unchanged, bit for bit.
 /// NaN and infinity give NaN.
-[[nodiscard]] double wrap360(double deg) noexcept;
+[[nodiscard]] ASTRO_EXPORT double wrap360(double deg) noexcept;
 /// Wrap an angle to [-180, 180) degrees. A value already in that range is returned unchanged, bit for bit.
 /// NaN and infinity give NaN.
-[[nodiscard]] double wrap180(double deg) noexcept;
+[[nodiscard]] ASTRO_EXPORT double wrap180(double deg) noexcept;
 
 /// Sexagesimal components. `negative` carries the sign so that "-00 30 00" is
 /// representable; deg/hours and minutes are non-negative.
@@ -83,12 +84,12 @@ struct Sexagesimal {
 /// true, and `h`, `m` and `s` are then used as magnitudes (the signs of `m` and `s` are ignored). So
 /// hmsToRad(-1, 30, 0) is -1.5 hours. An angle between 0 and -1 hour needs `negative`, because an `int`
 /// has no negative zero: hmsToRad(0, 30, 0, true) is -0.5 hours.
-[[nodiscard]] double hmsToRad(int h, int m, double s, bool negative = false) noexcept;
+[[nodiscard]] ASTRO_EXPORT double hmsToRad(int h, int m, double s, bool negative = false) noexcept;
 /// Degrees, arcminutes, arcseconds to radians.
 ///
 /// The sign is handled as in hmsToRad: dmsToRad(-5, 30, 0) is -5.5 degrees, and
 /// dmsToRad(0, 30, 0, true) is -0.5 degrees.
-[[nodiscard]] double dmsToRad(int d, int m, double s, bool negative = false) noexcept;
+[[nodiscard]] ASTRO_EXPORT double dmsToRad(int d, int m, double s, bool negative = false) noexcept;
 
 /// Decompose radians into hours/minutes/seconds, with seconds rounded to `decimals`
 /// places (carries propagate, so 59.9999 never prints as 60).
@@ -96,10 +97,10 @@ struct Sexagesimal {
 /// An angle with no such decomposition is reported in `seconds`, with `whole` and `minutes` zero:
 /// `seconds` is NaN if `rad` is not-a-number (NaN), and infinity if `rad` is infinite or so large that
 /// the hours do not fit in an `int` (`negative` still gives the sign).
-[[nodiscard]] Sexagesimal radToHms(double rad, int decimals = 3) noexcept;
+[[nodiscard]] ASTRO_EXPORT Sexagesimal radToHms(double rad, int decimals = 3) noexcept;
 /// Decompose radians into degrees/arcminutes/arcseconds. NaN, infinity and an angle whose degrees do
 /// not fit in an `int` are reported as in radToHms.
-[[nodiscard]] Sexagesimal radToDms(double rad, int decimals = 2) noexcept;
+[[nodiscard]] ASTRO_EXPORT Sexagesimal radToDms(double rad, int decimals = 2) noexcept;
 
 /// Parse an hours/minutes/seconds string into radians, e.g. "12:34:56.7", "12h 34m 56.7s", "12 34.5".
 ///
@@ -117,21 +118,21 @@ struct Sexagesimal {
 /// number, an exponent ("1e2"), "nan" or "inf", a sign that is not in front, a unit mark on the wrong
 /// number ("30m" alone) or of the wrong quantity ("12d", or an arc mark such as "12h30'"), and any
 /// other character (a line end included).
-[[nodiscard]] double parseHms(std::string_view text);
+[[nodiscard]] ASTRO_EXPORT double parseHms(std::string_view text);
 /// Parse a degrees/arcminutes/arcseconds string into radians, e.g. "-05:30:00", "-05d30m00s",
 /// "+45d 15' 36.2\"".
 ///
 /// The grammar and the errors are those of parseHms, with these unit marks: 'd' or the degree sign
 /// (UTF-8 or ISO 8859-1) after degrees, 'm' or an apostrophe after arcminutes, 's' or a double quote after
 /// arcseconds. An hours mark ("12h") is an error. Throws astro::Error as parseHms does.
-[[nodiscard]] double parseDms(std::string_view text);
+[[nodiscard]] ASTRO_EXPORT double parseDms(std::string_view text);
 
 /// Format as "HH:MM:SS.sss" (sep=':'). The angle is not wrapped: 2 pi prints as 24:00:00.000 and
 /// larger angles as more than 24 hours. A NaN angle gives "nan"; an angle that is infinite, or too
 /// large for radToHms, gives "inf" or "-inf".
-[[nodiscard]] std::string formatHms(double rad, int decimals = 3, char sep = ':');
+[[nodiscard]] ASTRO_EXPORT std::string formatHms(double rad, int decimals = 3, char sep = ':');
 /// Format as "+DD:MM:SS.ss" (sep=':'), always signed. A NaN angle gives "nan"; an angle that is
 /// infinite, or too large for radToDms, gives "+inf" or "-inf".
-[[nodiscard]] std::string formatDms(double rad, int decimals = 2, char sep = ':');
+[[nodiscard]] ASTRO_EXPORT std::string formatDms(double rad, int decimals = 2, char sep = ':');
 
 } // namespace astro

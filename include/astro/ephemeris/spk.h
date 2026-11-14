@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "astro/ephemeris/ephemeris.h"
+#include "astro/export.h"
 
 /// \file
 /// Reader for JPL SPK ephemeris kernels (.bsp; DAF segment types 2 and 3).
@@ -58,7 +59,7 @@ struct SpkSegmentInfo {
 /// the kernel lacks. DE430 and DE440 have the Mars system barycenter
 /// (Body::MarsBarycenter, NAIF id 4) but not Mars (Body::Mars, id 499), so
 /// Body::Mars throws with those kernels, and the message names the barycenter.
-class SpkEphemeris final : public Ephemeris {
+class ASTRO_EXPORT SpkEphemeris final : public Ephemeris {
 public:
     /// Open the kernel at `path` and read its segment summaries. Throws astro::Error if the file
     /// cannot be opened or read, is not a DAF/SPK file in IEEE format, or has no segments. The file
@@ -93,6 +94,6 @@ private:
 
 /// TDB seconds past J2000.0 for a time in any scale. Throws astro::Error if `t` cannot be
 /// converted to TDB: a UTC time before 1960, or a UT1 time (there is no Earth orientation data here).
-[[nodiscard]] double ephemerisTime(const Time& t);
+[[nodiscard]] ASTRO_EXPORT double ephemerisTime(const Time& t);
 
 } // namespace astro

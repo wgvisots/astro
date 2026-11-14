@@ -19,6 +19,7 @@
 #pragma once
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/frames/precession_nutation.h"
 #include "astro/time/julian_date.h"
 
@@ -27,23 +28,24 @@
 namespace astro {
 
 /// Earth Rotation Angle (IAU 2000), from UT1 as a two-part Julian Date.
-[[nodiscard]] double earthRotationAngle(const JulianDate& ut1) noexcept;
+[[nodiscard]] ASTRO_EXPORT double earthRotationAngle(const JulianDate& ut1) noexcept;
 
 /// Greenwich Mean Sidereal Time, IAU 2006 (consistent with IAU 2006 precession).
-[[nodiscard]] double gmst06(const JulianDate& ut1, const JulianDate& tt) noexcept;
+[[nodiscard]] ASTRO_EXPORT double gmst06(const JulianDate& ut1, const JulianDate& tt) noexcept;
 
 /// Equation of the origins, from a bias-precession-nutation matrix and the CIO locator s.
-[[nodiscard]] double equationOfOrigins(const Mat3& npb, double s) noexcept;
+[[nodiscard]] ASTRO_EXPORT double equationOfOrigins(const Mat3& npb, double s) noexcept;
 
 /// Greenwich Apparent Sidereal Time, IAU 2006/2000A (or 2000B), CIO based: GAST = ERA - EO.
-[[nodiscard]] double gast06(const JulianDate&       ut1,
-                            const JulianDate&       tt,
-                            PrecessionNutationModel model = PrecessionNutationModel::IAU2006_2000A) noexcept;
+[[nodiscard]] ASTRO_EXPORT double
+gast06(const JulianDate&       ut1,
+       const JulianDate&       tt,
+       PrecessionNutationModel model = PrecessionNutationModel::IAU2006_2000A) noexcept;
 
 /// Greenwich Mean Sidereal Time, IAU 1982 model (used to define TEME for SGP4).
-[[nodiscard]] double gmst82(const JulianDate& ut1) noexcept;
+[[nodiscard]] ASTRO_EXPORT double gmst82(const JulianDate& ut1) noexcept;
 
 /// Polar motion matrix W^T: TIRS -> ITRS, R1(-yp) R2(-xp) R3(s').
-[[nodiscard]] Mat3 polarMotionMatrix(double xp, double yp, double sp) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 polarMotionMatrix(double xp, double yp, double sp) noexcept;
 
 } // namespace astro

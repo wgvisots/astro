@@ -19,6 +19,7 @@
 #pragma once
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 
 /// \file
 /// Celestial spherical coordinates and the classical coordinate systems.
@@ -32,33 +33,33 @@ struct RaDec {
 };
 
 /// RA/Dec and length of a vector; RA is 0 on the z axis.
-[[nodiscard]] RaDec vectorToRaDec(const Vec3& v) noexcept;
+[[nodiscard]] ASTRO_EXPORT RaDec vectorToRaDec(const Vec3& v) noexcept;
 /// Vector of length `rd.distance` in the direction (ra, dec).
-[[nodiscard]] Vec3 raDecToVector(const RaDec& rd) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 raDecToVector(const RaDec& rd) noexcept;
 /// Unit vector in the direction (ra, dec), rad.
 [[nodiscard]] inline Vec3 raDecToUnitVector(double ra, double dec) noexcept {
     return raDecToVector({ra, dec, 1.0});
 }
 
 /// Angular separation between two directions (rad), robust for all angles.
-[[nodiscard]] double angularSeparation(double ra1, double dec1, double ra2, double dec2) noexcept;
+[[nodiscard]] ASTRO_EXPORT double angularSeparation(double ra1, double dec1, double ra2, double dec2) noexcept;
 /// Position angle of point 2 from point 1, east of north (rad, [0, 2pi)).
-[[nodiscard]] double positionAngle(double ra1, double dec1, double ra2, double dec2) noexcept;
+[[nodiscard]] ASTRO_EXPORT double positionAngle(double ra1, double dec1, double ra2, double dec2) noexcept;
 
 /// Equatorial -> ecliptic rotation for obliquity eps: v_ecl = R1(eps) v_eq.
-[[nodiscard]] Mat3 equatorialToEclipticMatrix(double eps) noexcept;
+[[nodiscard]] ASTRO_EXPORT Mat3 equatorialToEclipticMatrix(double eps) noexcept;
 /// Ecliptic coordinates of an equatorial vector (lon, lat as RaDec fields ra/dec).
-[[nodiscard]] RaDec equatorialToEcliptic(const Vec3& eq, double eps) noexcept;
+[[nodiscard]] ASTRO_EXPORT RaDec equatorialToEcliptic(const Vec3& eq, double eps) noexcept;
 /// Equatorial vector from ecliptic coordinates (lon, lat, distance as RaDec
 /// fields ra/dec/distance): v_eq = R1(-eps) v_ecl.
-[[nodiscard]] Vec3 eclipticToEquatorial(const RaDec& ecl, double eps) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 eclipticToEquatorial(const RaDec& ecl, double eps) noexcept;
 
 /// ICRS -> Galactic rotation matrix (Hipparcos definition, ESA 1997).
-[[nodiscard]] const Mat3& icrsToGalacticMatrix() noexcept;
+[[nodiscard]] ASTRO_EXPORT const Mat3& icrsToGalacticMatrix() noexcept;
 /// Galactic longitude/latitude (as RaDec ra/dec fields) from ICRS RA/Dec.
-[[nodiscard]] RaDec icrsToGalactic(double ra, double dec) noexcept;
+[[nodiscard]] ASTRO_EXPORT RaDec icrsToGalactic(double ra, double dec) noexcept;
 /// ICRS RA/Dec (as RaDec ra/dec fields, unit distance) from Galactic longitude
 /// `l` and latitude `b` (rad).
-[[nodiscard]] RaDec galacticToIcrs(double l, double b) noexcept;
+[[nodiscard]] ASTRO_EXPORT RaDec galacticToIcrs(double l, double b) noexcept;
 
 } // namespace astro

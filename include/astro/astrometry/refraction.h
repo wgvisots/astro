@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include "astro/export.h"
+
 /// \file
 /// Atmospheric refraction. Elevations in radians; refraction is the amount by
 /// which the observed (apparent) elevation exceeds the true (geometric) one.
@@ -43,13 +45,14 @@ struct RefractionConstants {
 };
 /// Refraction constants for the given conditions (inputs are clamped to safe
 /// ranges, as in ERFA's eraRefco).
-[[nodiscard]] RefractionConstants refractionConstants(const Atmosphere& atm) noexcept;
+[[nodiscard]] ASTRO_EXPORT RefractionConstants refractionConstants(const Atmosphere& atm) noexcept;
 
 /// Observed elevation from true elevation using the A/B model, with ERFA's (eraAtioq)
 /// treatment near the horizon (refraction is held constant below ~3 deg).
-[[nodiscard]] double refractTrueToObserved(double trueElevation, const RefractionConstants& k) noexcept;
+[[nodiscard]] ASTRO_EXPORT double refractTrueToObserved(double trueElevation, const RefractionConstants& k) noexcept;
 /// True elevation from observed elevation (A/B model).
-[[nodiscard]] double refractObservedToTrue(double observedElevation, const RefractionConstants& k) noexcept;
+[[nodiscard]] ASTRO_EXPORT double refractObservedToTrue(double                     observedElevation,
+                                                        const RefractionConstants& k) noexcept;
 
 /// Bennett (1982): refraction (rad) for an *observed* elevation; scaled for
 /// pressure and temperature. Good to ~0.1 arcmin down to the horizon.
@@ -61,8 +64,9 @@ struct RefractionConstants {
 /// at 1010 hPa and 10 C); for every elevation below that, where the formula as printed turns back
 /// down and then divides by zero, that largest value is returned. The result is therefore finite,
 /// continuous and never negative for any elevation; a NaN elevation gives NaN.
-[[nodiscard]] double
-refractionBennett(double observedElevation, double pressureHpa = 1010.0, double temperatureC = 10.0) noexcept;
+[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT refractionBennett(double observedElevation,
+                                                                 double pressureHpa  = 1010.0,
+                                                                 double temperatureC = 10.0) noexcept;
 /// Saemundsson (1986): refraction (rad) for a *true* elevation; scaled for pressure and
 /// temperature as refractionBennett(), with which it agrees to ~0.1 arcmin.
 ///
@@ -72,7 +76,8 @@ refractionBennett(double observedElevation, double pressureHpa = 1010.0, double 
 /// to the zenith. Below that it is an extrapolation, and it is largest at -1.90 deg (44.6 arcmin at
 /// 1010 hPa and 10 C); for every elevation below that the largest value is returned. The result is
 /// finite, continuous and never negative for any elevation; a NaN elevation gives NaN.
-[[nodiscard]] double
-refractionSaemundsson(double trueElevation, double pressureHpa = 1010.0, double temperatureC = 10.0) noexcept;
+[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT refractionSaemundsson(double trueElevation,
+                                                                     double pressureHpa  = 1010.0,
+                                                                     double temperatureC = 10.0) noexcept;
 
 } // namespace astro

@@ -1,5 +1,5 @@
-# Build and test with GCC and Clang (warnings as errors); under the thread, address and
-# undefined-behaviour sanitizers; fuzz the parsers; measure line coverage; build the .deb and .rpm
+# Build and test with GCC and Clang (warnings as errors), and as a shared library; under the thread,
+# address and undefined-behaviour sanitizers; fuzz the parsers; measure line coverage; build the .deb and .rpm
 # packages and use the installed one; check formatting; and
 # build the documentation (Doxygen warnings as errors; code in the docs must match the examples).
 name: CI
@@ -49,6 +49,48 @@ jobs:
 
     - name: Test
       run: ctest --test-dir build --output-on-failure
+
+  # The shared library: hidden visibility, so only what ASTRO_EXPORT marks is exported. The tests,
+  # examples and studies link against it (every public function they use is exported), the test
+  # exports.internal fails if an internal (detail or anonymous namespace) symbol leaks, and a
+  # program built outside the tree uses the installed library.
+  shared-library:
+    name: Shared library
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-dev libgtest-dev
+
+    - name: Configure
+      env:
+        CC: gcc
+        CXX: g++
+      run: >
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DASTRO_WARNINGS_AS_ERRORS=ON -DBUILD_SHARED_LIBS=ON
+        -DASTRO_BUILD_STUDIES=ON
+
+    - name: Build
+      run: cmake --build build -j 4
+
+    - name: Test
+      run: ctest --test-dir build --output-on-failure
+
+    # Also run by ctest above (exports.internal); here its output is in the log of its own step.
+    - name: Export check
+      run: python3 tools/check_exports.py build/libastro.so
+
+    - name: Install, then build and run a program against the installation
+      run: |
+        cmake --install build --prefix "$PWD/install"
+        cmake -S tests/package -B build-consumer -DCMAKE_PREFIX_PATH="$PWD/install"
+        cmake --build build-consumer
+        build-consumer/astro_consumer
 
   thread-sanitizer:
     name: ThreadSanitizer

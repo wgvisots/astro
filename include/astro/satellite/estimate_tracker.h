@@ -27,6 +27,7 @@
 
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/frames/transform.h"
 #include "astro/orbit/central_body.h"
 #include "astro/orbit/integrators.h"
@@ -83,7 +84,7 @@ enum class ConsistencyTest {
 BOOST_DESCRIBE_ENUM(ConsistencyTest, Position, PositionVelocity, Elements)
 
 /// Writes "ConsistencyTest::<enumerator>", or "ConsistencyTest::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, ConsistencyTest value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, ConsistencyTest value);
 
 /// Settings for propagating estimates.
 struct TrackerOptions {
@@ -146,15 +147,16 @@ struct ConsistencyCheck {
 /// Survival function of the chi-square distribution with 3 and 6 degrees of freedom, P(X >= x).
 /// 1 for x <= 0; 0 for +infinity and for any x so large that the value is below the smallest double
 /// (x > 1490). NaN for NaN, so a NaN statistic never passes a p-value test.
-[[nodiscard]] double chiSquareSurvival3(double x) noexcept;
-[[nodiscard]] double chiSquareSurvival6(double x) noexcept;
+[[nodiscard]] ASTRO_EXPORT double chiSquareSurvival3(double x) noexcept;
+[[nodiscard]] ASTRO_EXPORT double chiSquareSurvival6(double x) noexcept;
 /// @}
 
 /// The numerical propagator TrackerOptions describes, started from `e` (in options.frame): point
 /// mass and zonal field aligned with the true pole at e.epoch, with options.frame treated as
 /// inertial (frozen at e.epoch). Throws astro::Error as poleOfDateMatrix does: for an Earth-fixed
 /// options.frame (TIRS, PEF, ITRS), and if e.epoch cannot be converted to TT.
-[[nodiscard]] NumericalPropagator trackerPropagator(const StateEstimate& e, const TrackerOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT NumericalPropagator trackerPropagator(const StateEstimate&  e,
+                                                                 const TrackerOptions& options = {});
 
 /// Propagate `prior` to next.epoch and compare it with `next` (see ConsistencyCheck). Throws
 /// astro::Error if either estimate has a non-finite state, covariance or epoch. Also throws for an
@@ -162,13 +164,14 @@ struct ConsistencyCheck {
 /// NumericalPropagator::propagateGridWithCovariance does, a negative
 /// options.accelerationNoisePsd included), and if the two epochs cannot be subtracted (see Time).
 /// A prediction on an open orbit does not throw: see ConsistencyTest::Elements.
-[[nodiscard]] ConsistencyCheck
-checkConsistency(const StateEstimate& prior, const StateEstimate& next, const TrackerOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT ConsistencyCheck ASTRO_EXPORT checkConsistency(const StateEstimate&  prior,
+                                                                          const StateEstimate&  next,
+                                                                          const TrackerOptions& options = {});
 
 /// Latest-wins tracking of an upstream filter's estimates with a consistency check per delivery.
 /// Like the standard containers: const member functions (current, predict, predictGrid, options)
 /// may be called concurrently, while update() needs exclusive access.
-class EstimateTracker {
+class ASTRO_EXPORT EstimateTracker {
 public:
     /// Throws astro::Error if options.frame is not a celestial frame, if
     /// options.accelerationNoisePsd is negative or not finite, if options.alarmProbability is not

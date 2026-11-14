@@ -48,6 +48,15 @@ The CMake options are listed in [Getting started](docs/guide/getting-started.md)
   A message starts with the function's name: `"Function: what is wrong (got <value>)"`, for example
   `throw Error("dayOfYearToDate: day of year out of range (got " + std::to_string(doy) + ")")`. A
   helper that throws for several functions takes the name as an argument.
+- **Exports:** the library is built with hidden visibility, so a shared build exports only what is
+  marked `ASTRO_EXPORT` (from `astro/export.h`). A new public non-inline function needs it
+  (`[[nodiscard]] ASTRO_EXPORT double f(...)`), and so does a new public class with an out-of-line
+  member, a virtual function, or that is thrown (`class ASTRO_EXPORT Name`). Templates, inline and
+  `constexpr` functions, plain structs and anything in `detail` stay unmarked.
+  `tools/check_exports.py` (the test `exports.internal` in a `-DBUILD_SHARED_LIBS=ON` build) fails
+  if an internal symbol leaks; a missing mark shows up as a link error in that build when a test or
+  example uses the function. A new header goes in `astro/astro.h` (the test `headers.astro_h`
+  checks).
 - A new formula cites its source in a comment, and the source goes in
   [docs/references.md](docs/references.md). Code that follows another project's code is credited in
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), with its licence.
@@ -78,6 +87,8 @@ The CMake options are listed in [Getting started](docs/guide/getting-started.md)
 - **Signing:** commits are signed.
 - **CI must pass.** It checks:
   - GCC and Clang builds, with warnings as errors;
+  - a shared-library build: tests, examples, the export check, and a program built against the
+    installed library;
   - the tests under the thread, address and undefined-behaviour sanitizers;
   - a minute of fuzzing for each parser;
   - line coverage (it fails below the floor in the workflow);

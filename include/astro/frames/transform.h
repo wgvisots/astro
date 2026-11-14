@@ -24,6 +24,7 @@
 #include <boost/describe/enum.hpp>
 
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/frames/eop.h"
 #include "astro/frames/precession_nutation.h"
 #include "astro/time/time.h"
@@ -53,12 +54,12 @@ enum class Frame {
 BOOST_DESCRIBE_ENUM(Frame, GCRS, J2000, MOD, TOD, TEME, CIRS, TIRS, PEF, ITRS)
 
 /// Writes "Frame::<enumerator>", or "Frame::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, Frame value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, Frame value);
 
 /// Short name of a frame ("GCRS", "ITRS", ...), or "INVALID_VALUE" for any other value, as operator<< writes it.
-[[nodiscard]] std::string_view toString(Frame f) noexcept;
+[[nodiscard]] ASTRO_EXPORT std::string_view toString(Frame f) noexcept;
 /// True for frames that rotate with the Earth (TIRS, PEF, ITRS).
-[[nodiscard]] bool isEarthFixed(Frame f) noexcept;
+[[nodiscard]] ASTRO_EXPORT bool isEarthFixed(Frame f) noexcept;
 
 /// Model options for FrameTransformer.
 struct FrameOptions {
@@ -69,7 +70,7 @@ struct FrameOptions {
 
 /// All frame rotations at one epoch. Construct once per epoch and reuse; the
 /// constructor evaluates the full precession-nutation series.
-class FrameTransformer {
+class ASTRO_EXPORT FrameTransformer {
 public:
     /// Evaluates the rotations at epoch `t`. Throws astro::Error if `eop` has no data at `t`, or if
     /// `t` is before 1960, where UTC is undefined.
@@ -140,7 +141,7 @@ private:
 ///
 /// Throws astro::Error for the Earth-fixed frames (TIRS, PEF, ITRS), for a value that is not an
 /// enumerator of Frame, and if t cannot be converted as the frame requires.
-[[nodiscard]] Mat3 gcrsToCelestialMatrix(Frame f, const Time& t);
+[[nodiscard]] ASTRO_EXPORT Mat3 gcrsToCelestialMatrix(Frame f, const Time& t);
 
 /// Rotation from the celestial frame `from` to a frame whose z axis is the Celestial Intermediate
 /// Pole (Earth's true spin axis) at t, for aligning a zonal gravity field (GravityField's
@@ -149,10 +150,12 @@ private:
 /// epoch that converts to TT, as for gcrsToCelestialMatrix. Same model as gcrsToCelestialMatrix.
 /// Throws astro::Error for the Earth-fixed frames, for a value that is not an enumerator of Frame,
 /// and if t cannot be converted to TT.
-[[nodiscard]] Mat3 poleOfDateMatrix(Frame from, const Time& t);
+[[nodiscard]] ASTRO_EXPORT Mat3 poleOfDateMatrix(Frame from, const Time& t);
 
 /// GCRS -> ITRS rotation matrix ("ECI to ECEF"). Throws astro::Error as FrameTransformer does.
-[[nodiscard]] Mat3 gcrsToItrsMatrix(const Time& t, const EopProvider& eop, const FrameOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT Mat3 gcrsToItrsMatrix(const Time&         t,
+                                                 const EopProvider&  eop,
+                                                 const FrameOptions& options = {});
 
 /// One-off conversions between GCRS, ITRS and TEME at epoch `t` (any time
 /// scale), with default FrameOptions. Velocities include the Earth-rotation
@@ -160,14 +163,14 @@ private:
 /// the same epoch. Throws astro::Error if `eop` has no data at `t`, or if `t`
 /// is before 1960, where UTC is undefined.
 /// @{
-[[nodiscard]] Vec3        gcrsToItrs(const Vec3& r, const Time& t, const EopProvider& eop);
-[[nodiscard]] Vec3        itrsToGcrs(const Vec3& r, const Time& t, const EopProvider& eop);
-[[nodiscard]] StateVector gcrsToItrs(const StateVector& s, const Time& t, const EopProvider& eop);
-[[nodiscard]] StateVector itrsToGcrs(const StateVector& s, const Time& t, const EopProvider& eop);
-[[nodiscard]] StateVector temeToItrs(const StateVector& s, const Time& t, const EopProvider& eop);
-[[nodiscard]] StateVector itrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
-[[nodiscard]] StateVector temeToGcrs(const StateVector& s, const Time& t, const EopProvider& eop);
-[[nodiscard]] StateVector gcrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
+[[nodiscard]] ASTRO_EXPORT Vec3        gcrsToItrs(const Vec3& r, const Time& t, const EopProvider& eop);
+[[nodiscard]] ASTRO_EXPORT Vec3        itrsToGcrs(const Vec3& r, const Time& t, const EopProvider& eop);
+[[nodiscard]] ASTRO_EXPORT StateVector gcrsToItrs(const StateVector& s, const Time& t, const EopProvider& eop);
+[[nodiscard]] ASTRO_EXPORT StateVector itrsToGcrs(const StateVector& s, const Time& t, const EopProvider& eop);
+[[nodiscard]] ASTRO_EXPORT StateVector temeToItrs(const StateVector& s, const Time& t, const EopProvider& eop);
+[[nodiscard]] ASTRO_EXPORT StateVector itrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
+[[nodiscard]] ASTRO_EXPORT StateVector temeToGcrs(const StateVector& s, const Time& t, const EopProvider& eop);
+[[nodiscard]] ASTRO_EXPORT StateVector gcrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
 /// @}
 
 /// Aliases using the common names: ECI = GCRS, ECEF = ITRS. They throw

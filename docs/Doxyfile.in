@@ -41,7 +41,8 @@ SHOW_INCLUDE_FILES     = YES
 ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = YES
 EXPAND_ONLY_PREDEF     = YES
-PREDEFINED             = "BOOST_DESCRIBE_ENUM(...)="
+PREDEFINED             = "BOOST_DESCRIBE_ENUM(...)=" \
+                         "ASTRO_EXPORT="
 
 QUIET                  = YES
 WARNINGS               = YES

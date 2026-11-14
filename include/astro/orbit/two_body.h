@@ -22,6 +22,7 @@
 
 #include "astro/core/constants.h"
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/orbit/state12.h"
 #include "astro/orbit/state_covariance.h"
 
@@ -39,7 +40,7 @@ struct Stumpff {
 /// continued to psi <= 0 (hyperbolic functions). `psi` is dimensionless (chi^2 alpha in the universal
 /// variables). Accurate to a few rounding errors for every psi: by their power series for |psi| < 1, where the
 /// closed forms cancel.
-[[nodiscard]] Stumpff stumpff(double psi) noexcept;
+[[nodiscard]] ASTRO_EXPORT Stumpff stumpff(double psi) noexcept;
 
 /// Propagate a two-body state by dt seconds using universal variables
 /// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits, any dt of
@@ -51,7 +52,9 @@ struct Stumpff {
 ///
 /// Throws astro::Error if the state or dt is not finite, the position is zero, or mu is not positive.
 /// With dt = 0 the state is returned as given, unchecked.
-[[nodiscard]] StateVector propagateKepler(const StateVector& s0, double dt, double mu = constants::gmEarth);
+[[nodiscard]] ASTRO_EXPORT StateVector propagateKepler(const StateVector& s0,
+                                                       double             dt,
+                                                       double             mu = constants::gmEarth);
 
 /// propagateKepler with the state transition matrix Phi(dt) = d(state at dt) / d(s0), in closed
 /// form (the quantity of Shepperd 1985 and Battin 1999): the universal-variable Lagrange
@@ -61,15 +64,19 @@ struct Stumpff {
 /// variational equations to ~1e-11, and symplectic to 6e-9 after a day in LEO and 1e-7 after a week
 /// (astro_study_propagation). The state is
 /// propagateKepler's, bit for bit. Phi(0) is the identity. Throws astro::Error as propagateKepler does.
-[[nodiscard]] StateTransition propagateKeplerStm(const StateVector& s0, double dt, double mu = constants::gmEarth);
+[[nodiscard]] ASTRO_EXPORT StateTransition propagateKeplerStm(const StateVector& s0,
+                                                              double             dt,
+                                                              double             mu = constants::gmEarth);
 
 /// Two-body state and covariance dt seconds after s0: P = Phi P0 Phi^T, Phi from propagateKeplerStm.
 /// P0 is the covariance of s0 (m^2, m^2/s, m^2/s^2) in the frame of s0, and mu the gravitational
 /// parameter of the central body (m^3/s^2). No process noise; for that,
 /// or for any force beyond the point mass, use NumericalPropagator::propagateWithCovariance.
 /// Throws astro::Error as propagateKepler does.
-[[nodiscard]] StateCovariance
-propagateKeplerWithCovariance(const StateVector& s0, double dt, const Mat6& P0, double mu = constants::gmEarth);
+[[nodiscard]] ASTRO_EXPORT StateCovariance ASTRO_EXPORT propagateKeplerWithCovariance(const StateVector& s0,
+                                                                                      double             dt,
+                                                                                      const Mat6&        P0,
+                                                                                      double mu = constants::gmEarth);
 
 /// Two-body propagation of a 12-component state (position, velocity, acceleration, jerk) by dt
 /// seconds. The output acceleration and jerk are those of the point mass (plus the unmodeled
@@ -81,10 +88,10 @@ propagateKeplerWithCovariance(const StateVector& s0, double dt, const Mat6& P0, 
 ///
 /// Throws astro::Error as the 6-component propagateKepler does or, where the unmodeled force is
 /// integrated, as NumericalPropagator::propagate does.
-[[nodiscard]] Propagation12 propagateKepler(const StateVector12& s0,
-                                            double               dt,
-                                            double               mu   = constants::gmEarth,
-                                            HigherOrderMode      mode = HigherOrderMode::ModelOnly);
+[[nodiscard]] ASTRO_EXPORT Propagation12 propagateKepler(const StateVector12& s0,
+                                                         double               dt,
+                                                         double               mu   = constants::gmEarth,
+                                                         HigherOrderMode      mode = HigherOrderMode::ModelOnly);
 
 /// One solution of Lambert's problem; velocities (m/s) in the frame of r1 and r2.
 struct LambertSolution {
@@ -120,16 +127,16 @@ struct LambertSolution {
 /// or if r1 and r2 are collinear (sine of the angle between them below 1e-12: the plane is
 /// undefined). Also throws if no root is found for a number of revolutions that should have one: a
 /// guard against a failed iteration.
-[[nodiscard]] std::vector<LambertSolution> lambertIzzo(const Vec3& r1,
-                                                       const Vec3& r2,
-                                                       double      tof,
-                                                       double      mu             = constants::gmEarth,
-                                                       bool        prograde       = true,
-                                                       int         maxRevolutions = 0);
+[[nodiscard]] ASTRO_EXPORT std::vector<LambertSolution> lambertIzzo(const Vec3& r1,
+                                                                    const Vec3& r2,
+                                                                    double      tof,
+                                                                    double      mu             = constants::gmEarth,
+                                                                    bool        prograde       = true,
+                                                                    int         maxRevolutions = 0);
 
 /// The Lambert solution without a complete revolution (the first of lambertIzzo's). Throws
 /// astro::Error as lambertIzzo does.
-[[nodiscard]] LambertSolution
+[[nodiscard]] ASTRO_EXPORT LambertSolution ASTRO_EXPORT
 lambert(const Vec3& r1, const Vec3& r2, double tof, double mu = constants::gmEarth, bool prograde = true);
 
 } // namespace astro

@@ -30,6 +30,7 @@
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
 #include "astro/ephemeris/ephemeris.h"
+#include "astro/export.h"
 #include "astro/frames/transform.h"
 #include "astro/orbit/central_body.h"
 #include "astro/orbit/integrators.h"
@@ -47,7 +48,7 @@ namespace astro {
 /// A force that depends on `t` alone, or has a part that does (a thrust profile, for example), is
 /// invisible to the integrator's step-size control: see integrateRkf78Steps. Bound the step with
 /// AdaptiveOptions::maxStep if it varies smoothly, and start a new propagation where it jumps.
-class ForceModel {
+class ASTRO_EXPORT ForceModel {
 public:
     virtual ~ForceModel() = default;
     /// Acceleration (m/s^2) at `t` for position r (m) and velocity v (m/s). Must be safe to call
@@ -75,7 +76,7 @@ public:
 /// `toBodyFrame` rotates the propagation frame into one whose z axis is the
 /// rotation axis (e.g. the GCRS -> CIRS matrix at epoch); identity treats the
 /// propagation frame's z axis as the pole.
-class GravityField final : public ForceModel {
+class ASTRO_EXPORT GravityField final : public ForceModel {
 public:
     /// The point mass and every zonal term of `body` (an empty body.J: point mass only).
     explicit GravityField(const CentralBody& body = CentralBody::earth(), const Mat3& toBodyFrame = Mat3::identity());
@@ -96,7 +97,7 @@ private:
 
 /// Point-mass perturbation from a third body (e.g. Sun, Moon) using an ephemeris.
 /// The propagation frame is assumed to be the GCRS.
-class ThirdBodyForce final : public ForceModel {
+class ASTRO_EXPORT ThirdBodyForce final : public ForceModel {
 public:
     /// Perturbation by `body` with gravitational parameter `muBody` (m^3/s^2); its geocentric
     /// position comes from `ephemeris` at `epoch` + t. Throws astro::Error if `ephemeris` is null.
@@ -117,7 +118,7 @@ private:
 
 /// An unmodeled inertial acceleration that varies linearly in time: a(t) = a0 + j0 t, with t in
 /// seconds since the propagator epoch. HigherOrderMode::UnmodeledForce adds one of these.
-class UnmodeledAcceleration final : public ForceModel {
+class ASTRO_EXPORT UnmodeledAcceleration final : public ForceModel {
 public:
     /// `a0` is the acceleration at the epoch (m/s^2), `j0` its constant rate (m/s^3).
     UnmodeledAcceleration(const Vec3& a0, const Vec3& j0) noexcept
@@ -145,7 +146,7 @@ enum class Crossing {
 BOOST_DESCRIBE_ENUM(Crossing, Any, Rising, Falling)
 
 /// Writes "Crossing::<enumerator>", or "Crossing::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, Crossing value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, Crossing value);
 
 /// Event function for propagateToEvent: a value at dt seconds after the epoch for the state there.
 /// Events are its zero crossings (e.g. height above the ellipsoid, or the z coordinate for nodes).
@@ -158,7 +159,7 @@ struct PropagationEvent {
 };
 
 /// Integrates the equations of motion with RKF7(8).
-class NumericalPropagator {
+class ASTRO_EXPORT NumericalPropagator {
 public:
     /// Start from position (m) and velocity (m/s) at `epoch`, in the inertial frame the force
     /// models assume (all outputs are in the same frame). Throws astro::Error if `forces` is empty

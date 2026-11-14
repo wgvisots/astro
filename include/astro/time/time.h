@@ -26,6 +26,7 @@
 
 #include <boost/describe/enum.hpp>
 
+#include "astro/export.h"
 #include "astro/time/julian_date.h"
 
 /// \file
@@ -51,12 +52,12 @@ enum class TimeScale {
 BOOST_DESCRIBE_ENUM(TimeScale, UTC, TAI, TT, TDB, TCG, TCB, UT1, GPS, GST, BDT)
 
 /// Writes "TimeScale::<enumerator>", or "TimeScale::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, TimeScale value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, TimeScale value);
 
 /// Short name of a time scale ("UTC", "TT", ...), or "INVALID_VALUE" for any other value, as operator<< writes it.
-[[nodiscard]] std::string_view toString(TimeScale scale) noexcept;
+[[nodiscard]] ASTRO_EXPORT std::string_view toString(TimeScale scale) noexcept;
 /// Parse "UTC", "TAI", "TT", ... (case-insensitive). Throws astro::Error for an unknown name.
-[[nodiscard]] TimeScale parseTimeScale(std::string_view name);
+[[nodiscard]] ASTRO_EXPORT TimeScale parseTimeScale(std::string_view name);
 
 /// Global navigation satellite systems with their own time scale and week count.
 enum class GnssSystem {
@@ -68,7 +69,7 @@ enum class GnssSystem {
 BOOST_DESCRIBE_ENUM(GnssSystem, GPS, Galileo, BeiDou)
 
 /// Writes "GnssSystem::<enumerator>", or "GnssSystem::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, GnssSystem value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, GnssSystem value);
 
 /// GNSS week number and time of week, in the system's own time scale.
 struct GnssWeekTow {
@@ -89,7 +90,7 @@ struct GnssWeekTow {
 /// UTC is undefined before 1960-01-01, where the leap-second table starts. A
 /// member that has to convert to or from UTC before then throws astro::Error;
 /// each such member says so below.
-class Time {
+class ASTRO_EXPORT Time {
 public:
     /// J2000.0 TT.
     Time() = default;
@@ -215,13 +216,13 @@ public:
     /// Throws astro::Error if exactly one of the two is UT1 (the conversion needs
     /// Earth orientation data: use to() with an EopProvider first), or if a
     /// conversion to or from UTC falls before 1960.
-    friend double operator-(const Time& a, const Time& b);
+    friend ASTRO_EXPORT double operator-(const Time& a, const Time& b);
     /// Ordering after converting b to a's scale; throws as operator- does. Equality is
     /// exact: two times that are the same instant in different scales can compare
     /// unequal by a rounding error of the conversion (about 1 in 30 do). Compare
     /// std::abs(a - b) with a tolerance instead.
-    friend std::partial_ordering operator<=>(const Time& a, const Time& b);
-    friend bool                  operator==(const Time& a, const Time& b) { return (a <=> b) == 0; }
+    friend ASTRO_EXPORT std::partial_ordering operator<=>(const Time& a, const Time& b);
+    friend bool                               operator==(const Time& a, const Time& b) { return (a <=> b) == 0; }
 
 private:
     JulianDate jd_{constants::jdJ2000, 0.0};
@@ -236,15 +237,16 @@ private:
 /// @param elong        observer east longitude, rad
 /// @param uKm          observer distance from Earth's spin axis, km
 /// @param vKm          observer distance north of the equatorial plane, km
-[[nodiscard]] double tdbMinusTt(const JulianDate& tt,
-                                double            ut1Fraction = 0.0,
-                                double            elong       = 0.0,
-                                double            uKm         = 0.0,
-                                double            vKm         = 0.0) noexcept;
+[[nodiscard]] ASTRO_EXPORT double tdbMinusTt(const JulianDate& tt,
+                                             double            ut1Fraction = 0.0,
+                                             double            elong       = 0.0,
+                                             double            uKm         = 0.0,
+                                             double            vKm         = 0.0) noexcept;
 
 /// Resolve a truncated (rolled-over) GNSS week number, e.g. 10-bit GPS LNAV
 /// weeks, to the full week closest to `reference`. Throws astro::Error if
 /// `bits` is outside 1-30, or as Time::gnssWeekTow does for `reference`.
-[[nodiscard]] int resolveWeekRollover(int truncatedWeek, int bits, GnssSystem system, const Time& reference);
+[[nodiscard]] ASTRO_EXPORT int
+resolveWeekRollover(int truncatedWeek, int bits, GnssSystem system, const Time& reference);
 
 } // namespace astro

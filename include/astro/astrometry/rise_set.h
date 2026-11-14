@@ -25,6 +25,7 @@
 #include <boost/describe/enum.hpp>
 
 #include "astro/astrometry/apparent.h"
+#include "astro/export.h"
 
 /// \file
 /// Rise, set, transit and twilight times, and lunar phase.
@@ -40,7 +41,7 @@ enum class SkyEventType {
 BOOST_DESCRIBE_ENUM(SkyEventType, Rise, Set, Transit)
 
 /// Writes "SkyEventType::<enumerator>", or "SkyEventType::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, SkyEventType value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, SkyEventType value);
 
 /// A rise, set or transit event.
 struct SkyEvent {
@@ -69,11 +70,12 @@ struct SkyEvent {
 /// holds more than 2e9 steps. Also throws if `end - start` does (one of the two
 /// in UT1, or a UTC time before 1960; see Time). An exception thrown by
 /// `elevation` passes through.
-[[nodiscard]] std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&)>& elevation,
-                                                        const Time&                               start,
-                                                        const Time&                               end,
-                                                        double                                    threshold,
-                                                        double                                    step = 600.0);
+[[nodiscard]] ASTRO_EXPORT std::vector<SkyEvent>
+                           findElevationEvents(const std::function<double(const Time&)>& elevation,
+                                               const Time&                               start,
+                                               const Time&                               end,
+                                               double                                    threshold,
+                                               double                                    step = 600.0);
 
 /// Twilight definitions, by the Sun's elevation.
 enum class Twilight {
@@ -85,15 +87,15 @@ enum class Twilight {
 BOOST_DESCRIBE_ENUM(Twilight, Civil, Nautical, Astronomical)
 
 /// Writes "Twilight::<enumerator>", or "Twilight::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, Twilight value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, Twilight value);
 
 /// Sun elevation defining the twilight (-6, -12 or -18 deg).
-[[nodiscard]] double twilightElevation(Twilight tw) noexcept;
+[[nodiscard]] ASTRO_EXPORT double twilightElevation(Twilight tw) noexcept;
 
 /// Geometric topocentric elevation of a body's center (no refraction). Throws
 /// astro::Error if `eop` has no data at `t` or `t` is before 1960 (see
 /// FrameTransformer), and if `eph` has no data for `body` at `t`.
-[[nodiscard]] double
+[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT
 bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider& eop, const Ephemeris& eph);
 
 /// Sunrise/sunset (and solar transits) in [start, end] for a horizon elevation.
@@ -101,24 +103,24 @@ bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider&
 /// `end` before `start` throws astro::Error. The same holds for twilightEvents() and
 /// moonRiseSet(). All three also throw as bodyElevation() does, for any time
 /// in the window, and sunRiseSet() for a `horizon` that is NaN.
-[[nodiscard]] std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
-                                               const Time&        start,
-                                               const Time&        end,
-                                               const EopProvider& eop,
-                                               const Ephemeris&   eph,
-                                               double             horizon = constants::sunriseElevation);
+[[nodiscard]] ASTRO_EXPORT std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
+                                                            const Time&        start,
+                                                            const Time&        end,
+                                                            const EopProvider& eop,
+                                                            const Ephemeris&   eph,
+                                                            double             horizon = constants::sunriseElevation);
 /// Twilight begin (Rise) / end (Set) events. Throws astro::Error as
 /// sunRiseSet() does.
-[[nodiscard]] std::vector<SkyEvent> twilightEvents(Twilight           tw,
-                                                   const Geodetic&    site,
-                                                   const Time&        start,
-                                                   const Time&        end,
-                                                   const EopProvider& eop,
-                                                   const Ephemeris&   eph);
+[[nodiscard]] ASTRO_EXPORT std::vector<SkyEvent> twilightEvents(Twilight           tw,
+                                                                const Geodetic&    site,
+                                                                const Time&        start,
+                                                                const Time&        end,
+                                                                const EopProvider& eop,
+                                                                const Ephemeris&   eph);
 /// Moonrise/moonset of the upper limb with 34' refraction (topocentric, so parallax is included).
 /// Like sunRiseSet(), it also returns the transits.
 /// Throws astro::Error as sunRiseSet() does.
-[[nodiscard]] std::vector<SkyEvent>
+[[nodiscard]] ASTRO_EXPORT std::vector<SkyEvent> ASTRO_EXPORT
 moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop, const Ephemeris& eph);
 
 /// Geocentric lunar phase quantities.
@@ -131,6 +133,6 @@ struct MoonPhase {
 };
 /// Geocentric phase of the Moon at `t`, from the Moon and Sun positions in `eph`.
 /// Throws astro::Error if `eph` has no data for the Moon or the Sun at `t`.
-[[nodiscard]] MoonPhase moonPhase(const Time& t, const Ephemeris& eph);
+[[nodiscard]] ASTRO_EXPORT MoonPhase moonPhase(const Time& t, const Ephemeris& eph);
 
 } // namespace astro

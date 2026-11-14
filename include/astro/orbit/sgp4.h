@@ -25,6 +25,7 @@
 
 #include "astro/core/error.h"
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/orbit/tle.h"
 
 /// \file
@@ -43,7 +44,7 @@ enum class Sgp4Gravity {
 BOOST_DESCRIBE_ENUM(Sgp4Gravity, WGS72Old, WGS72, WGS84)
 
 /// Writes "Sgp4Gravity::<enumerator>", or "Sgp4Gravity::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, Sgp4Gravity value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, Sgp4Gravity value);
 
 /// 'Improved' (Vallado) or 'AFSPC' compatibility for the GMST at epoch and node wrapping.
 enum class Sgp4OpsMode {
@@ -54,7 +55,7 @@ enum class Sgp4OpsMode {
 BOOST_DESCRIBE_ENUM(Sgp4OpsMode, Improved, Afspc)
 
 /// Writes "Sgp4OpsMode::<enumerator>", or "Sgp4OpsMode::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value);
 
 /// Outcome of one SGP4 propagation. The underlying values are the error codes of the reference code
 /// (Vallado's sgp4, 1 to 6, with no 5), so `static_cast<int>(status)` compares with its output. One more
@@ -79,11 +80,11 @@ BOOST_DESCRIBE_ENUM(Sgp4Status,
                     TimeNotFinite)
 
 /// Writes "Sgp4Status::<enumerator>", or "Sgp4Status::INVALID_VALUE" for any other value.
-std::ostream& operator<<(std::ostream& os, Sgp4Status value);
+ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, Sgp4Status value);
 
 /// Thrown by Sgp4 when the theory fails: an astro::Error that also carries the Sgp4Status, so that a
 /// caller can tell a decayed satellite from bad elements.
-class Sgp4Error : public Error {
+class ASTRO_EXPORT Sgp4Error : public Error {
 public:
     /// `code` is the status that failed (never Sgp4Status::Ok), `what` the message.
     Sgp4Error(Sgp4Status code, const std::string& what)
@@ -108,7 +109,7 @@ struct Sgp4Result {
 /// the element set's epoch. The reference code (Vallado's sgp4) and most other SGP4 implementations
 /// take minutes instead; propagateMinutes takes minutes, for comparison with them and with their
 /// verification output.
-class Sgp4 {
+class ASTRO_EXPORT Sgp4 {
 public:
     /// Initialize from `tle`. Throws Sgp4Error (an astro::Error) if the elements fail at the epoch (statuses
     /// 1-4 of Sgp4Status; a decayed state, Sgp4Status::Decayed, is accepted). A negative mean motion is

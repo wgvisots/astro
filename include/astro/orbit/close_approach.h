@@ -23,6 +23,7 @@
 
 #include "astro/core/mat6.h"
 #include "astro/core/vec.h"
+#include "astro/export.h"
 #include "astro/orbit/trajectory.h"
 #include "astro/time/time.h"
 
@@ -86,11 +87,11 @@ struct CloseApproach {
 /// end is before start, for options that are not positive and finite, or if a trajectory returns a
 /// non-finite state. Also throws as Trajectory::state does, for either trajectory, and if
 /// `end - start` does (see Time).
-[[nodiscard]] CloseApproach closestApproach(const Trajectory&           first,
-                                            const Trajectory&           second,
-                                            const Time&                 start,
-                                            const Time&                 end,
-                                            const CloseApproachOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT CloseApproach closestApproach(const Trajectory&           first,
+                                                         const Trajectory&           second,
+                                                         const Time&                 start,
+                                                         const Time&                 end,
+                                                         const CloseApproachOptions& options = {});
 
 /// Every local minimum of the distance in (start, end] that is no farther than `maxDistance` (m),
 /// in time order: a conjunction list. Each is a point of zero range rate reached while closing, so
@@ -98,12 +99,13 @@ struct CloseApproach {
 /// is not. Objects that keep a constant distance (the same orbit, a fixed phase apart) have no
 /// minimum: a change of sign of the range rate within its rounding error is ignored. Same search
 /// as closestApproach. Throws astro::Error as closestApproach does, and if `maxDistance` is NaN.
-[[nodiscard]] std::vector<CloseApproach> closeApproaches(const Trajectory& first,
-                                                         const Trajectory& second,
-                                                         const Time&       start,
-                                                         const Time&       end,
-                                                         double maxDistance = std::numeric_limits<double>::infinity(),
-                                                         const CloseApproachOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT std::vector<CloseApproach>
+                           closeApproaches(const Trajectory&           first,
+                                           const Trajectory&           second,
+                                           const Time&                 start,
+                                           const Time&                 end,
+                                           double                      maxDistance = std::numeric_limits<double>::infinity(),
+                                           const CloseApproachOptions& options = {});
 
 /// Probability that a 2-D Gaussian point with mean (mx, my) and covariance [[xx, xy], [xy, yy]]
 /// (m^2) lies within `radius` (m) of the origin.
@@ -121,7 +123,8 @@ struct CloseApproach {
 /// handled exactly. A mean more than 15 standard deviations outside the circle along the major axis
 /// gives 0 (the probability is below ~1e-49). Throws astro::Error for a radius that is not positive
 /// and finite, a non-finite argument, or a covariance that is not positive semi-definite.
-[[nodiscard]] double probabilityInCircle(double mx, double my, double xx, double xy, double yy, double radius);
+[[nodiscard]] ASTRO_EXPORT double
+probabilityInCircle(double mx, double my, double xx, double xy, double yy, double radius);
 
 /// The collision probability of one approach, and the encounter-plane quantities behind it.
 struct CollisionProbability {
@@ -158,18 +161,18 @@ struct CollisionProbability {
 /// approach, not atBoundary) for the encounter plane. Throws astro::Error for a radius that is not
 /// positive and finite, a non-finite state, a zero relative velocity, or a covariance that is not
 /// finite and positive semi-definite in the plane.
-[[nodiscard]] CollisionProbability collisionProbability(const CloseApproach& approach,
-                                                        const Mat3&          covariance1,
-                                                        const Mat3&          covariance2,
-                                                        double               hardBodyRadius);
+[[nodiscard]] ASTRO_EXPORT CollisionProbability collisionProbability(const CloseApproach& approach,
+                                                                     const Mat3&          covariance1,
+                                                                     const Mat3&          covariance2,
+                                                                     double               hardBodyRadius);
 
 /// As above, from 6x6 position/velocity covariances (only the position blocks are used), e.g. from
 /// NumericalPropagator::propagateGridWithCovariance at the time of the approach. Throws
 /// astro::Error as the overload above does.
-[[nodiscard]] CollisionProbability collisionProbability(const CloseApproach& approach,
-                                                        const Mat6&          covariance1,
-                                                        const Mat6&          covariance2,
-                                                        double               hardBodyRadius);
+[[nodiscard]] ASTRO_EXPORT CollisionProbability collisionProbability(const CloseApproach& approach,
+                                                                     const Mat6&          covariance1,
+                                                                     const Mat6&          covariance2,
+                                                                     double               hardBodyRadius);
 
 /// One approach of two objects with its collision probability.
 struct ConjunctionAssessment {
@@ -193,24 +196,24 @@ struct ConjunctionAssessment {
 /// approach, and the probability is that of the straight-line encounter through it. Throws
 /// astro::Error as closestApproach, UncertainTrajectory::stateCovariance and collisionProbability
 /// do.
-[[nodiscard]] ConjunctionAssessment assessConjunction(const UncertainTrajectory&  first,
-                                                      const UncertainTrajectory&  second,
-                                                      const Time&                 start,
-                                                      const Time&                 end,
-                                                      double                      hardBodyRadius,
-                                                      const CloseApproachOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT ConjunctionAssessment assessConjunction(const UncertainTrajectory&  first,
+                                                                   const UncertainTrajectory&  second,
+                                                                   const Time&                 start,
+                                                                   const Time&                 end,
+                                                                   double                      hardBodyRadius,
+                                                                   const CloseApproachOptions& options = {});
 
 /// Every local minimum of the distance strictly inside [start, end] no farther than `maxDistance`
 /// (m), as closeApproaches, each with its covariances and collision probability, in time order.
 /// Throws astro::Error as closeApproaches, UncertainTrajectory::stateCovariance and
 /// collisionProbability do.
-[[nodiscard]] std::vector<ConjunctionAssessment>
-assessConjunctions(const UncertainTrajectory&  first,
-                   const UncertainTrajectory&  second,
-                   const Time&                 start,
-                   const Time&                 end,
-                   double                      hardBodyRadius,
-                   double                      maxDistance = std::numeric_limits<double>::infinity(),
-                   const CloseApproachOptions& options     = {});
+[[nodiscard]] ASTRO_EXPORT std::vector<ConjunctionAssessment>
+    ASTRO_EXPORT           assessConjunctions(const UncertainTrajectory&  first,
+                                              const UncertainTrajectory&  second,
+                                              const Time&                 start,
+                                              const Time&                 end,
+                                              double                      hardBodyRadius,
+                                              double                      maxDistance = std::numeric_limits<double>::infinity(),
+                                              const CloseApproachOptions& options = {});
 
 } // namespace astro
