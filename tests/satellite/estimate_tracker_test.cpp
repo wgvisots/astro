@@ -516,3 +516,100 @@ TEST(EstimateTracker, RejectsEarthFixedFrames) {
     const StateEstimate e{kEpoch, leo(), diagonal(1.0, 1e-6)};
     EXPECT_THROW((void)checkConsistency(e, e, itrs), Error);
 }
+
+namespace {
+
+/// R P R^T for a 3x3 block of a covariance, written out.
+Mat3 rotatedBlock(const Mat6& P, std::size_t row, std::size_t col, const Mat3& R) {
+    Mat3 out;
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            double s = 0.0;
+            for (std::size_t k = 0; k < 3; ++k) {
+                for (std::size_t l = 0; l < 3; ++l) {
+                    s += R(i, k) * P[row + k][col + l] * R(j, l);
+                }
+            }
+            out(i, j) = s;
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+TEST(EstimateTracker, ResidualsAndSigmasAreThoseOfThePredictionInRic) {
+    // A delivery placed at known offsets from the prediction, along the prediction's radial,
+    // in-track and cross-track axes: the residuals are those offsets, and the sigmas the square roots
+    // of the diagonal of the predicted covariance turned into the same axes.
+    const StateVector   s0 = leo();
+    const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
+    const Time          t1 = kEpoch + 1200.0;
+    const auto          c0 = checkConsistency(prior, {t1, truthAt(s0, 1200.0), diagonal(25.0, 1e-5)});
+    const Mat3          R  = ricMatrix(c0.predicted);
+    const Vec3          dr{1.0, -2.0, 3.0}, dv{0.01, -0.02, 0.03};
+    const StateEstimate next{
+        t1,
+        {c0.predicted.r + R.transpose() * dr, c0.predicted.v + R.transpose() * dv},
+        diagonal(25.0, 1e-5)
+    };
+    const auto c = checkConsistency(prior, next);
+    // The prediction is the same (same prior, same epoch): residuals to rounding in coordinates of
+    // 7e6 m and velocities of 7.7e3 m/s (measured 3.3e-10 m; below 1e-11 m/s).
+    test::expectVecNear(c.positionResidualRic, dr, 2e-9, "position residual");
+    test::expectVecNear(c.velocityResidualRic, dv, 1e-11, "velocity residual");
+    const Mat3 Prr = rotatedBlock(c.predictedCovariance, 0, 0, R);
+    const Mat3 Pvv = rotatedBlock(c.predictedCovariance, 3, 3, R);
+    for (std::size_t i = 0; i < 3; ++i) {
+        EXPECT_NEAR(c.positionSigmaRic[i], std::sqrt(Prr(i, i)), 1e-14 * std::sqrt(Prr(i, i))) << i;
+        EXPECT_NEAR(c.velocitySigmaRic[i], std::sqrt(Pvv(i, i)), 1e-14 * std::sqrt(Pvv(i, i))) << i;
+    }
+    // The in-track uncertainty has grown most over 20 minutes.
+    EXPECT_GT(c.positionSigmaRic.y, c.positionSigmaRic.z);
+}
+
+TEST(EstimateTracker, AlarmProbabilityIsTheThresholdOnThePValue) {
+    // The selected test's p-value against TrackerOptions::alarmProbability: consistent at or above it.
+    const StateVector   s0 = leo();
+    const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
+    StateVector         moved  = truthAt(s0, 1200.0);
+    moved.r                   += Vec3{20.0, -15.0, 10.0}; // a few sigma: a p-value well inside (0, 1)
+    const StateEstimate next{kEpoch + 1200.0, moved, diagonal(25.0, 1e-5)};
+    const double        p = checkConsistency(prior, next).elementsPValue;
+    ASSERT_GT(p, 1e-12);
+    ASSERT_LT(p, 0.5);
+    TrackerOptions below, above;
+    below.alarmProbability = 0.5 * p;
+    above.alarmProbability = 2.0 * p;
+    EXPECT_TRUE(checkConsistency(prior, next, below).consistent);
+    EXPECT_FALSE(checkConsistency(prior, next, above).consistent);
+}
+
+TEST(EstimateTracker, AccelerationNoiseAddsTheWhiteNoiseCovariance) {
+    // White acceleration noise of spectral density q adds, over dt, q dt^3/3 to each position
+    // variance, q dt^2/2 to each position-velocity covariance and q dt to each velocity variance (a
+    // free particle; gravity gradients change this by about (n dt)^2 = 4e-3 of it over 60 s; measured
+    // 1.5e-3). Tolerance 1e-2.
+    const StateVector s0 = leo();
+    const double      q = 1e-6, dt = 60.0;
+    TrackerOptions    noisy;
+    noisy.accelerationNoisePsd = q;
+    const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
+    const StateEstimate next{kEpoch + dt, truthAt(s0, dt), diagonal(25.0, 1e-5)};
+    const Mat6          quiet = checkConsistency(prior, next).predictedCovariance;
+    const Mat6          noise = checkConsistency(prior, next, noisy).predictedCovariance;
+    for (std::size_t i = 0; i < 3; ++i) {
+        SCOPED_TRACE(testing::Message() << "axis " << i);
+        EXPECT_NEAR((noise[i][i] - quiet[i][i]) / (q * dt * dt * dt / 3.0), 1.0, 1e-2);
+        EXPECT_NEAR((noise[i][i + 3] - quiet[i][i + 3]) / (q * dt * dt / 2.0), 1.0, 1e-2);
+        EXPECT_NEAR((noise[i + 3][i + 3] - quiet[i + 3][i + 3]) / (q * dt), 1.0, 1e-2);
+    }
+}
+
+TEST(EstimateTracker, PredictGridWithoutAnEstimateOrWithAZeroStepThrows) {
+    EstimateTracker tracker;
+    EXPECT_THROW((void)tracker.predictGrid(0.0, 60.0, 3), Error);
+    (void)tracker.update({kEpoch, leo(), diagonal(100.0, 1e-4)});
+    EXPECT_NO_THROW((void)tracker.predictGrid(0.0, 60.0, 3));
+    EXPECT_THROW((void)tracker.predictGrid(0.0, 0.0, 3), Error);
+}
