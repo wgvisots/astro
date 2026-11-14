@@ -19,7 +19,9 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "astro/core/angle.h"
@@ -27,6 +29,7 @@
 #include "astro/core/rootfind.h"
 #include "astro/geodesy/local.h"
 #include "astro/orbit/elements.h"
+#include "astro/orbit/gravity.h"
 #include "astro/orbit/impact.h"
 #include "test_util.h"
 
@@ -56,25 +59,44 @@ StateVector launch(const Geodetic& site, double V, double gamma, double az, cons
 const Geodetic kSite{deg2rad(30.0), deg2rad(-100.0), 0.0};
 
 /// Brute-force reference: tight tolerance, the full IAU 2006/2000A transformation at every
-/// evaluation, Brent's method on the propagated height.
+/// evaluation, Brent's method on the propagated height; optionally with further forces.
 struct Reference {
-    double dt;
-    Vec3   itrs;
+    double      dt;
+    Vec3        itrs;
+    StateVector itrsState; ///< position and ground-relative velocity at impact
 };
-Reference referenceImpact(const StateVector& s0, double guess, const EopProvider& eop) {
+Reference referenceImpact(const StateVector&                                    s0,
+                          double                                                guess,
+                          const EopProvider&                                    eop,
+                          const std::vector<std::shared_ptr<const ForceModel>>& extra = {}) {
     const ImpactOptions o;
     AdaptiveOptions     tight;
     tight.relTol = 1e-13;
     tight.absTol = 1e-9;
-    const NumericalPropagator prop(
-        kEpoch,
-        s0,
-        {std::make_shared<GravityField>(o.J, o.mu, o.re, poleOfDateMatrix(Frame::GCRS, kEpoch))},
-        tight);
+    std::vector<std::shared_ptr<const ForceModel>> forces{
+        std::make_shared<GravityField>(o.J, o.mu, o.re, poleOfDateMatrix(Frame::GCRS, kEpoch))};
+    forces.insert(forces.end(), extra.begin(), extra.end());
+    const NumericalPropagator prop(kEpoch, s0, forces, tight);
     const auto height = [&](double dt) { return ecefToGeodetic(gcrsToItrs(prop.propagate(dt).r, kEpoch + dt, eop)).h; };
-    const double dt   = brentRoot(height, guess - 2.0, guess + 2.0, 1e-9);
-    return {dt, gcrsToItrs(prop.propagate(dt).r, kEpoch + dt, eop)};
+    const double      dt = brentRoot(height, guess - 2.0, guess + 2.0, 1e-9);
+    const StateVector g  = prop.propagate(dt);
+    return {dt, gcrsToItrs(g.r, kEpoch + dt, eop), gcrsToItrs(g, kEpoch + dt, eop)};
 }
+
+/// The zonal part of the default impact gravity model as a separate force: J2..J4 about the true
+/// pole at the epoch, no point mass.
+class ZonalOnly final : public ForceModel {
+public:
+    explicit ZonalOnly(const Mat3& toPole)
+        : R_(toPole) {}
+    [[nodiscard]] Vec3 acceleration(double, const Vec3& r, const Vec3&) const override {
+        const ImpactOptions o;
+        return R_.transpose() * zonalAcceleration(R_ * r, o.J, o.mu, o.re);
+    }
+
+private:
+    Mat3 R_;
+};
 
 } // namespace
 
@@ -133,7 +155,7 @@ TEST(Impact, FramesSurfaceHeightAndSharedRotations) {
 
     // The same physical state given in other celestial frames gives the same impact, and the
     // impact state comes back in the input frame of the impact time.
-    for (Frame f : {Frame::J2000, Frame::TOD, Frame::TEME}) {
+    for (Frame f : {Frame::J2000, Frame::MOD, Frame::TOD, Frame::TEME, Frame::CIRS}) {
         const Mat3 M = gcrsToCelestialMatrix(f, kEpoch);
         const auto i = predictImpact(kEpoch, StateVector{M * s0.r, M * s0.v}, f, eop);
         ASSERT_TRUE(i.has_value());
@@ -168,13 +190,120 @@ TEST(Impact, NoImpactAndInvalidInput) {
     // A 400 km circular orbit never comes down.
     const StateVector orbit = elementsToState({6778e3, 0.0, deg2rad(51.6), 0.3, 0.5, 0.7});
     EXPECT_FALSE(predictImpact(kEpoch, orbit, Frame::GCRS, eop).has_value());
-    EXPECT_THROW((void)predictImpact(kEpoch, orbit, Frame::ITRS, eop), Error);
-    ImpactOptions bad;
-    bad.maxFlightTime = -1.0;
-    EXPECT_THROW((void)predictImpact(kEpoch, orbit, Frame::GCRS, eop, bad), Error);
-    bad               = {};
-    bad.surfaceHeight = std::nan("");
-    EXPECT_THROW((void)predictImpact(kEpoch, orbit, Frame::GCRS, eop, bad), Error);
+    // Earth-fixed frames are refused, with a message that says so.
+    for (Frame f : {Frame::ITRS, Frame::TIRS, Frame::PEF}) {
+        try {
+            (void)predictImpact(kEpoch, orbit, f, eop);
+            ADD_FAILURE() << "no exception for " << f;
+        } catch (const Error& e) {
+            EXPECT_NE(std::string(e.what()).find("celestial frame"), std::string::npos) << e.what();
+        }
+    }
+    // Each invalid option, through both overloads.
+    const double               nan = std::nan(""), inf = std::numeric_limits<double>::infinity();
+    std::vector<ImpactOptions> invalid;
+    for (double t : {-1.0, 0.0, nan, inf}) {
+        invalid.emplace_back().maxFlightTime = t;
+    }
+    for (double h : {nan, inf}) {
+        invalid.emplace_back().surfaceHeight = h;
+    }
+    for (double q : {-1e-9, nan, inf}) {
+        invalid.emplace_back().accelerationNoisePsd = q;
+    }
+    invalid.emplace_back().timeTolerance     = 0.0; // refused by the event search
+    invalid.emplace_back().integrator.relTol = -1.0;
+    for (const ImpactOptions& bad : invalid) {
+        EXPECT_THROW((void)predictImpact(kEpoch, orbit, Frame::GCRS, eop, bad), Error)
+            << bad.maxFlightTime << " " << bad.surfaceHeight << " " << bad.accelerationNoisePsd << " "
+            << bad.timeTolerance;
+        EXPECT_THROW((void)predictImpact(kEpoch, orbit, Mat6{}, Frame::GCRS, eop, bad), Error);
+    }
+}
+
+TEST(Impact, GroundVelocityHeadingAngleAndSpeedMatchTheReference) {
+    // The brute-force reference's state at impact, converted to the ITRS with the Earth's rotation
+    // (gcrsToItrs of a state), gives the ground-relative velocity; in the local east-north-up frame
+    // of the impact point, the heading is atan2(east, north), the impact angle atan2(-up,
+    // horizontal) and the speed its norm. Measured: 4e-5 m/s in the velocity and the speed, 1e-9 rad
+    // in the heading and 6e-9 rad in the angle (the reference uses IAU 2000A, the default 2000B).
+    const ConstantEop eop = someEop();
+    for (const double az : {45.0, 200.0, 300.0}) {
+        const StateVector s0  = launch(kSite, 6000.0, deg2rad(35.0), deg2rad(az), eop);
+        const auto        imp = predictImpact(kEpoch, s0, Frame::GCRS, eop);
+        ASSERT_TRUE(imp.has_value()) << az;
+        const Reference ref = referenceImpact(s0, imp->flightTime, eop);
+        const Geodetic  pt  = ecefToGeodetic(ref.itrsState.r);
+        const Vec3      v   = ecefToEnuMatrix(pt.lat, pt.lon) * ref.itrsState.v;
+        test::expectVecNear(imp->itrs.v, ref.itrsState.v, 2e-4, "ground-relative velocity");
+        EXPECT_NEAR(std::remainder(imp->heading - std::atan2(v.x, v.y), constants::twoPi), 0.0, 1e-8) << az;
+        EXPECT_GE(imp->heading, 0.0);
+        EXPECT_LT(imp->heading, constants::twoPi);
+        EXPECT_NEAR(imp->angle, std::atan2(-v.z, std::hypot(v.x, v.y)), 3e-8) << az;
+        EXPECT_NEAR(imp->speed, norm(v), 2e-4) << az;
+    }
+}
+
+TEST(Impact, AdditionalForcesAreAppliedInGcrsAtTheirTime) {
+    const ConstantEop eop     = someEop();
+    const StateVector s0      = launch(kSite, 5000.0, deg2rad(40.0), deg2rad(60.0), eop);
+    const auto        nominal = predictImpact(kEpoch, s0, Frame::GCRS, eop);
+    ASSERT_TRUE(nominal.has_value());
+    // The zonal field moved from the built-in model into additionalForces: the same physics, so
+    // the same impact (measured: 2e-13 s and 3e-9 m).
+    ImpactOptions split;
+    split.J                = {};
+    split.additionalForces = {std::make_shared<ZonalOnly>(poleOfDateMatrix(Frame::GCRS, kEpoch))};
+    const auto same        = predictImpact(kEpoch, s0, Frame::GCRS, eop, split);
+    ASSERT_TRUE(same.has_value());
+    EXPECT_NEAR(same->flightTime, nominal->flightTime, 1e-9);
+    EXPECT_LT(norm(same->itrs.r - nominal->itrs.r), 1e-6);
+    // A force that grows with t (seconds after the epoch) moves the impact by 10 km; the brute-force
+    // reference with the same force agrees as it does without (measured 8e-8 s and 3.7 mm).
+    const auto    push = std::make_shared<UnmodeledAcceleration>(Vec3{}, Vec3{2e-5, -3e-5, 1e-5});
+    ImpactOptions pushed;
+    pushed.additionalForces = {push};
+    const auto moved        = predictImpact(kEpoch, s0, Frame::GCRS, eop, pushed);
+    ASSERT_TRUE(moved.has_value());
+    const Reference ref = referenceImpact(s0, moved->flightTime, eop, {push});
+    EXPECT_GT(norm(moved->itrs.r - nominal->itrs.r), 1000.0);
+    EXPECT_NEAR(moved->flightTime, ref.dt, 1e-6);
+    EXPECT_LT(norm(moved->itrs.r - ref.itrs), 0.02);
+}
+
+TEST(Impact, SphericalSurfaceIsMetWhereTheRadiusEqualsItsRadius) {
+    // On a sphere of radius R the height is |r| - R in any Earth-fixed or inertial frame, so the
+    // truth needs no frame or geodetic conversion: the time at which the tightly integrated GCRS
+    // radius falls to R. Measured: 1.2e-7 s and 7e-5 m.
+    const ConstantEop eop = someEop();
+    const double      R   = 6371.0e3;
+    const StateVector s0  = launch(kSite, 5000.0, deg2rad(40.0), deg2rad(120.0), eop);
+    ImpactOptions     sphere;
+    sphere.ellipsoid = Ellipsoid::sphere(R);
+    const auto imp   = predictImpact(kEpoch, s0, Frame::GCRS, eop, sphere);
+    ASSERT_TRUE(imp.has_value());
+    const ImpactOptions o;
+    AdaptiveOptions     tight;
+    tight.relTol = 1e-13;
+    tight.absTol = 1e-9;
+    const NumericalPropagator prop(
+        kEpoch,
+        s0,
+        {std::make_shared<GravityField>(o.J, o.mu, o.re, poleOfDateMatrix(Frame::GCRS, kEpoch))},
+        tight);
+    const double dt = brentRoot([&](double t) { return norm(prop.propagate(t).r) - R; },
+                                imp->flightTime - 2.0,
+                                imp->flightTime + 2.0,
+                                1e-9);
+    EXPECT_NEAR(imp->flightTime, dt, 1e-6);
+    EXPECT_NEAR(norm(imp->itrs.r), R, 5e-4);
+    EXPECT_NEAR(norm(imp->state.r), R, 5e-4);
+    // On a sphere geodetic and geocentric latitude coincide.
+    EXPECT_NEAR(imp->point.lat, std::asin(imp->itrs.r.z / norm(imp->itrs.r)), 1e-15);
+    // The WGS 84 surface is 1.8 km above this sphere here, so it is met earlier.
+    const auto wgs = predictImpact(kEpoch, s0, Frame::GCRS, eop);
+    ASSERT_TRUE(wgs.has_value());
+    EXPECT_LT(wgs->flightTime, imp->flightTime);
 }
 
 TEST(Impact, UncertaintyMatchesFiniteDifferences) {
