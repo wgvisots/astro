@@ -16,6 +16,7 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -239,23 +240,230 @@ TEST(Geodesic, VincentyFlindersPeakToBuninyong) {
     EXPECT_NEAR(dir.azimuth2, inv.azimuth2, 1e-10);
 }
 
-TEST(Geodesic, RandomRoundTrips) {
-    std::mt19937                           rng(11);
-    std::uniform_real_distribution<double> la(-1.5, 1.5), lo(-3.14, 3.14), az(0.0, 6.28), d(1.0, 1.5e7);
-    for (int i = 0; i < 300; ++i) {
-        const double          lat1 = la(rng), lon1 = lo(rng), a1 = az(rng), s = d(rng);
-        const auto            dir = geodesicDirect(lat1, lon1, a1, s);
-        GeodesicInverseResult inv;
-        try {
-            inv = geodesicInverse(lat1, lon1, dir.lat, dir.lon);
-        } catch (const Error&) {
-            continue; // nearly antipodal
-        }
-        EXPECT_NEAR(inv.distance, s, 1e-4 + 1e-12 * s);
-        EXPECT_NEAR(wrapPi(inv.azimuth1 - a1), 0.0, 1e-9);
+namespace {
+
+/// End of a geodesic found by integrating its differential equation (geodesicByIntegration()).
+struct IntegratedGeodesic {
+    long double lat;        ///< geodetic latitude, rad
+    long double lon;        ///< longitude, rad
+    long double azimuth;    ///< forward azimuth, rad, clockwise from north
+    long double clairaut;   ///< largest change along the line of Clairaut's constant (rho sin(azimuth)), m
+    long double offSurface; ///< largest |(x^2 + y^2) / a^2 + z^2 / b^2 - 1| along the line
+};
+
+/// Reference for geodesicDirect() and geodesicInverse() that shares nothing with Vincenty's series: the
+/// geodesic as a curve r(s) of the surface F(r) = (x^2 + y^2) / a^2 + z^2 / b^2 - 1 = 0 whose
+/// acceleration is along the surface normal (it does not turn within the surface),
+///     r'' = -lambda g,   g = (x / a^2, y / a^2, z / b^2),
+///     lambda = ((v_x^2 + v_y^2) / a^2 + v_z^2 / b^2) / |g|^2,
+/// where lambda keeps r on the surface (the second derivative of F along the curve is zero). Integrated
+/// in Cartesian coordinates, which have no singularity at the poles, with the classical fourth-order
+/// Runge-Kutta method in long double (64-bit significand) and `steps` equal steps. Clairaut's
+/// constant (the distance from the axis times the sine of the azimuth) and the distance from the surface
+/// are tracked as checks of the integration itself.
+IntegratedGeodesic
+geodesicByIntegration(double lat1, double lon1, double azimuth1, double distance, const Ellipsoid& ell, int steps) {
+    using LD    = long double;
+    const LD a  = ell.a;
+    const LD b  = a * (1.0L - static_cast<LD>(ell.f));
+    const LD a2 = a * a, b2 = b * b;
+    struct Point {
+        LD x, y, z, vx, vy, vz;
+    };
+    const auto derivative = [&](const Point& p) {
+        const LD gx = p.x / a2, gy = p.y / a2, gz = p.z / b2;
+        const LD q      = (p.vx * p.vx + p.vy * p.vy) / a2 + p.vz * p.vz / b2;
+        const LD lambda = q / (gx * gx + gy * gy + gz * gz);
+        return Point{p.vx, p.vy, p.vz, -lambda * gx, -lambda * gy, -lambda * gz};
+    };
+    const auto axpy = [](const Point& p, LD h, const Point& d) {
+        return Point{p.x + h * d.x, p.y + h * d.y, p.z + h * d.z, p.vx + h * d.vx, p.vy + h * d.vy, p.vz + h * d.vz};
+    };
+    // Unit vectors east and north of the surface normal at geodetic latitude `lat`, longitude `lon`.
+    const auto horizon = [](LD lat, LD lon, LD(&east)[3], LD(&north)[3]) {
+        east[0]  = -std::sin(lon);
+        east[1]  = std::cos(lon);
+        east[2]  = 0.0L;
+        north[0] = -std::sin(lat) * std::cos(lon);
+        north[1] = -std::sin(lat) * std::sin(lon);
+        north[2] = std::cos(lat);
+    };
+    // Geodetic latitude, longitude and azimuth of a point of the surface: the latitude is that of the
+    // normal g.
+    const auto describe = [&](const Point& p, LD& lat, LD& lon, LD& az) {
+        lat = std::atan2(p.z / b2, std::hypot(p.x, p.y) / a2);
+        lon = std::atan2(p.y, p.x);
+        LD east[3], north[3];
+        horizon(lat, lon, east, north);
+        az = std::atan2(p.vx * east[0] + p.vy * east[1] + p.vz * east[2],
+                        p.vx * north[0] + p.vy * north[1] + p.vz * north[2]);
+    };
+    const LD phi = lat1, lam = lon1, alpha = azimuth1;
+    const LD e2 = 1.0L - b2 / a2;
+    const LD N  = a / std::sqrt(1.0L - e2 * std::sin(phi) * std::sin(phi));
+    LD       east[3], north[3];
+    horizon(phi, lam, east, north);
+    Point p{N * std::cos(phi) * std::cos(lam),
+            N * std::cos(phi) * std::sin(lam),
+            N * (1.0L - e2) * std::sin(phi),
+            std::cos(alpha) * north[0] + std::sin(alpha) * east[0],
+            std::cos(alpha) * north[1] + std::sin(alpha) * east[1],
+            std::cos(alpha) * north[2] + std::sin(alpha) * east[2]};
+    // Clairaut's constant as the z component of r x v (rho sin(azimuth), conserved by the axial symmetry).
+    const auto clairaut   = [](const Point& q) { return q.x * q.vy - q.y * q.vx; };
+    const LD   clairaut0  = clairaut(p);
+    LD         clairautCh = 0.0L, offSurface = 0.0L;
+    const LD   h = static_cast<LD>(distance) / steps;
+    for (int i = 0; i < steps; ++i) {
+        const Point k1  = derivative(p);
+        const Point k2  = derivative(axpy(p, h / 2, k1));
+        const Point k3  = derivative(axpy(p, h / 2, k2));
+        const Point k4  = derivative(axpy(p, h, k3));
+        p.x            += h / 6 * (k1.x + 2 * k2.x + 2 * k3.x + k4.x);
+        p.y            += h / 6 * (k1.y + 2 * k2.y + 2 * k3.y + k4.y);
+        p.z            += h / 6 * (k1.z + 2 * k2.z + 2 * k3.z + k4.z);
+        p.vx           += h / 6 * (k1.vx + 2 * k2.vx + 2 * k3.vx + k4.vx);
+        p.vy           += h / 6 * (k1.vy + 2 * k2.vy + 2 * k3.vy + k4.vy);
+        p.vz           += h / 6 * (k1.vz + 2 * k2.vz + 2 * k3.vz + k4.vz);
+        clairautCh      = std::max(clairautCh, std::abs(clairaut(p) - clairaut0));
+        offSurface      = std::max(offSurface, std::abs((p.x * p.x + p.y * p.y) / a2 + p.z * p.z / b2 - 1.0L));
     }
+    IntegratedGeodesic out{};
+    describe(p, out.lat, out.lon, out.azimuth);
+    out.clairaut   = clairautCh;
+    out.offSurface = offSurface;
+    return out;
+}
+
+/// A test line: start, azimuth and length.
+struct GeodesicLine {
+    const char* what;
+    double      lat1, lon1, azimuth1, distance; // rad, rad, rad, m
+};
+
+// clang-format off
+const GeodesicLine kGeodesicLines[] = {
+    {"1 km, mid-latitude",                 0.7,   0.3,   0.5,                          1.0e3 },
+    {"100 km, mid-latitude",               0.7,   0.3,   0.5,                          1.0e5 },
+    {"1000 km, southern, westward",       -0.6,   2.9,   4.0,                          1.0e6 },
+    {"5000 km, across the antimeridian",   0.2,   3.0,   1.2,                          5.0e6 },
+    {"10000 km, high latitude",            1.2,  -1.0,   2.5,                          1.0e7 },
+    {"15000 km",                          -0.3,   0.1,   0.9,                          1.5e7 },
+    {"19000 km",                           0.4,  -2.0,   2.0,                          1.9e7 },
+    {"near-meridional, over the pole",     0.5,   1.0,   1e-3,                         1.0e7 },
+    {"near-meridional, southward",        -0.1,  -0.5,   constants::pi + 1e-4,         1.2e7 },
+    {"near-equatorial, eastward",          1e-4,  0.0,   constants::halfPi - 1e-4,     1.0e7 },
+    {"near-equatorial, westward",         -1e-4,  1.0,   1.5 * constants::pi + 1e-3,   1.7e7 },
+};
+// clang-format on
+
+} // namespace
+
+namespace {
+
+/// Distance (m) on the surface between two nearby points given by geodetic latitude and longitude:
+/// the meridional radius times the latitude difference and the radius of the parallel times the
+/// longitude difference.
+double surfaceOffset(double lat, double dLat, double dLon, const Ellipsoid& ell) {
+    return std::hypot(ell.meridionalRadius(lat) * dLat, ell.primeVerticalRadius(lat) * std::cos(lat) * dLon);
+}
+
+int stepsFor(double distance) {
+    // 2 km steps: halving them changes the end point by less than 3e-16 rad (measured), so the reference
+    // is a thousand times more accurate than the tolerances below.
+    return std::max(200, static_cast<int>(distance / 2000.0));
+}
+
+// Vincenty's series are truncated in the flattening; the header promises sub-millimetre results for
+// the Earth. Measured against the integration: end points within 0.085 mm (the 19000 km line),
+// distances within 0.071 mm, azimuths within 3.3e-11 rad. Tolerances: 0.1 mm and 5e-11 rad.
+constexpr double kVincentyLength  = 1e-4;
+constexpr double kVincentyAzimuth = 5e-11;
+
+} // namespace
+
+TEST(Geodesic, DirectMatchesTheIntegratedGeodesicEquation) {
+    // geodesicDirect() against the curve found by integrating the geodesic equation (see
+    // geodesicByIntegration()): short and long lines, near-meridional and near-equatorial ones.
+    const Ellipsoid ell = Ellipsoid::wgs84();
+    for (const GeodesicLine& line : kGeodesicLines) {
+        SCOPED_TRACE(line.what);
+        const IntegratedGeodesic ref =
+            geodesicByIntegration(line.lat1, line.lon1, line.azimuth1, line.distance, ell, stepsFor(line.distance));
+        // Checks of the integration: the true curve keeps Clairaut's constant (measured change 1.7e-11 m
+        // of rounding, on 6e6 m) and stays on the surface (measured 1.7e-17).
+        EXPECT_LT(static_cast<double>(ref.clairaut), 1e-10);
+        EXPECT_LT(static_cast<double>(ref.offSurface), 1e-16);
+        const GeodesicDirectResult dir  = geodesicDirect(line.lat1, line.lon1, line.azimuth1, line.distance, ell);
+        const double               dLat = static_cast<double>(dir.lat - ref.lat);
+        const double               dLon = wrapPi(static_cast<double>(dir.lon - ref.lon));
+        EXPECT_LT(surfaceOffset(dir.lat, dLat, dLon, ell), kVincentyLength);
+        EXPECT_NEAR(wrapPi(static_cast<double>(dir.azimuth2 - ref.azimuth)), 0.0, kVincentyAzimuth);
+    }
+}
+
+TEST(Geodesic, InverseMatchesTheIntegratedGeodesicEquation) {
+    // geodesicInverse() between the ends of the integrated curves must give back their length and the
+    // azimuths at both ends. Every line here is the shortest between its ends (all are shorter than half
+    // the meridian's or the equator's length) and none is nearly antipodal, so the iteration converges.
+    const Ellipsoid ell = Ellipsoid::wgs84();
+    for (const GeodesicLine& line : kGeodesicLines) {
+        SCOPED_TRACE(line.what);
+        const IntegratedGeodesic ref =
+            geodesicByIntegration(line.lat1, line.lon1, line.azimuth1, line.distance, ell, stepsFor(line.distance));
+        const GeodesicInverseResult inv =
+            geodesicInverse(line.lat1, line.lon1, static_cast<double>(ref.lat), static_cast<double>(ref.lon), ell);
+        EXPECT_NEAR(inv.distance, line.distance, kVincentyLength);
+        EXPECT_NEAR(wrapPi(inv.azimuth1 - line.azimuth1), 0.0, kVincentyAzimuth);
+        EXPECT_NEAR(wrapPi(static_cast<double>(inv.azimuth2 - ref.azimuth)), 0.0, kVincentyAzimuth);
+        EXPECT_GE(inv.azimuth1, 0.0); // [0, 2 pi), as documented
+        EXPECT_LT(inv.azimuth1, constants::twoPi);
+    }
+}
+
+TEST(Geodesic, OnASphereTheGeodesicIsTheGreatCircle) {
+    // With no flattening the geodesic is a great circle, whose spherical trigonometry is written out
+    // here: distance r * sigma with cos(sigma) from the law of cosines, azimuth from the four-part
+    // formula, and the destination from the sine and cosine rules.
+    const double    r    = 6371000.0;
+    const Ellipsoid sph  = Ellipsoid::sphere(r);
+    const double    lat1 = 0.4, lon1 = -1.1, lat2 = -0.7, lon2 = 1.9;
+    const double    dLon = lon2 - lon1;
+    const double sigma = std::acos(std::sin(lat1) * std::sin(lat2) + std::cos(lat1) * std::cos(lat2) * std::cos(dLon));
+    const double az1   = std::atan2(std::sin(dLon) * std::cos(lat2),
+                                  std::cos(lat1) * std::sin(lat2) - std::sin(lat1) * std::cos(lat2) * std::cos(dLon));
+    const GeodesicInverseResult inv = geodesicInverse(lat1, lon1, lat2, lon2, sph);
+    // The arc is 2.8 rad, near half a circle, where acos magnifies the rounding of its argument by
+    // 1 / sin(sigma) = 3 and the haversine's asin by 1 / cos(sigma / 2) = 6: 1.3e-15 rad, times r, is
+    // 8e-9 m. Tolerance 5e-8 m (measured 1.1e-8 m for the haversine).
+    EXPECT_NEAR(inv.distance, r * sigma, 5e-8);
+    EXPECT_NEAR(wrapPi(inv.azimuth1 - az1), 0.0, 1e-14);
+    EXPECT_NEAR(haversineDistance(lat1, lon1, lat2, lon2, r), r * sigma, 5e-8);
+
+    const double s = 9.0e6, az = 2.2, c = s / r;
+    const double latEnd = std::asin(std::sin(lat1) * std::cos(c) + std::cos(lat1) * std::sin(c) * std::cos(az));
+    const double lonEnd =
+        lon1 + std::atan2(std::sin(az) * std::sin(c) * std::cos(lat1), std::cos(c) - std::sin(lat1) * std::sin(latEnd));
+    const GeodesicDirectResult dir = geodesicDirect(lat1, lon1, az, s, sph);
+    EXPECT_NEAR(dir.lat, latEnd, 1e-14);
+    EXPECT_NEAR(wrapPi(dir.lon - lonEnd), 0.0, 1e-14);
+}
+
+TEST(Geodesic, CoincidentPointsAndHaversine) {
+    EXPECT_EQ(geodesicInverse(0.3, 0.4, 0.3, 0.4).distance, 0.0);
+    // Half a great circle, and a quarter of one along the equator.
     EXPECT_NEAR(haversineDistance(0, 0, 0, constants::pi, 1.0), constants::pi, 1e-15);
-    EXPECT_DOUBLE_EQ(geodesicInverse(0.3, 0.4, 0.3, 0.4).distance, 0.0);
+    EXPECT_NEAR(haversineDistance(0, 0, 0, constants::halfPi, 2.0), constants::pi, 1e-15);
+}
+
+TEST(Geodesic, NearlyAntipodalOrNotFiniteInverseThrows) {
+    // On the equator Vincenty's iteration does not converge within about 0.6 deg of the antipode
+    // (from 179.40 deg of longitude); the header promises astro::Error, and the same for input that
+    // is not finite.
+    EXPECT_THROW((void)geodesicInverse(0.0, 0.0, 0.0, deg2rad(179.7)), Error);
+    EXPECT_THROW((void)geodesicInverse(0.0, 0.0, 0.0, std::numeric_limits<double>::quiet_NaN()), Error);
+    EXPECT_THROW((void)geodesicInverse(std::numeric_limits<double>::infinity(), 0.0, 0.1, 0.2), Error);
+    EXPECT_NO_THROW((void)geodesicInverse(0.0, 0.0, 0.0, deg2rad(179.0)));
 }
 
 TEST(Helmert, TransformAndInverse) {
