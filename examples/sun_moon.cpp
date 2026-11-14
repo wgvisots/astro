@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
 
     //! [shadow]
     // A satellite 7000 km from the Earth's center, directly behind it as seen from the Sun.
-    const ShadowResult s = shadow(-normalized(sun) * 7000e3, sun);
+    const ShadowResult s = earthShadow(-normalized(sun) * 7000e3, sun);
     std::cout << "satellite: " << s.state << ", illumination " << s.illumination << '\n';
     //! [shadow]
     return 0;

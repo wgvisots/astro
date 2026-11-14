@@ -154,7 +154,7 @@ struct ConsistencyCheck {
 /// mass and zonal field aligned with the true pole at e.epoch, with options.frame treated as
 /// inertial (frozen at e.epoch). Throws astro::Error as poleOfDateMatrix does: for an Earth-fixed
 /// options.frame (TIRS, PEF, ITRS), and if e.epoch cannot be converted to TT.
-[[nodiscard]] NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions& options = {});
+[[nodiscard]] NumericalPropagator trackerPropagator(const StateEstimate& e, const TrackerOptions& options = {});
 
 /// Propagate `prior` to next.epoch and compare it with `next` (see ConsistencyCheck). Throws
 /// astro::Error if either estimate has a non-finite state, covariance or epoch. Also throws for an

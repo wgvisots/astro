@@ -39,8 +39,8 @@ Vec3 helmertTransform(const Vec3& x, const HelmertParams& p) noexcept {
     return x + p.t + p.s * x + rotationMatrix(p.r, p.convention) * x;
 }
 
-HelmertParams inverse(const HelmertParams& p) noexcept {
-    return {-p.t, -p.r, -p.s, p.convention};
+HelmertParams HelmertParams::inverse() const noexcept {
+    return {-t, -r, -s, convention};
 }
 
 StateVector helmertTransform(const StateVector& x, const HelmertTimeDependent& h, double decimalYear) noexcept {

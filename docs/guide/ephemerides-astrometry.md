@@ -53,7 +53,7 @@ std::cout << "Moon " << std::setprecision(0) << phase.illuminatedFraction * 100 
 ```
 
 `sunRiseSet` uses the conventional -0.8333 deg altitude of the Sun's centre (refraction plus the
-semi-diameter); `twilight` takes `Twilight::Civil`, `Nautical` or `Astronomical` (-6, -12, -18 deg).
+semi-diameter); `twilightEvents` takes `Twilight::Civil`, `Nautical` or `Astronomical` (-6, -12, -18 deg).
 `moonRiseSet` uses the Moon's upper limb with 34' of refraction, as seen from the site (so the
 parallax is included). `sunRiseSet` and `moonRiseSet` also return the transits.
 `findElevationEvents` finds rises, sets and transits of any elevation function: it samples it and

@@ -105,7 +105,7 @@ int main() {
     std::printf("\nConsistency check (propagate the previous estimate with covariance, compare)\n\n");
     for (double gap : {600.0, 1800.0, 14400.0}) {
         const StateEstimate prior{t0, s0, P0};
-        const StateEstimate next{t0 + gap, makePropagator(prior).propagate(gap), P0};
+        const StateEstimate next{t0 + gap, trackerPropagator(prior).propagate(gap), P0};
         std::printf("  gap %6.0f s: %7.1f us\n", gap, microseconds([&] {
                         sink += checkConsistency(prior, next).mahalanobis2;
                     }));

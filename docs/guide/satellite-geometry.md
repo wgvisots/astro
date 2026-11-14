@@ -76,18 +76,18 @@ if (!passes.empty()) {
 <!-- snippet: examples/sun_moon.cpp#shadow -->
 ```cpp
 // A satellite 7000 km from the Earth's center, directly behind it as seen from the Sun.
-const ShadowResult s = shadow(-normalized(sun) * 7000e3, sun);
+const ShadowResult s = earthShadow(-normalized(sun) * 7000e3, sun);
 std::cout << "satellite: " << s.state << ", illumination " << s.illumination << '\n';
 ```
 
-`shadow` uses a cylindrical or conical (umbra, penumbra, annular, with the visible fraction of the
+`earthShadow` uses a cylindrical or conical (umbra, penumbra, annular, with the visible fraction of the
 solar disk) model [Montenbruck & Gill (2000), sec. 3.4](https://doi.org/10.1007/978-3-642-58351-3); `findEclipses` finds the
 entry and exit times over a span; `betaAngle` is the Sun's elevation above the orbit plane.
 
 ## Ground track, footprint, line of sight
 
 `subSatellitePoint` and `groundTrack` give the point below the satellite; `coverageHalfAngle` and
-`maxSlantRange` give the coverage for an altitude and minimum elevation, and `footprint` the circle
+`maxSlantRange` give the coverage for an altitude and minimum elevation, and `coverageFootprint` the circle
 of that half angle as latitude/longitude points; `lineOfSight` says whether the Earth's ellipsoid
 blocks the line between two points. All are in `satellite/ground.h`.
 

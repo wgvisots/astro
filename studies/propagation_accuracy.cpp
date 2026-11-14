@@ -112,7 +112,7 @@ double maxRateInconsistency(const std::vector<StateVector>& g, double step) {
 }
 
 std::vector<StateVector> truthGrid(const StateVector& s0, double step, std::size_t n) {
-    return makePropagator({kEpoch, s0, Mat6{}}, tightOptions()).propagateGrid(0.0, step, n);
+    return trackerPropagator({kEpoch, s0, Mat6{}}, tightOptions()).propagateGrid(0.0, step, n);
 }
 
 void toleranceStudy() {
@@ -131,7 +131,7 @@ void toleranceStudy() {
         double        e4 = 0.0, eDay = 0.0;
         AdaptiveStats st;
         for (int i = 0; i < 3; ++i) {
-            const auto    prop = makePropagator({kEpoch, elementsToState(kOrbits[i].el), Mat6{}}, o);
+            const auto    prop = trackerPropagator({kEpoch, elementsToState(kOrbits[i].el), Mat6{}}, o);
             AdaptiveStats s;
             e4   = std::max(e4, maxDistance(prop.propagateGrid(0.0, 10.0, 1441, &s), truth4[i]));
             eDay = std::max(eDay, maxDistance(prop.propagateGrid(0.0, 60.0, 1441), truthDay[i]));
@@ -146,7 +146,7 @@ void toleranceStudy() {
 void interpolationStudy() {
     std::printf("\n2. Grid interpolation vs the integrator's own error (LEO, default tolerance, 1 day)\n\n");
     const StateVector   s0    = elementsToState(kOrbits[0].el);
-    const auto          prop  = makePropagator({kEpoch, s0, Mat6{}}, [] {
+    const auto          prop  = trackerPropagator({kEpoch, s0, Mat6{}}, [] {
         TrackerOptions o;
         o.integrator = AdaptiveOptions{};
         return o;
@@ -235,7 +235,7 @@ void secularStudy() {
         const StateVector s0           = elementsToState(kOrbits[i].el);
         TrackerOptions    tod          = tightOptions();
         tod.frame                      = Frame::TOD; // the secular theory needs z = pole
-        const auto              truth  = makePropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
+        const auto              truth  = trackerPropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
         const auto              direct = SecularPropagator(s0).propagateGrid(0.0, 30.0, 481);
         const double            period = orbitalPeriod(stateToElements(s0).a);
         const std::size_t       nFit   = std::min<std::size_t>(481, static_cast<std::size_t>(2.0 * period / 30.0) + 1);
@@ -315,7 +315,7 @@ void secularStartStudy() {
         const StateVector s0  = elementsToState(o.el);
         TrackerOptions    tod = tightOptions();
         tod.frame             = Frame::TOD;
-        const auto truth      = makePropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
+        const auto truth      = trackerPropagator({kEpoch, s0, Mat6{}}, tod).propagateGrid(0.0, 30.0, 481);
         const auto osc        = SecularPropagator(s0).propagateGrid(0.0, 30.0, 481);
         const auto matched    = SecularPropagatorCorrected(matchCorrectedVelocity(s0)).propagateGrid(0.0, 30.0, 481);
         std::printf("%-24s %13.1f km %19.1f km\n",
@@ -331,7 +331,7 @@ void poleStudy() {
     const StateVector s0 = elementsToState(kOrbits[0].el);
     TrackerOptions    o  = tightOptions();
     o.integrator.maxStep = 1e30;
-    const auto right     = makePropagator({t0, s0, Mat6{}}, o).propagateGrid(0.0, 60.0, 241); // pole aligned
+    const auto right     = trackerPropagator({t0, s0, Mat6{}}, o).propagateGrid(0.0, 60.0, 241); // pole aligned
     const auto wrong =
         NumericalPropagator(t0, s0, {std::make_shared<GravityField>(CentralBody::earthJ2J4())}, o.integrator)
             .propagateGrid(0.0, 60.0, 241);
@@ -475,7 +475,7 @@ void covarianceStudy() {
         const StateVector s0                       = elementsToState(o.el); // TOD
         TrackerOptions    tod                      = tightOptions();
         tod.frame                                  = Frame::TOD;
-        const auto                       numerical = makePropagator({kEpoch, s0, Mat6{}}, tod);
+        const auto                       numerical = trackerPropagator({kEpoch, s0, Mat6{}}, tod);
         const SecularPropagatorCorrected secular(s0);
         for (double dt : {14400.0, 86400.0}) {
             const Vec3 n = ricSigmas(numerical.propagateWithCovariance(dt, P0));

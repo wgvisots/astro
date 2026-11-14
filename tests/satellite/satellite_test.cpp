@@ -388,19 +388,19 @@ TEST(Eclipse, ShadowStatesAndBetaAngle) {
     const Vec3   sun{constants::au, 0, 0};
     const double r = 7000 * km;
     // Sunward: lit. Directly behind: umbra.
-    EXPECT_EQ(shadow({r, 0, 0}, sun).state, ShadowState::Sunlit);
-    EXPECT_EQ(shadow({r, 0, 0}, sun).illumination, 1.0);
-    EXPECT_EQ(shadow({-r, 0, 0}, sun).state, ShadowState::Umbra);
-    EXPECT_EQ(shadow({-r, 0, 0}, sun).illumination, 0.0);
-    EXPECT_EQ(shadow({-r, 0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Umbra);
+    EXPECT_EQ(earthShadow({r, 0, 0}, sun).state, ShadowState::Sunlit);
+    EXPECT_EQ(earthShadow({r, 0, 0}, sun).illumination, 1.0);
+    EXPECT_EQ(earthShadow({-r, 0, 0}, sun).state, ShadowState::Umbra);
+    EXPECT_EQ(earthShadow({-r, 0, 0}, sun).illumination, 0.0);
+    EXPECT_EQ(earthShadow({-r, 0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Umbra);
     // The cylinder's edge is the Earth's radius from the Sun line, whatever the distance behind.
-    EXPECT_EQ(shadow({-r, constants::wgs84A - 1.0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Umbra);
-    EXPECT_EQ(shadow({-r, constants::wgs84A + 1.0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Sunlit);
+    EXPECT_EQ(earthShadow({-r, constants::wgs84A - 1.0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Umbra);
+    EXPECT_EQ(earthShadow({-r, constants::wgs84A + 1.0, 0}, sun, ShadowModel::Cylindrical).state, ShadowState::Sunlit);
     // Far beyond the umbra cone (~1.4e6 km), the Earth only partially covers the Sun: annular, with the
     // Earth's whole disk inside the Sun's, so the visible fraction is 1 - b^2 / a^2.
     const Vec3   far{-3.0e9, 0, 0};
     const Disks  d = disksSeenFrom(far, sun);
-    ShadowResult s = shadow(far, sun);
+    ShadowResult s = earthShadow(far, sun);
     EXPECT_EQ(s.state, ShadowState::Annular);
     EXPECT_NEAR(s.illumination, 1.0 - d.b * d.b / (d.a * d.a), 1e-12);
     // Beta angle.
@@ -433,10 +433,10 @@ TEST(Eclipse, PenumbraBoundariesAndIlluminationMatchTheDiskGeometry) {
     const double yUmbra    = bisect(inner, 6000 * km, 7000 * km);
     ASSERT_LT(yUmbra, yPenumbra); // the penumbra is about 61 km wide here
     // 1 m on either side of each edge (the edges move 1 m per 1.4e-7 rad of c, far above rounding).
-    EXPECT_EQ(shadow(point(yPenumbra + 1.0), sun).state, ShadowState::Sunlit);
-    EXPECT_EQ(shadow(point(yPenumbra - 1.0), sun).state, ShadowState::Penumbra);
-    EXPECT_EQ(shadow(point(yUmbra + 1.0), sun).state, ShadowState::Penumbra);
-    EXPECT_EQ(shadow(point(yUmbra - 1.0), sun).state, ShadowState::Umbra);
+    EXPECT_EQ(earthShadow(point(yPenumbra + 1.0), sun).state, ShadowState::Sunlit);
+    EXPECT_EQ(earthShadow(point(yPenumbra - 1.0), sun).state, ShadowState::Penumbra);
+    EXPECT_EQ(earthShadow(point(yUmbra + 1.0), sun).state, ShadowState::Penumbra);
+    EXPECT_EQ(earthShadow(point(yUmbra - 1.0), sun).state, ShadowState::Umbra);
     // Illumination at a quarter, half and three quarters of the way across, increasing outward. The
     // chords have square-root ends, so the midpoint rule converges as n^-1.5: measured differences
     // 1.5e-8 with 2e5 strips, 2e-10 with 4e6. With 1e6 strips (a few ms), tolerance 5e-9.
@@ -445,7 +445,7 @@ TEST(Eclipse, PenumbraBoundariesAndIlluminationMatchTheDiskGeometry) {
         const double y = yUmbra + f * (yPenumbra - yUmbra);
         const Disks  d = disksSeenFrom(point(y), sun);
         SCOPED_TRACE(testing::Message() << "fraction " << f << " of the way out");
-        const ShadowResult s = shadow(point(y), sun);
+        const ShadowResult s = earthShadow(point(y), sun);
         EXPECT_EQ(s.state, ShadowState::Penumbra);
         EXPECT_NEAR(s.illumination, uncoveredFraction(d.a, d.b, d.c), 5e-9);
         EXPECT_GT(s.illumination, previous);
@@ -555,7 +555,7 @@ TEST(Eclipse, IssWithRealSun) {
     EXPECT_GE(ecl.size(), 14u);
     EXPECT_LE(ecl.size(), 17u);
     const Time end   = start + 86400.0;
-    const auto state = [&](const Time& t) { return shadow(sat(t), sun(t)).state; };
+    const auto state = [&](const Time& t) { return earthShadow(sat(t), sun(t)).state; };
     for (const auto& e : ecl) {
         // An eclipse cut by the window starts (or ends) at the window's edge, where the satellite is
         // then in shadow, and is no longer than a whole one. One that is not cut has a sunlit moment
@@ -596,7 +596,7 @@ TEST(Ground, SubpointFootprintAndLineOfSight) {
                 1e-6);
     // Footprint points are all at the requested central angle.
     const double lam = degToRad(20.0);
-    for (const Geodetic& p : footprint(degToRad(45.0), degToRad(10.0), lam, 36)) {
+    for (const Geodetic& p : coverageFootprint(degToRad(45.0), degToRad(10.0), lam, 36)) {
         const double c = std::acos(std::sin(degToRad(45.0)) * std::sin(p.lat)
                                    + std::cos(degToRad(45.0)) * std::cos(p.lat) * std::cos(p.lon - degToRad(10.0)));
         EXPECT_NEAR(c, lam, 1e-12);
@@ -621,9 +621,9 @@ TEST(Ground, FootprintAboutAPoleIsAnEvenlySpacedParallel) {
     const double lam = degToRad(20.0), lon0 = degToRad(10.0);
     const int    n = 12;
     for (double pole : {constants::halfPi, -constants::halfPi}) {
-        const auto ring = footprint(pole, lon0, lam, n);
+        const auto ring = coverageFootprint(pole, lon0, lam, n);
         // The same circle about a center 1e-9 rad (6 mm) short of the pole.
-        const auto nearby = footprint(pole > 0.0 ? pole - 1e-9 : pole + 1e-9, lon0, lam, n);
+        const auto nearby = coverageFootprint(pole > 0.0 ? pole - 1e-9 : pole + 1e-9, lon0, lam, n);
         ASSERT_EQ(ring.size(), 12u);
         ASSERT_EQ(nearby.size(), 12u);
         for (std::size_t i = 0; i < ring.size(); ++i) {
@@ -693,7 +693,7 @@ TEST(Eclipse, BadWindowOrStepThrows) {
     auto              sat = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
     auto              sun = [](const Time&) { return Vec3{constants::au, 0, 0}; };
     const Time        mid = t0 + 0.5 * orbitalPeriod(r); // behind the Earth: in eclipse
-    ASSERT_EQ(shadow(sat(mid), sun(mid)).state, ShadowState::Umbra);
+    ASSERT_EQ(earthShadow(sat(mid), sun(mid)).state, ShadowState::Umbra);
     EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, mid, t0); }, "findEclipses", "end"));
     for (double step : {0.0, -30.0, kNan, kInf}) {
         EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, t0, mid, step); }, "findEclipses", "step")) << step;
@@ -872,7 +872,7 @@ TEST(Eclipse, GrazingPassThroughThePenumbraOnlyIsAPenumbralEclipse) {
     ASSERT_LT(betaUmbra, betaPenumbra);
     const double beta = 0.5 * (betaUmbra + betaPenumbra);
     auto         sun  = [&](const Time&) { return sunAt(beta); };
-    ASSERT_EQ(shadow(behind, sunAt(beta)).state, ShadowState::Penumbra);
+    ASSERT_EQ(earthShadow(behind, sunAt(beta)).state, ShadowState::Penumbra);
     const auto ecl = findEclipses(sat, sun, t0, t0 + period, 20.0);
     ASSERT_EQ(ecl.size(), 1u);
     EXPECT_FALSE(ecl[0].umbral);

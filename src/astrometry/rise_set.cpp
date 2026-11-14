@@ -125,12 +125,12 @@ std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
                                horizon);
 }
 
-std::vector<SkyEvent> twilight(Twilight           tw,
-                               const Geodetic&    site,
-                               const Time&        start,
-                               const Time&        end,
-                               const EopProvider& eop,
-                               const Ephemeris&   eph) {
+std::vector<SkyEvent> twilightEvents(Twilight           tw,
+                                     const Geodetic&    site,
+                                     const Time&        start,
+                                     const Time&        end,
+                                     const EopProvider& eop,
+                                     const Ephemeris&   eph) {
     auto ev = sunRiseSet(site, start, end, eop, eph, twilightElevation(tw));
     std::erase_if(ev, [](const SkyEvent& e) { return e.type == SkyEventType::Transit; });
     return ev;

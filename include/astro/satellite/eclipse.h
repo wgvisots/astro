@@ -33,7 +33,7 @@
 /// geocentric, in any common frame, in meters.
 namespace astro {
 
-/// Earth shadow model for shadow() and findEclipses().
+/// Earth shadow model for earthShadow() and findEclipses().
 enum class ShadowModel {
     Cylindrical, ///< umbra only, Earth's shadow as a cylinder
     Conical,     ///< umbra and penumbra with the finite solar disk
@@ -57,7 +57,7 @@ BOOST_DESCRIBE_ENUM(ShadowState, Sunlit, Penumbra, Umbra, Annular)
 /// Writes "ShadowState::<enumerator>", or "ShadowState::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, ShadowState value);
 
-/// Result of shadow().
+/// Result of earthShadow().
 struct ShadowResult {
     ShadowState state{ShadowState::Sunlit}; ///< shadow region (only Sunlit or Umbra for the cylindrical model)
     double      illumination{1.0};          ///< fraction of the solar disk visible, 0..1
@@ -67,11 +67,11 @@ struct ShadowResult {
 /// The conical model follows Montenbruck & Gill (2000), sec. 3.4.2, with a
 /// spherical Earth of radius `earthRadius`. A satellite at the Earth's centre or
 /// at the Sun's position has no shadow geometry: the illumination is then NaN.
-[[nodiscard]] ShadowResult shadow(const Vec3& sat,
-                                  const Vec3& sun,
-                                  ShadowModel model       = ShadowModel::Conical,
-                                  double      earthRadius = constants::wgs84A,
-                                  double      sunRadius   = constants::sunRadius) noexcept;
+[[nodiscard]] ShadowResult earthShadow(const Vec3& sat,
+                                       const Vec3& sun,
+                                       ShadowModel model       = ShadowModel::Conical,
+                                       double      earthRadius = constants::wgs84A,
+                                       double      sunRadius   = constants::sunRadius) noexcept;
 
 /// Solar beta angle (rad): elevation of the Sun above the orbit plane.
 [[nodiscard]] double betaAngle(const StateVector& sat, const Vec3& sun) noexcept;

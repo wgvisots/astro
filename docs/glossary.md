@@ -129,7 +129,7 @@ they are in alphabetical order.
 | AOS / LOS | Acquisition / Loss Of Signal | when a satellite rises above / sets below a site's elevation mask |
 | Beta angle | | angle between the orbit plane and the Sun direction (`betaAngle`) |
 | LOS | Line Of Sight | also used for an unobstructed straight line between two points (`lineOfSight`) |
-| Umbra / penumbra | | full / partial Earth shadow (`shadow`, `findEclipses`) |
+| Umbra / penumbra | | full / partial Earth shadow (`earthShadow`, `findEclipses`) |
 
 ## Data, standards and software
 

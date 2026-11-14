@@ -614,7 +614,7 @@ TEST(Helmert, TransformAndInverse) {
                   1e-9);
     // inverse() negates the parameters, which undoes the transformation to first order; what is left
     // is second order (s t, r t, s^2 x, r^2 x, r s x), about 2e-8 m here (measured 1.1e-8 m).
-    expectVecNear(helmertTransform(y, inverse(p)), x, 5e-8);
+    expectVecNear(helmertTransform(y, p.inverse()), x, 5e-8);
     // Coordinate-frame convention flips rotation sign only.
     HelmertParams cf = p;
     cf.convention    = HelmertConvention::CoordinateFrame;

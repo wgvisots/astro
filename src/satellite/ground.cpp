@@ -68,7 +68,7 @@ double maxSlantRange(double altitude, double minElevation, double radius) noexce
     return std::sqrt(radius * radius + rs * rs - 2.0 * radius * rs * std::cos(lambda));
 }
 
-std::vector<Geodetic> footprint(double lat, double lon, double halfAngle, int n) {
+std::vector<Geodetic> coverageFootprint(double lat, double lon, double halfAngle, int n) {
     std::vector<Geodetic> out;
     const double          sl = std::sin(lat), cl = std::cos(lat), sd = std::sin(halfAngle), cd = std::cos(halfAngle);
     for (int i = 0; i < n; ++i) {

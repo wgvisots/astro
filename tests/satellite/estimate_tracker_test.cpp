@@ -61,7 +61,7 @@ StateVector truthAt(const StateVector& s0, double dt) {
     TrackerOptions tight;
     tight.integrator.relTol = 1e-13;
     tight.integrator.absTol = 1e-10;
-    return makePropagator({kEpoch, s0, Mat6{}}, tight).propagate(dt);
+    return trackerPropagator({kEpoch, s0, Mat6{}}, tight).propagate(dt);
 }
 
 } // namespace
@@ -284,7 +284,7 @@ TEST(EstimateTracker, ManoeuvreIsFlaggedInTrack) {
     TrackerOptions tight;
     tight.integrator.relTol   = 1e-13;
     tight.integrator.absTol   = 1e-10;
-    const StateVector   after = makePropagator({kEpoch + 900.0, burn, Mat6{}}, tight).propagate(900.0);
+    const StateVector   after = trackerPropagator({kEpoch + 900.0, burn, Mat6{}}, tight).propagate(900.0);
     const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
     const StateEstimate next{kEpoch + 1800.0, after, diagonal(25.0, 1e-5)};
     const auto          c = checkConsistency(prior, next);
@@ -305,7 +305,7 @@ TEST(EstimateTracker, FreshBurnNeedsAVelocityTest) {
     TrackerOptions tight;
     tight.integrator.relTol   = 1e-13;
     tight.integrator.absTol   = 1e-10;
-    const StateVector   after = makePropagator({kEpoch + 1780.0, burn, Mat6{}}, tight).propagate(20.0);
+    const StateVector   after = trackerPropagator({kEpoch + 1780.0, burn, Mat6{}}, tight).propagate(20.0);
     const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
     const StateEstimate next{kEpoch + 1800.0, after, diagonal(25.0, 1e-5)};
     TrackerOptions      position, full;
@@ -328,7 +328,7 @@ TEST(EstimateTracker, SemiMajorAxisResidualOfABurn) {
     TrackerOptions tight;
     tight.integrator.relTol = 1e-13;
     tight.integrator.absTol = 1e-10;
-    const StateVector after = makePropagator({kEpoch + 1500.0, burn, Mat6{}}, tight).propagate(300.0);
+    const StateVector after = trackerPropagator({kEpoch + 1500.0, burn, Mat6{}}, tight).propagate(300.0);
     const auto        c =
         checkConsistency({kEpoch, s0, diagonal(100.0, 1e-4)}, {kEpoch + 1800.0, after, diagonal(25.0, 1e-5)});
     EXPECT_NEAR(c.semiMajorAxisResidual / da, 1.0, 0.05);
@@ -440,7 +440,7 @@ TEST(EstimateTracker, TrueOfDateDeliveries) {
     TrackerOptions    tight;
     tight.integrator.relTol = 1e-13;
     tight.integrator.absTol = 1e-10;
-    const auto truthG       = [&](double dt) { return makePropagator({t0, sg, Mat6{}}, tight).propagate(dt); };
+    const auto truthG       = [&](double dt) { return trackerPropagator({t0, sg, Mat6{}}, tight).propagate(dt); };
     const auto toTod        = [&](const StateVector& s, double dt) {
         const Mat3 B = FrameTransformer(t0 + dt, ConstantEop{}).gcrsTo(Frame::TOD);
         return StateVector{B * s.r, B * s.v};
@@ -624,7 +624,7 @@ TEST(EstimateTracker, DeliveriesInTheOtherCelestialFramesGiveTheSameCheck) {
     TrackerOptions    tight;
     tight.integrator.relTol = 1e-13;
     tight.integrator.absTol = 1e-10;
-    const StateVector truth = makePropagator({t0, sg, Mat6{}}, tight).propagate(1800.0);
+    const StateVector truth = trackerPropagator({t0, sg, Mat6{}}, tight).propagate(1800.0);
     const Mat6        P     = diagonal(100.0, 1e-4);
     EstimateTracker   gcrs;
     (void)gcrs.update({t0, sg, P});

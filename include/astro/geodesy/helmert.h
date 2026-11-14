@@ -50,6 +50,9 @@ struct HelmertParams {
     Vec3              r;                                             ///< rotation angles (rad)
     double            s{0.0};                                        ///< scale (unitless, e.g. 1.5 ppb -> 1.5e-9)
     HelmertConvention convention{HelmertConvention::PositionVector}; ///< sign convention of `r`
+
+    /// First-order inverse transformation: all parameters negated, the convention kept.
+    [[nodiscard]] HelmertParams inverse() const noexcept;
 };
 
 /// Time-dependent (14-parameter) Helmert transformation: parameters at epoch
@@ -67,8 +70,6 @@ struct HelmertTimeDependent {
 
 /// Transform a position (m): X2 = X1 + T + s X1 + R X1.
 [[nodiscard]] Vec3 helmertTransform(const Vec3& x, const HelmertParams& p) noexcept;
-/// First-order inverse transformation (all parameters negated).
-[[nodiscard]] HelmertParams inverse(const HelmertParams& p) noexcept;
 /// Transform position (m) and velocity (m/s) with a time-dependent Helmert at the given epoch
 /// (decimal years). The velocity returned is the time derivative of the transformed position, in
 /// m/s like the one given: the rates of `h`, which are per year, are converted with the Julian year

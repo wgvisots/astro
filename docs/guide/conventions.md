@@ -31,6 +31,9 @@ Names follow one pattern, so that a reader who has learned one part of the libra
   `gcrsToItrs(r, t, eop)` and `ItrsRotationSeries::gcrsToItrs(r, dt)`, as `propagateKepler(s0, dt)`.
   (Force models, the right-hand side of an ordinary differential equation, keep the usual `f(t, y)`
   order: `ForceModel::acceleration(t, r, v)`.)
+- **No generic free names in `astro::`.** A free function says what it computes (`earthShadow`,
+  `twilightEvents`, `coverageFootprint`, `trackerPropagator`); an operation that belongs to one type
+  is a member (`HelmertParams::inverse()`).
 
 ## Rotations
 

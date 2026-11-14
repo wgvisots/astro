@@ -49,7 +49,7 @@ int main() {
     // Truth for the simulation: the tracker's own model.
     const StateVector s0    = elementsToState({6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
     auto              truth = [](const Time& t, const StateVector& s, double dt) {
-        return makePropagator({t, s, Mat6{}}).propagate(dt);
+        return trackerPropagator({t, s, Mat6{}}).propagate(dt);
     };
 
     //! [tracker]

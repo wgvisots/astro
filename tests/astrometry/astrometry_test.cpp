@@ -239,8 +239,8 @@ TEST(RiseSet, LondonSolstice) {
     // The refined events sit on the threshold.
     EXPECT_NEAR(bodyElevation(Body::Sun, ev[0].time, site, eop, eph), constants::sunriseElevation, 1e-6);
     // Astronomical twilight does not end at 51.5 N in midsummer.
-    EXPECT_TRUE(twilight(Twilight::Astronomical, site, start, start + 86400.0, eop, eph).empty());
-    EXPECT_EQ(twilight(Twilight::Civil, site, start, start + 86400.0, eop, eph).size(), 2u);
+    EXPECT_TRUE(twilightEvents(Twilight::Astronomical, site, start, start + 86400.0, eop, eph).empty());
+    EXPECT_EQ(twilightEvents(Twilight::Civil, site, start, start + 86400.0, eop, eph).size(), 2u);
     // Polar day: no sunrise at 80 N.
     const Geodetic arctic{degToRad(80.0), 0.0, 0.0};
     const auto     polar = sunRiseSet(arctic, start, start + 86400.0, eop, eph);
@@ -445,7 +445,7 @@ TEST(RiseSet, BadWindowOrStepThrows) {
     const ConstantEop           eop;
     const Geodetic              site{degToRad(51.4769), degToRad(-0.0005), 0.0};
     EXPECT_THROW((void)sunRiseSet(site, t0 + 86400.0, t0, eop, eph), Error);
-    EXPECT_THROW((void)twilight(Twilight::Civil, site, t0 + 86400.0, t0, eop, eph), Error);
+    EXPECT_THROW((void)twilightEvents(Twilight::Civil, site, t0 + 86400.0, t0, eop, eph), Error);
     EXPECT_THROW((void)moonRiseSet(site, t0 + 86400.0, t0, eop, eph), Error);
 }
 
@@ -656,7 +656,7 @@ TEST(RiseSet, TwilightEventsSitOnTheConventionalSunElevations) {
     Time dawnBefore = sun[0].time, duskAfter = sun[2].time;
     for (Twilight tw : {Twilight::Civil, Twilight::Nautical, Twilight::Astronomical}) {
         SCOPED_TRACE(testing::Message() << tw);
-        const auto ev = twilight(tw, site, start, start + 86400.0, eop, eph);
+        const auto ev = twilightEvents(tw, site, start, start + 86400.0, eop, eph);
         ASSERT_EQ(ev.size(), 2u);
         EXPECT_EQ(ev[0].type, SkyEventType::Rise);
         EXPECT_EQ(ev[1].type, SkyEventType::Set);
