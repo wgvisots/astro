@@ -274,17 +274,25 @@ struct Mat3 {
 /// @{
 
 /// Element-wise sum and difference; scaling by a scalar.
-[[nodiscard]] constexpr Mat3 operator+(Mat3 a, const Mat3& b) noexcept {
-    return a += b;
+[[nodiscard]] constexpr Mat3 operator+(const Mat3& a, const Mat3& b) noexcept {
+    Mat3 c  = a;
+    c      += b;
+    return c;
 }
-[[nodiscard]] constexpr Mat3 operator-(Mat3 a, const Mat3& b) noexcept {
-    return a -= b;
+[[nodiscard]] constexpr Mat3 operator-(const Mat3& a, const Mat3& b) noexcept {
+    Mat3 c  = a;
+    c      -= b;
+    return c;
 }
-[[nodiscard]] constexpr Mat3 operator*(Mat3 a, double s) noexcept {
-    return a *= s;
+[[nodiscard]] constexpr Mat3 operator*(const Mat3& a, double s) noexcept {
+    Mat3 c  = a;
+    c      *= s;
+    return c;
 }
-[[nodiscard]] constexpr Mat3 operator*(double s, Mat3 a) noexcept {
-    return a *= s;
+[[nodiscard]] constexpr Mat3 operator*(double s, const Mat3& a) noexcept {
+    Mat3 c  = a;
+    c      *= s;
+    return c;
 }
 /// @}
 
