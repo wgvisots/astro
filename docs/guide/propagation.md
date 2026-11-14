@@ -386,10 +386,10 @@ probability. Each object is an `UncertainTrajectory`:
 // 10 cm/s for the first object, 1 km and 1 m/s for the debris.
 Mat6 P1{}, P2{};
 for (std::size_t i = 0; i < 3; ++i) {
-    P1[i][i]         = 100.0 * 100.0;
-    P1[i + 3][i + 3] = 0.1 * 0.1;
-    P2[i][i]         = 1000.0 * 1000.0;
-    P2[i + 3][i + 3] = 1.0 * 1.0;
+    P1(i, i)         = 100.0 * 100.0;
+    P1(i + 3, i + 3) = 0.1 * 0.1;
+    P2(i, i)         = 1000.0 * 1000.0;
+    P2(i + 3, i + 3) = 1.0 * 1.0;
 }
 const UncertainTrajectory first{epoch, s0, P1}, second{epoch, elementsToState(debris), P2};
 for (const ConjunctionAssessment& c : assessConjunctions(first, second, epoch, end, 6.0, 10e3)) {

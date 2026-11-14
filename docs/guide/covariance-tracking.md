@@ -13,8 +13,8 @@ derivatives (the variational equations [Montenbruck & Gill (2000), ch. 7](https:
 // 10 m and 1 cm/s (1-sigma) per axis at the epoch, in the state's frame (GCRS).
 Mat6 P0{};
 for (std::size_t i = 0; i < 3; ++i) {
-    P0[i][i]         = 10.0 * 10.0;
-    P0[i + 3][i + 3] = 0.01 * 0.01;
+    P0(i, i)         = 10.0 * 10.0;
+    P0(i + 3, i + 3) = 0.01 * 0.01;
 }
 AdaptiveOptions opt;
 opt.relTol      = 1e-9;
@@ -42,8 +42,8 @@ Uncertainty is easiest to read in radial / in-track / cross-track axes:
 std::cout << " t (h)   sigma R (m)   sigma I (m)   sigma C (m)\n" << std::fixed << std::setprecision(1);
 for (std::size_t k = 0; k < out.size(); k += 6) {
     const Mat6 ric = rotateCovariance(out[k].covariance, ricMatrix(out[k].state));
-    std::cout << std::setw(5) << k / 6.0 << std::setw(14) << std::sqrt(ric[0][0]) << std::setw(14)
-              << std::sqrt(ric[1][1]) << std::setw(14) << std::sqrt(ric[2][2]) << '\n';
+    std::cout << std::setw(5) << k / 6.0 << std::setw(14) << std::sqrt(ric(0, 0)) << std::setw(14)
+              << std::sqrt(ric(1, 1)) << std::setw(14) << std::sqrt(ric(2, 2)) << '\n';
 }
 ```
 
@@ -71,8 +71,8 @@ const SecularPropagatorCorrected secular(StateVector{toPole * s0.r, toPole * s0.
 const StateCovariance            mean = secular.propagateWithCovariance(4.0 * 3600.0, rotateCovariance(P0, toPole));
 const auto                       row  = [](const char* name, const StateCovariance& s) {
     const Mat6 ric = rotateCovariance(s.covariance, ricMatrix(s.state));
-    std::cout << std::left << std::setw(26) << name << std::right << std::setw(9) << std::sqrt(ric[0][0])
-              << std::setw(14) << std::sqrt(ric[1][1]) << std::setw(14) << std::sqrt(ric[2][2]) << '\n';
+    std::cout << std::left << std::setw(26) << name << std::right << std::setw(9) << std::sqrt(ric(0, 0))
+              << std::setw(14) << std::sqrt(ric(1, 1)) << std::setw(14) << std::sqrt(ric(2, 2)) << '\n';
 };
 std::cout << "at 4 h                     sigma R (m)   sigma I (m)   sigma C (m)\n";
 row("numerical J2/J4 (+ noise)", out.back());

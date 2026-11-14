@@ -316,12 +316,12 @@ TEST(Impact, UncertaintyMatchesFiniteDifferences) {
     Mat6              L{}; // P0 = L L^T, correlated
     const double      sr[3] = {80.0, 120.0, 60.0}, sv[3] = {0.05, 0.08, 0.03};
     for (std::size_t i = 0; i < 3; ++i) {
-        L[i][i]         = sr[i];
-        L[i + 3][i + 3] = sv[i];
-        L[i + 3][i]     = 0.3 * sv[i]; // velocity correlated with position
+        L(i, i)         = sr[i];
+        L(i + 3, i + 3) = sv[i];
+        L(i + 3, i)     = 0.3 * sv[i]; // velocity correlated with position
     }
-    L[1][0]       = 40.0;
-    const Mat6 P0 = multiply(L, transpose(L));
+    L(1, 0)       = 40.0;
+    const Mat6 P0 = L * L.transpose();
 
     const auto nominal = predictImpact(kEpoch, s0, P0, Frame::TOD, eop);
     ASSERT_TRUE(nominal.has_value());
@@ -349,7 +349,7 @@ TEST(Impact, UncertaintyMatchesFiniteDifferences) {
         for (std::size_t j = 0; j < 3; ++j) {
             for (std::size_t a = 0; a < 6; ++a) {
                 for (std::size_t b = 0; b < 6; ++b) {
-                    C[i][j] += J[i][a] * P0[a][b] * J[j][b];
+                    C[i][j] += J[i][a] * P0(a, b) * J[j][b];
                 }
             }
         }
@@ -362,7 +362,7 @@ TEST(Impact, UncertaintyMatchesFiniteDifferences) {
     EXPECT_GT(u.ellipse.semiMajor, u.ellipse.semiMinor);
 
     // The covariance at impact is reported in the input frame, and process noise only adds to it.
-    EXPECT_GT(u.covariance[0][0], 0.0);
+    EXPECT_GT(u.covariance(0, 0), 0.0);
     ImpactOptions noisy;
     noisy.accelerationNoisePsd = 1e-6;
     const auto n               = predictImpact(kEpoch, s0, P0, Frame::TOD, eop, noisy);

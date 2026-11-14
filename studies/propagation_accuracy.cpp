@@ -76,8 +76,8 @@ TrackerOptions tightOptions() {
 [[maybe_unused]] Mat6 diagonal(double positionSigma, double velocitySigma) {
     Mat6 P{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P[i][i]         = positionSigma * positionSigma;
-        P[i + 3][i + 3] = velocitySigma * velocitySigma;
+        P(i, i)         = positionSigma * positionSigma;
+        P(i + 3, i + 3) = velocitySigma * velocitySigma;
     }
     return P;
 }
@@ -360,8 +360,8 @@ double maxBlockRelDiff(const Mat6& a, const Mat6& b) {
             double num = 0.0, den = 0.0;
             for (std::size_t i = 0; i < 3; ++i) {
                 for (std::size_t j = 0; j < 3; ++j) {
-                    num = std::max(num, std::abs(a[3 * br + i][3 * bc + j] - b[3 * br + i][3 * bc + j]));
-                    den = std::max(den, std::abs(b[3 * br + i][3 * bc + j]));
+                    num = std::max(num, std::abs(a(3 * br + i, 3 * bc + j) - b(3 * br + i, 3 * bc + j)));
+                    den = std::max(den, std::abs(b(3 * br + i, 3 * bc + j)));
                 }
             }
             worst = std::max(worst, num / den);
@@ -383,7 +383,7 @@ Mat6 keplerDifferences(const StateVector& s0, double dt) {
             const StateVector o               = propagateKepler(s, dt);
             const double      c[6]            = {o.r.x, o.r.y, o.r.z, o.v.x, o.v.y, o.v.z};
             for (std::size_t i = 0; i < 6; ++i) {
-                m[i][j] += weight[p] * c[i] / (12.0 * h);
+                m(i, j) += weight[p] * c[i] / (12.0 * h);
             }
         }
     }
@@ -392,7 +392,7 @@ Mat6 keplerDifferences(const StateVector& s0, double dt) {
 
 Vec3 ricSigmas(const StateCovariance& s) {
     const Mat6 ric = rotateCovariance(s.covariance, ricMatrix(s.state));
-    return {std::sqrt(ric[0][0]), std::sqrt(ric[1][1]), std::sqrt(ric[2][2])};
+    return {std::sqrt(ric(0, 0)), std::sqrt(ric(1, 1)), std::sqrt(ric(2, 2))};
 }
 
 void covarianceStudy() {
@@ -417,18 +417,18 @@ void covarianceStudy() {
     tight.absTol = 1e-11;
     Mat6 J{};
     for (std::size_t i = 0; i < 3; ++i) {
-        J[i][i + 3] = 1.0;
-        J[i + 3][i] = -1.0;
+        J(i, i + 3) = 1.0;
+        J(i + 3, i) = -1.0;
     }
     for (const Case& c : twoBody) {
         const Mat6                phi = propagateKeplerStm(c.s0, c.dt).stm;
         const NumericalPropagator mass(Time(), c.s0, {std::make_shared<GravityField>(CentralBody::pointMass())}, tight);
         const Mat6                var   = mass.propagateStm(c.dt).stm;
-        const Mat6                sym   = multiply(transpose(phi), multiply(J, phi));
+        const Mat6                sym   = phi.transpose() * (J * phi);
         double                    worst = 0.0;
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
-                worst = std::max(worst, std::abs(sym[i][j] - J[i][j]));
+                worst = std::max(worst, std::abs(sym(i, j) - J(i, j)));
             }
         }
         std::printf("| %s | %.1f d | %.1e | %.1e | %.1e |\n",
@@ -468,8 +468,8 @@ void covarianceStudy() {
     std::printf("|---|---|---|---|---|\n");
     Mat6 P0{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P0[i][i]         = 100.0 * 100.0;
-        P0[i + 3][i + 3] = 0.1 * 0.1;
+        P0(i, i)         = 100.0 * 100.0;
+        P0(i + 3, i + 3) = 0.1 * 0.1;
     }
     for (const Orbit& o : kOrbits) {
         const StateVector s0                       = elementsToState(o.el); // TOD

@@ -114,7 +114,7 @@ std::optional<double> elementsDistance(const StateCovariance& pred, StateVector 
                                   en.q - ep.q,
                                   wrapPi(en.lambda - ep.lambda)};
     c.semiMajorAxisResidual = d[0];
-    c.semiMajorAxisSigma    = Pe[0][0] > 0.0 ? std::sqrt(Pe[0][0]) : 0.0;
+    c.semiMajorAxisSigma    = Pe(0, 0) > 0.0 ? std::sqrt(Pe(0, 0)) : 0.0;
     return mahalanobis2(d, Pe, 6);
 }
 
@@ -130,8 +130,8 @@ ConsistencyCheck compare(const StateCovariance& pred, const StateEstimate& next,
     c.positionResidualRic = R * dr;
     c.velocityResidualRic = R * dv;
     const Mat6 Pric       = rotateCovariance(pred.covariance, R);
-    c.positionSigmaRic    = {std::sqrt(Pric[0][0]), std::sqrt(Pric[1][1]), std::sqrt(Pric[2][2])};
-    c.velocitySigmaRic    = {std::sqrt(Pric[3][3]), std::sqrt(Pric[4][4]), std::sqrt(Pric[5][5])};
+    c.positionSigmaRic    = {std::sqrt(Pric(0, 0)), std::sqrt(Pric(1, 1)), std::sqrt(Pric(2, 2))};
+    c.velocitySigmaRic    = {std::sqrt(Pric(3, 3)), std::sqrt(Pric(4, 4)), std::sqrt(Pric(5, 5))};
 
     const std::array<double, 6> d{dr.x, dr.y, dr.z, dv.x, dv.y, dv.z};
     const auto                  d6 = mahalanobis2(d, pred.covariance, 6);
@@ -220,7 +220,7 @@ void requireFinite(const StateEstimate& e) {
     for (std::size_t i = 0; i < 3; ++i) {
         ok = ok && std::isfinite(e.state.r[i]) && std::isfinite(e.state.v[i]);
     }
-    for (const auto& row : e.covariance) {
+    for (const auto& row : e.covariance.m) {
         for (double x : row) {
             ok = ok && std::isfinite(x);
         }

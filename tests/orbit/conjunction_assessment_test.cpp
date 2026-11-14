@@ -67,8 +67,8 @@ struct Crossing60 {
 Mat6 diagonalCovariance(double positionSigma, double velocitySigma) {
     Mat6 P{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P[i][i]         = positionSigma * positionSigma;
-        P[i + 3][i + 3] = velocitySigma * velocitySigma;
+        P(i, i)         = positionSigma * positionSigma;
+        P(i + 3, i + 3) = velocitySigma * velocitySigma;
     }
     return P;
 }
@@ -76,7 +76,7 @@ Mat6 diagonalCovariance(double positionSigma, double velocitySigma) {
 void expectMatNear(const Mat6& a, const Mat6& b, double relTol, const char* what) {
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            EXPECT_NEAR(a[i][j], b[i][j], relTol * std::sqrt(b[i][i] * b[j][j])) << what << " " << i << " " << j;
+            EXPECT_NEAR(a(i, j), b(i, j), relTol * std::sqrt(b(i, i) * b(j, j))) << what << " " << i << " " << j;
         }
     }
 }
@@ -218,7 +218,7 @@ TEST(ConjunctionAssessment, Errors) {
     const Crossing60 c;
     const Mat6       P   = diagonalCovariance(10.0, 0.005);
     Mat6             bad = P;
-    bad[2][4]            = std::numeric_limits<double>::quiet_NaN();
+    bad(2, 4)            = std::numeric_limits<double>::quiet_NaN();
     EXPECT_THROW((void)UncertainTrajectory(c.epoch, c.first, bad), Error);
     EXPECT_THROW(
         (void)UncertainTrajectory(Trajectory{c.epoch, c.first}, UncertainTrajectory::StateCovarianceFunction{}),
@@ -274,8 +274,8 @@ TEST(ConjunctionAssessment, CovarianceFunctionThatIsNotFiniteIsAnError) {
     const auto                withCovariance = [&](double value, std::size_t i, std::size_t j) {
         return UncertainTrajectory(Trajectory{c.epoch, c.second}, [=, epoch = c.epoch, s = c.second](const Time& t) {
             StateCovariance out  = propagateKeplerWithCovariance(s, t - epoch, P);
-            out.covariance[i][j] = value;
-            out.covariance[j][i] = value;
+            out.covariance(i, j) = value;
+            out.covariance(j, i) = value;
             return out;
         });
     };

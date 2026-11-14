@@ -803,15 +803,15 @@ TEST(OrbitalFrames, CovarianceRotatedIntoRicIsKnownByHand) {
     const double    c = h.c, s = h.s;
     const double    A = 1.0e4, B = 2.5e3, C = 1.0e2, D = 1.5e3, a = 1e-2, b = 2.5e-3, cc = 1e-4, k = 0.3, m = -0.2;
     Mat6            P{};
-    P[0][0] = A;
-    P[1][1] = B;
-    P[2][2] = C;
-    P[0][1] = P[1][0] = D;
-    P[3][3]           = a;
-    P[4][4]           = b;
-    P[5][5]           = cc;
-    P[1][4] = P[4][1] = k;
-    P[0][5] = P[5][0] = m;
+    P(0, 0) = A;
+    P(1, 1) = B;
+    P(2, 2) = C;
+    P(0, 1) = P(1, 0) = D;
+    P(3, 3)           = a;
+    P(4, 4)           = b;
+    P(5, 5)           = cc;
+    P(1, 4) = P(4, 1) = k;
+    P(0, 5) = P(5, 0) = m;
     Mat6 expected{};
     // clang-format off
     const double rr[3][3] = {{A,      D * c,                  -D * s                },
@@ -826,17 +826,17 @@ TEST(OrbitalFrames, CovarianceRotatedIntoRicIsKnownByHand) {
     // clang-format on
     for (std::size_t i = 0; i < 3; ++i) {
         for (std::size_t j = 0; j < 3; ++j) {
-            expected[i][j]         = rr[i][j];
-            expected[i + 3][j + 3] = vv[i][j];
-            expected[i][j + 3]     = rv[i][j];
-            expected[i + 3][j]     = rv[j][i];
+            expected(i, j)         = rr[i][j];
+            expected(i + 3, j + 3) = vv[i][j];
+            expected(i, j + 3)     = rv[i][j];
+            expected(i + 3, j)     = rv[j][i];
         }
     }
     const Mat6 Q = rotateCovariance(P, ricMatrix(h.state));
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
             // Rounding: a few units in the last place of the largest term, 1e4 m^2.
-            EXPECT_NEAR(Q[i][j], expected[i][j], 1e-11) << i << ", " << j;
+            EXPECT_NEAR(Q(i, j), expected(i, j), 1e-11) << i << ", " << j;
         }
     }
 }

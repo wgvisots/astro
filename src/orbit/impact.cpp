@@ -131,7 +131,7 @@ std::optional<Impact> impact(const Time&          epoch,
         const StateCovariance pc =
             prop.propagateWithCovariance(event->dt, rotateCovariance(*covariance, toGcrs0), o.accelerationNoisePsd);
         const Mat6& P   = pc.covariance;
-        const Mat3  Prr = block(P, 0, 0);
+        const Mat3  Prr = P.block(0, 0);
 
         // A position error dr (GCRS) at the nominal time moves the impact point (ITRS) by
         //     dp = (I - v u^T / (u . v)) R dr,

@@ -71,8 +71,8 @@ TEST(ThreadSafety, SharedNumericalPropagator) {
     const NumericalPropagator prop(kEpoch, leo(), {std::make_shared<GravityField>(CentralBody::earthJ2J4()), moon});
     Mat6                      P0{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P0[i][i]         = 100.0;
-        P0[i + 3][i + 3] = 1e-4;
+        P0(i, i)         = 100.0;
+        P0(i + 3, i + 3) = 1e-4;
     }
     const auto                                refGrid = prop.propagateGrid(0.0, 60.0, 121);
     const auto                                refCov  = prop.propagateGridWithCovariance(0.0, 60.0, 121, P0, 1e-10);
@@ -104,8 +104,8 @@ TEST(ThreadSafety, SharedSecularPropagatorAndTracker) {
     EstimateTracker tracker;
     Mat6            P{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P[i][i]         = 100.0;
-        P[i + 3][i + 3] = 1e-4;
+        P(i, i)         = 100.0;
+        P(i + 3, i + 3) = 1e-4;
     }
     (void)tracker.update({kEpoch, leo(), P});
     const auto refTrack = tracker.predictGrid(0.0, 60.0, 61);
@@ -200,8 +200,8 @@ TEST(ThreadSafety, SharedRotationSeriesForImpacts) {
     options.rotations = &rotations;
     Mat6 P{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P[i][i]         = 1e4;
-        P[i + 3][i + 3] = 1e-2;
+        P(i, i)         = 1e4;
+        P(i + 3, i + 3) = 1e-2;
     }
     // Suborbital: a LEO-like state slowed to 80 % of circular speed comes down within an orbit.
     const StateVector s0  = leo();

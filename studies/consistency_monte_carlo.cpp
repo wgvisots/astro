@@ -62,8 +62,8 @@ TrackerOptions tightOptions() {
 [[maybe_unused]] Mat6 diagonal(double positionSigma, double velocitySigma) {
     Mat6 P{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P[i][i]         = positionSigma * positionSigma;
-        P[i + 3][i + 3] = velocitySigma * velocitySigma;
+        P(i, i)         = positionSigma * positionSigma;
+        P(i + 3, i + 3) = velocitySigma * velocitySigma;
     }
     return P;
 }

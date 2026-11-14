@@ -59,8 +59,8 @@ int main() {
     const StateVector s0 = elementsToState({6778e3, 0.0005, degToRad(51.6), 0.3, 0.5, 0.7});
     Mat6              P0{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P0[i][i]         = 100.0;
-        P0[i + 3][i + 3] = 1e-4;
+        P0(i, i)         = 100.0;
+        P0(i + 3, i + 3) = 1e-4;
     }
 
     std::printf("4 h at Y = 10 s (1441 outputs)\n\n%-8s %16s %16s %24s\n",
@@ -94,12 +94,12 @@ int main() {
     int        n       = 0;
     const auto secular = SecularPropagatorCorrected(s0);
     std::printf("  propagateKeplerWithCovariance                     %7.2f us\n",
-                microseconds([&] { sink += propagateKeplerWithCovariance(s0, 100.0 + n++, P0).covariance[0][0]; }));
+                microseconds([&] { sink += propagateKeplerWithCovariance(s0, 100.0 + n++, P0).covariance(0, 0); }));
     std::printf("  SecularPropagatorCorrected::propagateWithCovariance %5.2f us\n",
-                microseconds([&] { sink += secular.propagateWithCovariance(100.0 + n++, P0).covariance[0][0]; }));
+                microseconds([&] { sink += secular.propagateWithCovariance(100.0 + n++, P0).covariance(0, 0); }));
     std::printf("  SecularPropagatorCorrected::propagateGridWithCovariance, 1441 outputs %7.0f us\n", microseconds([&] {
                     secular.propagateGridWithCovariance(0.0, 10.0, P0, pc);
-                    sink += pc.back().covariance[0][0];
+                    sink += pc.back().covariance(0, 0);
                 }));
 
     std::printf("\nConsistency check (propagate the previous estimate with covariance, compare)\n\n");

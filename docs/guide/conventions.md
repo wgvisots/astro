@@ -117,12 +117,15 @@ try {
 }
 ```
 
-## 6x6 matrices
+## Matrices
 
-`Mat6` (`core/mat6.h`) is a `std::array<std::array<double, 6>, 6>` for covariances and state
-transition matrices, with named helpers (`multiply`, `transpose`, `congruence` for A P A^T,
-`block`, `mahalanobis2`): operators declared for a `std::array` would not be found outside the
-`astro` namespace.
+`Mat3` (`core/vec.h`, rotations and 3x3 covariances) and `Mat6` (`core/mat6.h`, position/velocity
+covariances and state transition matrices) are used the same way: `a(i, j)` is row i, column j;
+`a * b`, `a + b`, `a - b` and `s * a` are the matrix operations; `a.transpose()` and
+`Mat3::identity()` / `Mat6::identity()` are members. Both are zero when default-constructed, and
+`a.block(i, j)` is the 3x3 block of a `Mat6` (0 = position, 1 = velocity). The covariance
+operations are free functions in `core/mat6.h`: `congruence(a, p)` for A P A^T (exactly
+symmetric), `rotateCovariance(P, R)` and `mahalanobis2(d, S, n)`.
 
 ## Threads
 

@@ -237,7 +237,7 @@ TEST(PropagateKeplerStm, ShortStepOnAnEccentricOrbit) {
         for (std::size_t j = 0; j < 6; ++j) {
             double value = 0.0, scale = 0.0;
             for (std::size_t k = 0; k < 3; ++k) {
-                const double a = st.stm[k][i] * st.stm[k + 3][j], b = st.stm[k + 3][i] * st.stm[k][j];
+                const double a = st.stm(k, i) * st.stm(k + 3, j), b = st.stm(k + 3, i) * st.stm(k, j);
                 value += a - b;
                 scale += std::abs(a) + std::abs(b);
             }

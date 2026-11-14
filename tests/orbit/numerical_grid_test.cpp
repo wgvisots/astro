@@ -85,7 +85,7 @@ bool isPositiveDefinite(const Mat6& m) {
     double L[6][6] = {};
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j <= i; ++j) {
-            double sum = m[i][j];
+            double sum = m(i, j);
             for (std::size_t k = 0; k < j; ++k) {
                 sum -= L[i][k] * L[j][k];
             }
@@ -161,9 +161,9 @@ TEST(NumericalGridTowardsEpoch, EveryOutputIsAsGoodAsPropagatingToItDirectly) {
 TEST(NumericalGridAcrossEpoch, CovarianceAtTheEpochIsTheInitialCovariance) {
     Mat6 P0{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P0[i][i]         = 100.0;
-        P0[i + 3][i + 3] = 1e-4;
-        P0[i][i + 3] = P0[i + 3][i] = 0.03;
+        P0(i, i)         = 100.0;
+        P0(i + 3, i + 3) = 1e-4;
+        P0(i, i + 3) = P0(i + 3, i) = 0.03;
     }
     const NumericalPropagator prop = loosePropagator();
     for (double q : {0.0, 1e-8}) {
@@ -189,11 +189,11 @@ TEST(NumericalGridAcrossEpoch, ProcessNoiseOnlyEverAccumulates) {
         // q |t| in velocity (to 1 % within a minute, where gravity has hardly acted on it).
         if (std::abs(t) < 60.0) {
             for (std::size_t i = 0; i < 3; ++i) {
-                ASSERT_NEAR(grid[k].covariance[i][i],
+                ASSERT_NEAR(grid[k].covariance(i, i),
                             q * std::abs(t * t * t) / 3.0,
                             0.01 * q * std::abs(t * t * t) / 3.0)
                     << "t = " << t;
-                ASSERT_NEAR(grid[k].covariance[i + 3][i + 3], q * std::abs(t), 0.01 * q * std::abs(t)) << "t = " << t;
+                ASSERT_NEAR(grid[k].covariance(i + 3, i + 3), q * std::abs(t), 0.01 * q * std::abs(t)) << "t = " << t;
             }
         }
     }

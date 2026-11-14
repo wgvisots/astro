@@ -64,7 +64,7 @@ double maxBlockRelDiff(const Mat6& a, const Mat6& b) {
     double worst = 0.0;
     for (std::size_t br = 0; br < 2; ++br) {
         for (std::size_t bc = 0; bc < 2; ++bc) {
-            worst = std::max(worst, maxRelDiff(block(a, br, bc), block(b, br, bc)));
+            worst = std::max(worst, maxRelDiff(a.block(br, bc), b.block(br, bc)));
         }
     }
     return worst;
@@ -91,15 +91,15 @@ TEST(Mat6, Helpers) {
     Mat6 a{};
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            a[i][j] = static_cast<double>(i * 6 + j) - 10.0;
+            a(i, j) = static_cast<double>(i * 6 + j) - 10.0;
         }
     }
-    EXPECT_EQ(multiply(identity6(), a), a);
-    EXPECT_EQ(transpose(transpose(a)), a);
-    const Mat6 c = congruence(a, identity6());
-    EXPECT_EQ(c, transpose(c));
-    EXPECT_EQ(c, multiply(a, transpose(a)));
-    EXPECT_EQ(block(a, 1, 0)(2, 1), a[5][1]);
+    EXPECT_EQ(Mat6::identity() * a, a);
+    EXPECT_EQ(a.transpose().transpose(), a);
+    const Mat6 c = congruence(a, Mat6::identity());
+    EXPECT_EQ(c, c.transpose());
+    EXPECT_EQ(c, a * a.transpose());
+    EXPECT_EQ(a.block(1, 0)(2, 1), a(5, 1));
 }
 
 TEST(Gravity, PointMassAndJ2GradientsMatchTheirClosedForms) {
@@ -238,11 +238,11 @@ Mat6 analyticEquinoctialPartials(const StateVector& s, double mu) {
         const Vec3   dw = (dh - w * dot(w, dh)) / hm;
         const double dp = (dw.x * (1.0 + w.z) - w.x * dw.z) / ((1.0 + w.z) * (1.0 + w.z));
         const double dq = -(dw.y * (1.0 + w.z) - w.y * dw.z) / ((1.0 + w.z) * (1.0 + w.z));
-        T[0][j]         = da;
-        T[1][j]         = dot(de, g) + dot(e, gp * dp + gq * dq);
-        T[2][j]         = dot(de, f) + dot(e, fp * dp + fq * dq);
-        T[3][j]         = dp;
-        T[4][j]         = dq;
+        T(0, j)         = da;
+        T(1, j)         = dot(de, g) + dot(e, gp * dp + gq * dq);
+        T(2, j)         = dot(de, f) + dot(e, fp * dp + fq * dq);
+        T(3, j)         = dp;
+        T(4, j)         = dq;
     }
     return T;
 }
@@ -256,8 +256,8 @@ Applied apply(const Mat6& J, const Vec3& dr, const Vec3& dv) {
     Applied out;
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 3; ++j) {
-            out.value[i] += J[i][j] * dr[j] + J[i][j + 3] * dv[j];
-            out.scale[i] += std::abs(J[i][j] * dr[j]) + std::abs(J[i][j + 3] * dv[j]);
+            out.value[i] += J(i, j) * dr[j] + J(i, j + 3) * dv[j];
+            out.scale[i] += std::abs(J(i, j) * dr[j]) + std::abs(J(i, j + 3) * dv[j]);
         }
     }
     return out;
@@ -278,8 +278,8 @@ TEST(Covariance, EquinoctialJacobianMatchesTheAnalyticPartials) {
             double scale = 0.0, worst = 0.0;
             for (std::size_t j = 0; j < 6; ++j) {
                 const double unit = j < 3 ? norm(s.r) : norm(s.v);
-                scale             = std::max(scale, std::abs(T[i][j]) * unit);
-                worst             = std::max(worst, std::abs(J[i][j] - T[i][j]) * unit);
+                scale             = std::max(scale, std::abs(T(i, j)) * unit);
+                worst             = std::max(worst, std::abs(J(i, j) - T(i, j)) * unit);
             }
             EXPECT_LT(worst, 1e-8 * scale) << "element " << i << ", e = " << el.e << ", i = " << el.i;
         }
@@ -352,7 +352,7 @@ TEST(Covariance, StmMatchesFiniteDifferences) {
         const StateVector b  = NumericalPropagator(Time(), sm, {field}, tight).propagate(t);
         const double d[6] = {a.r.x - b.r.x, a.r.y - b.r.y, a.r.z - b.r.z, a.v.x - b.v.x, a.v.y - b.v.y, a.v.z - b.v.z};
         for (std::size_t i = 0; i < 6; ++i) {
-            fd[i][j] = d[i] / (2.0 * h);
+            fd(i, j) = d[i] / (2.0 * h);
         }
     }
     EXPECT_LT(maxBlockRelDiff(phi[0], fd), 1e-6);
@@ -368,17 +368,17 @@ TEST(Covariance, StmIsSymplectic) {
     const NumericalPropagator prop(Time(), leo(), {std::make_shared<GravityField>(kJ2J4)}, tight);
     Mat6                      J{};
     for (std::size_t i = 0; i < 3; ++i) {
-        J[i][i + 3] = 1.0;
-        J[i + 3][i] = -1.0;
+        J(i, i + 3) = 1.0;
+        J(i + 3, i) = -1.0;
     }
     for (double t : {600.0, 3600.0, 14400.0}) {
         std::vector<StateVector> st(1);
         std::vector<Mat6>        phi(1);
         prop.propagateGridStm(t, 1.0, st, phi);
-        const Mat6 s = multiply(transpose(phi[0]), multiply(J, phi[0]));
+        const Mat6 s = phi[0].transpose() * (J * phi[0]);
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
-                EXPECT_NEAR(s[i][j], J[i][j], 1e-8) << t;
+                EXPECT_NEAR(s(i, j), J(i, j), 1e-8) << t;
             }
         }
     }
@@ -416,24 +416,24 @@ TEST(Covariance, PropagatedCovarianceMatchesPerturbedTrajectories) {
     const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), s0, Frame::TOD);
     Mat6                      P0{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P0[i][i]         = 100.0; // (10 m)^2
-        P0[i + 3][i + 3] = 1e-4;  // (1 cm/s)^2
-        P0[i][i + 3]     = 0.05;  // some position/velocity correlation
-        P0[i + 3][i]     = 0.05;
+        P0(i, i)         = 100.0; // (10 m)^2
+        P0(i + 3, i + 3) = 1e-4;  // (1 cm/s)^2
+        P0(i, i + 3)     = 0.05;  // some position/velocity correlation
+        P0(i + 3, i)     = 0.05;
     }
     Mat6 L{};
     for (std::size_t j = 0; j < 6; ++j) {
-        double d = P0[j][j];
+        double d = P0(j, j);
         for (std::size_t k = 0; k < j; ++k) {
-            d -= L[j][k] * L[j][k];
+            d -= L(j, k) * L(j, k);
         }
-        L[j][j] = std::sqrt(d);
+        L(j, j) = std::sqrt(d);
         for (std::size_t i = j + 1; i < 6; ++i) {
-            double x = P0[i][j];
+            double x = P0(i, j);
             for (std::size_t k = 0; k < j; ++k) {
-                x -= L[i][k] * L[j][k];
+                x -= L(i, k) * L(j, k);
             }
-            L[i][j] = x / L[j][j];
+            L(i, j) = x / L(j, j);
         }
     }
     AdaptiveOptions tight;
@@ -445,7 +445,7 @@ TEST(Covariance, PropagatedCovarianceMatchesPerturbedTrajectories) {
     const auto        pc    = prop.propagateGridWithCovariance(0.0, step, count, P0);
     std::vector<Mat6> truth(count, Mat6{});
     for (std::size_t k = 0; k < 6; ++k) {
-        const Vec3 dr{L[0][k], L[1][k], L[2][k]}, dv{L[3][k], L[4][k], L[5][k]};
+        const Vec3 dr{L(0, k), L(1, k), L(2, k)}, dv{L(3, k), L(4, k), L(5, k)};
         const auto plus =
             NumericalPropagator(Time(), {s0.r + dr, s0.v + dv}, {field}, tight).propagateGrid(0.0, step, count);
         const auto minus =
@@ -455,7 +455,7 @@ TEST(Covariance, PropagatedCovarianceMatchesPerturbedTrajectories) {
             const double x[6] = {a.x, a.y, a.z, b.x, b.y, b.z};
             for (std::size_t i = 0; i < 6; ++i) {
                 for (std::size_t j = 0; j < 6; ++j) {
-                    truth[t][i][j] += x[i] * x[j];
+                    truth[t](i, j) += x[i] * x[j];
                 }
             }
         }
@@ -467,17 +467,17 @@ TEST(Covariance, PropagatedCovarianceMatchesPerturbedTrajectories) {
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
                 worst = std::max(worst,
-                                 std::abs(pc[t].covariance[i][j] - truth[t][i][j])
-                                     / std::sqrt(truth[t][i][i] * truth[t][j][j]));
+                                 std::abs(pc[t].covariance(i, j) - truth[t](i, j))
+                                     / std::sqrt(truth[t](i, i) * truth[t](j, j)));
             }
         }
-        EXPECT_EQ(pc[t].covariance, transpose(pc[t].covariance));
+        EXPECT_EQ(pc[t].covariance, pc[t].covariance.transpose());
     }
     EXPECT_LT(worst, 1e-7);
     EXPECT_EQ(pc[0].covariance, P0);
     // Along-track uncertainty grows: position variance after 4 h far exceeds the initial 300 m^2.
     const Mat6& P = pc.back().covariance;
-    EXPECT_GT(P[0][0] + P[1][1] + P[2][2], 10.0 * 300.0);
+    EXPECT_GT(P(0, 0) + P(1, 1) + P(2, 2), 10.0 * 300.0);
 }
 
 TEST(Covariance, ProcessNoiseMatchesWhiteAccelerationModel) {
@@ -489,11 +489,11 @@ TEST(Covariance, ProcessNoiseMatchesWhiteAccelerationModel) {
     const auto                pc   = prop.propagateGridWithCovariance(0.0, t / 4, 5, Mat6{}, q);
     const Mat6&               Q    = pc.back().covariance;
     for (std::size_t i = 0; i < 3; ++i) {
-        EXPECT_NEAR(Q[i][i] / (q * t * t * t / 3.0), 1.0, 1e-3);
-        EXPECT_NEAR(Q[i][i + 3] / (q * t * t / 2.0), 1.0, 1e-3);
-        EXPECT_NEAR(Q[i + 3][i + 3] / (q * t), 1.0, 1e-3);
+        EXPECT_NEAR(Q(i, i) / (q * t * t * t / 3.0), 1.0, 1e-3);
+        EXPECT_NEAR(Q(i, i + 3) / (q * t * t / 2.0), 1.0, 1e-3);
+        EXPECT_NEAR(Q(i + 3, i + 3) / (q * t), 1.0, 1e-3);
     }
-    EXPECT_EQ(Q, transpose(Q));
+    EXPECT_EQ(Q, Q.transpose());
     EXPECT_THROW((void)prop.propagateGridWithCovariance(0.0, 1.0, 2, Mat6{}, -1.0), Error);
     std::vector<StateVector> st(2);
     std::vector<Mat6>        phi(3);
@@ -524,24 +524,20 @@ TEST(Covariance, ProcessNoiseOverAnOrbitMatchesQuadratureOfTheTwoBodyStm) {
                 for (std::size_t j = 0; j < 6; ++j) {
                     double sum = 0.0;
                     for (std::size_t m = 3; m < 6; ++m) {
-                        sum += phi[i][m] * phi[j][m];
+                        sum += phi(i, m) * phi(j, m);
                     }
-                    Q[i][j] += w * sum;
+                    Q(i, j) += w * sum;
                 }
             }
         }
-        for (auto& row : Q) {
-            for (double& x : row) {
-                x *= q * std::abs(h) / 3.0;
-            }
-        }
+        Q *= q * std::abs(h) / 3.0;
         return Q;
     };
     const auto worstDifference = [](const Mat6& a, const Mat6& b) {
         double worst = 0.0;
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
-                worst = std::max(worst, std::abs(a[i][j] - b[i][j]) / std::sqrt(b[i][i] * b[j][j]));
+                worst = std::max(worst, std::abs(a(i, j) - b(i, j)) / std::sqrt(b(i, i) * b(j, j)));
             }
         }
         return worst;
@@ -569,16 +565,16 @@ TEST(Covariance, ProcessNoiseGrowsInBothDirections) {
     const double              t    = 20.0;
     const Mat6                Q    = prop.propagateGridWithCovariance(-t, 1.0, 1, Mat6{}, q)[0].covariance;
     for (std::size_t i = 0; i < 3; ++i) {
-        EXPECT_NEAR(Q[i][i] / (q * t * t * t / 3.0), 1.0, 1e-3);
-        EXPECT_NEAR(Q[i][i + 3] / (-q * t * t / 2.0), 1.0, 1e-3);
-        EXPECT_NEAR(Q[i + 3][i + 3] / (q * t), 1.0, 1e-3);
+        EXPECT_NEAR(Q(i, i) / (q * t * t * t / 3.0), 1.0, 1e-3);
+        EXPECT_NEAR(Q(i, i + 3) / (-q * t * t / 2.0), 1.0, 1e-3);
+        EXPECT_NEAR(Q(i + 3, i + 3) / (q * t), 1.0, 1e-3);
     }
 
     // A grid that crosses the epoch matches propagating to each of its times directly.
     Mat6 P0{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P0[i][i]         = 100.0;
-        P0[i + 3][i + 3] = 1e-4;
+        P0(i, i)         = 100.0;
+        P0(i + 3, i + 3) = 1e-4;
     }
     const double qLeo = 1e-8;
     const auto   grid = prop.propagateGridWithCovariance(-3600.0, 600.0, 13, P0, qLeo);
@@ -590,14 +586,14 @@ TEST(Covariance, ProcessNoiseGrowsInBothDirections) {
         for (std::size_t i = 0; i < 6; ++i) {
             for (std::size_t j = 0; j < 6; ++j) {
                 worst = std::max(worst,
-                                 std::abs(grid[k].covariance[i][j] - direct[i][j])
-                                     / std::sqrt(direct[i][i] * direct[j][j]));
+                                 std::abs(grid[k].covariance(i, j) - direct(i, j))
+                                     / std::sqrt(direct(i, i) * direct(j, j)));
             }
         }
         EXPECT_LT(worst, 1e-7) << "t = " << tk;
         const Mat6 noNoise = prop.propagateGridWithCovariance(tk, 1.0, 1, P0, 0.0)[0].covariance;
         for (std::size_t i = 0; i < 6; ++i) {
-            EXPECT_GE(direct[i][i], noNoise[i][i]) << "t = " << tk << ", i = " << i;
+            EXPECT_GE(direct(i, i), noNoise(i, i)) << "t = " << tk << ", i = " << i;
         }
     }
 }
@@ -608,8 +604,8 @@ TEST(Covariance, SingleTimeFormsAreGridsOfOneOutput) {
     const NumericalPropagator prop = NumericalPropagator::j2j4(Time(), leo(), Frame::TOD);
     Mat6                      P0{};
     for (std::size_t i = 0; i < 3; ++i) {
-        P0[i][i]         = 100.0;
-        P0[i + 3][i + 3] = 1e-4;
+        P0(i, i)         = 100.0;
+        P0(i + 3, i + 3) = 1e-4;
     }
     for (const double dt : {-5400.0, -20.0, 20.0, 3000.0, 14400.0}) {
         std::vector<StateVector> st(1);
@@ -632,7 +628,7 @@ TEST(Covariance, SingleTimeFormsAreGridsOfOneOutput) {
     // At the epoch: the initial state, Phi = I and P = P0, exactly.
     const StateTransition zero = prop.propagateStm(0.0);
     EXPECT_EQ(zero.state, leo());
-    EXPECT_EQ(zero.stm, identity6());
+    EXPECT_EQ(zero.stm, Mat6::identity());
     EXPECT_EQ(prop.propagateWithCovariance(0.0, P0).covariance, P0);
     EXPECT_EQ(prop.propagateWithCovariance(0.0, P0, 1e-8).covariance, P0);
 
