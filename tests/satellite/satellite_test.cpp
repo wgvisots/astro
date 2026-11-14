@@ -840,3 +840,56 @@ TEST(OrbitalFrames, CovarianceRotatedIntoRicIsKnownByHand) {
         }
     }
 }
+
+TEST(Eclipse, GrazingPassThroughThePenumbraOnlyIsAPenumbralEclipse) {
+    // A circular orbit with the Sun raised out of its plane by beta: the satellite comes nearest the
+    // shadow axis at u = 180 deg. With beta between the angle at which it would just touch the umbra
+    // (c = b - a there) and the angle at which it would just touch the penumbra (c = a + b), both
+    // found by bisection, the eclipse is penumbral only: documented as umbral = false, with the umbra
+    // times equal to the penumbra times. (From 500 km the Earth's disk has a radius of 67 deg, so beta
+    // is about 1.2 rad.)
+    const double      r      = constants::wgs84A + 500 * km;
+    const StateVector s0     = elementsToState({r, 0.0, 0.0, 0.0, 0.0, 0.0});
+    const double      period = orbitalPeriod(r);
+    const Time        t0;
+    auto              sat   = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
+    const auto        sunAt = [](double beta) { return constants::au * Vec3{std::cos(beta), 0.0, std::sin(beta)}; };
+    const Vec3        behind{-r, 0.0, 0.0};
+    const double      betaUmbra = bisect(
+        [&](double beta) {
+            const Disks d = disksSeenFrom(behind, sunAt(beta));
+            return d.c - (d.b - d.a);
+        },
+        0.0,
+        constants::halfPi);
+    const double betaPenumbra = bisect(
+        [&](double beta) {
+            const Disks d = disksSeenFrom(behind, sunAt(beta));
+            return d.c - (d.a + d.b);
+        },
+        0.0,
+        constants::halfPi);
+    ASSERT_LT(betaUmbra, betaPenumbra);
+    const double beta = 0.5 * (betaUmbra + betaPenumbra);
+    auto         sun  = [&](const Time&) { return sunAt(beta); };
+    ASSERT_EQ(shadow(behind, sunAt(beta)).state, ShadowState::Penumbra);
+    const auto ecl = findEclipses(sat, sun, t0, t0 + period, 20.0);
+    ASSERT_EQ(ecl.size(), 1u);
+    EXPECT_FALSE(ecl[0].umbral);
+    EXPECT_EQ(ecl[0].umbraEntry, ecl[0].penumbraEntry);
+    EXPECT_EQ(ecl[0].umbraExit, ecl[0].penumbraExit);
+    // Centred on u = 180 deg (Brent's 1 ms on each end).
+    EXPECT_NEAR(0.5 * ((ecl[0].penumbraEntry - t0) + (ecl[0].penumbraExit - t0)), 0.5 * period, 2e-3);
+}
+
+TEST(Ground, LineOfSightIsBlockedWhenAnEndIsInsideTheEllipsoid) {
+    // The segment meets the solid ellipsoid as soon as one end is inside it (or both are).
+    const double a = constants::wgs84A;
+    EXPECT_FALSE(lineOfSight({0.5 * a, 0, 0}, {2.0 * a, 0, 0}));
+    EXPECT_FALSE(lineOfSight({2.0 * a, 0, 0}, {0.5 * a, 0, 0}));
+    EXPECT_FALSE(lineOfSight({0.1 * a, 0, 0}, {0, 0.1 * a, 0}));
+    // Just above the pole, along the polar radius b < a: clear 1 m above it, blocked 1 m below.
+    const double b = Ellipsoid::wgs84().b();
+    EXPECT_TRUE(lineOfSight({-1000.0, 0, b + 1.0}, {1000.0, 0, b + 1.0}));
+    EXPECT_FALSE(lineOfSight({-1000.0, 0, b - 1.0}, {1000.0, 0, b - 1.0}));
+}
