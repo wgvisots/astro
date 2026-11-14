@@ -108,6 +108,20 @@ Frame inertialFrame(Frame frame, std::string_view type) {
     return frame;
 }
 
+// The frame of an analytic trajectory: inertial for every model and, for the secular models, one
+// whose z axis is the true pole (their zonal field is applied about z). Anything else is refused,
+// so that a GCRS state given to a secular model is an error rather than a 0.1-0.2 deg tilt.
+Frame modelFrame(Frame frame, TrajectoryModel model, std::string_view type) {
+    inertialFrame(frame, type);
+    const bool poleIsZ = frame == Frame::TOD || frame == Frame::TEME || frame == Frame::CIRS;
+    if (model != TrajectoryModel::TwoBody && !poleIsZ) {
+        throw Error(std::string(type) + ": the secular models apply the zonal field about z, which must be the "
+                    + "true pole: give the state in Frame::TOD, Frame::TEME or Frame::CIRS (got Frame::"
+                    + std::string(detail::enumName(frame, "INVALID_VALUE")) + "; poleOfDateMatrix converts)");
+    }
+    return frame;
+}
+
 } // namespace
 
 Trajectory::Trajectory(const Time&        epoch,
@@ -115,7 +129,7 @@ Trajectory::Trajectory(const Time&        epoch,
                        Frame              frame,
                        TrajectoryModel    model,
                        const CentralBody& body)
-    : frame_(inertialFrame(frame, "Trajectory"))
+    : frame_(modelFrame(frame, model, "Trajectory"))
     , epoch_(epoch) {
     if (model == TrajectoryModel::TwoBody) {
         fromEpoch_ = twoBody(state, body.mu);
@@ -129,7 +143,7 @@ Trajectory::Trajectory(const Time&              epoch,
                        Frame                    frame,
                        TrajectoryModel          model,
                        const CentralBody&       body)
-    : frame_(inertialFrame(frame, "Trajectory"))
+    : frame_(modelFrame(frame, model, "Trajectory"))
     , epoch_(epoch) {
     if (model == TrajectoryModel::TwoBody) {
         fromEpoch_ = twoBody(elementsToState(elements, body.mu), body.mu);
@@ -213,8 +227,8 @@ Trajectory sgp4Trajectory(const Sgp4& sgp4, const EopProvider& eop, Frame frame)
             }};
 }
 
-Trajectory bodyTrajectory(const Ephemeris& eph, Body target, Body center) {
-    return {Frame::GCRS, [&eph, target, center](const Time& t) { return eph.state(target, center, t); }};
+Trajectory bodyTrajectory(const Ephemeris& eph, Body target) {
+    return {Frame::GCRS, [&eph, target](const Time& t) { return eph.state(target, Body::Earth, t); }};
 }
 
 } // namespace astro

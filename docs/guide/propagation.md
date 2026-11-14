@@ -254,7 +254,7 @@ function of time that carries its frame. Every way of building one names the fra
 | `{epoch, EquinoctialElements, frame}` | the same, via `equinoctialToKeplerian` |
 | `{frame, callable}`, a callable `StateVector(const Time&)` such as a lambda | your own: a `NumericalPropagator`, an ephemeris table, ... |
 | `sgp4Trajectory(sgp4, eop, frame)` | `Sgp4::propagate`, converted from TEME to `frame` |
-| `bodyTrajectory(eph, target, center)` | `Ephemeris::state`, in `Frame::GCRS` |
+| `bodyTrajectory(eph, target)` | `Ephemeris::state`, in `Frame::GCRS` |
 
 The model (two-body and secular) is inertial, so those three forms throw `astro::Error` for an
 Earth-fixed frame (TIRS, PEF, ITRS); a callable may be in any frame. Two element sets, two states,

@@ -356,7 +356,17 @@ TEST(CloseApproach, Errors) {
         {0.0,       12 * km, 0.0}
     };
     EXPECT_NO_THROW(Trajectory(kEpoch, hyperbolic, Frame::GCRS));
-    EXPECT_THROW(Trajectory(kEpoch, hyperbolic, Frame::GCRS, TrajectoryModel::SecularJ2J4), Error);
+    EXPECT_THROW(Trajectory(kEpoch, hyperbolic, Frame::TOD, TrajectoryModel::SecularJ2J4), Error);
+    // The secular models apply the zonal field about z, so z must be the true pole.
+    const StateVector leo = elementsToState({7000 * km, 0.001, degToRad(51.6), 0.3, 0.6, 0.9});
+    for (Frame f : {Frame::GCRS, Frame::J2000, Frame::MOD}) {
+        EXPECT_THROW(Trajectory(kEpoch, leo, f, TrajectoryModel::SecularJ2), Error) << f;
+        EXPECT_THROW(UncertainTrajectory(kEpoch, leo, Mat6::identity(), f, TrajectoryModel::SecularJ2J4), Error) << f;
+        EXPECT_NO_THROW(Trajectory(kEpoch, leo, f, TrajectoryModel::TwoBody)) << f;
+    }
+    for (Frame f : {Frame::TOD, Frame::TEME, Frame::CIRS}) {
+        EXPECT_NO_THROW(Trajectory(kEpoch, leo, f, TrajectoryModel::SecularJ2J4)) << f;
+    }
     EXPECT_THROW(Trajectory(kEpoch, hyperbolic, Frame::GCRS, static_cast<TrajectoryModel>(42)), Error);
 
     std::ostringstream os;
@@ -416,8 +426,18 @@ TEST(Trajectory, AnalyticModelsAreInertial) {
             EXPECT_TRUE(names(errorMessage([&] { (void)Trajectory(kEpoch, c.elements, f, model); }), {name.c_str()}));
             EXPECT_TRUE(names(errorMessage([&] { (void)Trajectory(kEpoch, eq, f, model); }), {name.c_str()}));
         }
-        for (Frame f : {Frame::GCRS, Frame::J2000, Frame::MOD, Frame::TOD, Frame::TEME, Frame::CIRS}) {
+        // Two-body takes any inertial frame; the secular models only those whose z is the true pole.
+        for (Frame f : {Frame::TOD, Frame::TEME, Frame::CIRS}) {
             EXPECT_NO_THROW((void)Trajectory(kEpoch, c.atTca, f, model)) << f << ' ' << model;
+        }
+        for (Frame f : {Frame::GCRS, Frame::J2000, Frame::MOD}) {
+            if (model == TrajectoryModel::TwoBody) {
+                EXPECT_NO_THROW((void)Trajectory(kEpoch, c.atTca, f, model)) << f;
+            } else {
+                EXPECT_TRUE(names(errorMessage([&] { (void)Trajectory(kEpoch, c.atTca, f, model); }),
+                                  {"true pole", "Frame::TOD"}))
+                    << f;
+            }
         }
     }
 }

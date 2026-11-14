@@ -22,7 +22,7 @@ change that breaks existing code raises the minor number.
 - **Removed:** `ItrsStateFunction`, `sgp4ItrsFunction`, and the `std::function<Vec3(const Time&)>`
   parameters of `groundTrack` and `findEclipses`. New helpers make the usual trajectories:
   `sgp4Trajectory(sgp4, eop, frame)` (SGP4's TEME output converted to `frame`; in `Frame::ITRS` it
-  gives the same numbers as `sgp4ItrsFunction` did) and `bodyTrajectory(eph, target, center)` (an
+  gives the same numbers as `sgp4ItrsFunction` did) and `bodyTrajectory(eph, target)` (an
   ephemeris state, in `Frame::GCRS`).
 
 Before / after:

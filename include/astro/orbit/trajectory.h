@@ -75,9 +75,10 @@ public:
     /// Propagate `state` (m, m/s, in `frame`) from `epoch` with `model`. body.mu is the
     /// gravitational parameter of every model; the secular models also use body.re, J2 and J4 (J3
     /// and higher do not enter), and take the osculating elements of `state` as mean elements (see
-    /// propagateSecular), so for them `frame` should have its z axis along the Earth's pole (TOD,
-    /// TEME or CIRS). Throws astro::Error for an Earth-fixed `frame` (see isEarthFixed: the models
-    /// are inertial), and for a secular model and a non-elliptic orbit.
+    /// propagateSecular). Their zonal field acts about z, so for them `frame` must have its z axis
+    /// along the true pole: Frame::TOD, Frame::TEME or Frame::CIRS. Throws astro::Error for an
+    /// Earth-fixed `frame` (see isEarthFixed: the models are inertial), for a secular model in any
+    /// other frame (convert with poleOfDateMatrix), and for a secular model and a non-elliptic orbit.
     ///
     /// The secular models use SecularPropagatorCorrected, whose velocity is the time derivative of
     /// the position: the search needs the true rate of change of the distance.
@@ -87,8 +88,8 @@ public:
                TrajectoryModel    model = TrajectoryModel::TwoBody,
                const CentralBody& body  = CentralBody::earth());
     /// Propagate Keplerian elements (in `frame`) from `epoch`: osculating for TwoBody, mean for the
-    /// secular models. Throws astro::Error for an Earth-fixed `frame`, and as elementsToState or
-    /// SecularPropagator do.
+    /// secular models. Throws astro::Error for the frames the state constructor refuses, and as
+    /// elementsToState or SecularPropagator do.
     Trajectory(const Time&              epoch,
                const KeplerianElements& elements,
                Frame                    frame,
@@ -155,7 +156,7 @@ public:
     /// (analytic state transition matrix), the secular models with
     /// SecularPropagatorCorrected::propagateWithCovariance (differenced). Neither adds process noise.
     /// Throws astro::Error for a non-finite covariance, or as Trajectory does (an Earth-fixed
-    /// `frame`, for one).
+    /// `frame`, or a secular model in a frame whose z is not the true pole).
     UncertainTrajectory(const Time&        epoch,
                         const StateVector& state,
                         const Mat6&        covariance,
@@ -191,12 +192,14 @@ private:
 /// (see FrameTransformer), and as Sgp4::propagate does.
 [[nodiscard]] Trajectory sgp4Trajectory(const Sgp4& sgp4, const EopProvider& eop, Frame frame);
 
-/// The trajectory of `target` relative to `center` from an ephemeris (Ephemeris::state), in
-/// Frame::GCRS: the ephemeris axes are the ICRF's, which for a geocentric `center` are the GCRS.
+/// The geocentric trajectory of `target` from an ephemeris (Ephemeris::state relative to
+/// Body::Earth), in Frame::GCRS: geocentric ephemeris axes are the ICRF's, which are the GCRS's.
+/// (It is geocentric only because Frame has no barycentric or heliocentric frame to label any
+/// other centre with; for those, call Ephemeris::state.)
 /// For the Sun in findEclipses: `bodyTrajectory(eph, Body::Sun)`.
 ///
 /// The trajectory keeps a reference to `eph`: it must outlive it (and its copies). Its state()
 /// throws astro::Error as Ephemeris::state does.
-[[nodiscard]] Trajectory bodyTrajectory(const Ephemeris& eph, Body target, Body center = Body::Earth);
+[[nodiscard]] Trajectory bodyTrajectory(const Ephemeris& eph, Body target);
 
 } // namespace astro

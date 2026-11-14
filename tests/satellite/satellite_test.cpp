@@ -810,15 +810,15 @@ TEST(Trajectory, Sgp4TrajectoryConvertsTemeToTheFrameAsked) {
 TEST(Trajectory, BodyTrajectoryIsTheEphemerisStateInGcrs) {
     const LowPrecisionEphemeris eph;
     const Trajectory            sun  = bodyTrajectory(eph, Body::Sun);
-    const Trajectory            moon = bodyTrajectory(eph, Body::Moon, Body::Sun);
+    const Trajectory            moon = bodyTrajectory(eph, Body::Moon);
     EXPECT_EQ(sun.frame(), Frame::GCRS);
     EXPECT_EQ(moon.frame(), Frame::GCRS);
     for (double dt : {0.0, 3600.0, 30 * 86400.0}) {
         const Time t = kIss.epoch + dt;
         EXPECT_EQ(sun.state(t).r, eph.state(Body::Sun, Body::Earth, t).r) << dt;
         EXPECT_EQ(sun.state(t).v, eph.state(Body::Sun, Body::Earth, t).v) << dt;
-        EXPECT_EQ(moon.state(t).r, eph.state(Body::Moon, Body::Sun, t).r) << dt;
-        EXPECT_EQ(moon.state(t).v, eph.state(Body::Moon, Body::Sun, t).v) << dt;
+        EXPECT_EQ(moon.state(t).r, eph.state(Body::Moon, Body::Earth, t).r) << dt;
+        EXPECT_EQ(moon.state(t).v, eph.state(Body::Moon, Body::Earth, t).v) << dt;
     }
 }
 
