@@ -21,12 +21,14 @@
 #include <cmath>
 #include <memory>
 #include <sstream>
+#include <vector>
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/numerical.h"
+#include "astro/orbit/secular.h"
 #include "test_util.h"
 
 using namespace astro;
@@ -92,4 +94,52 @@ TEST(PropagationEvent, NoEventAndErrors) {
     std::ostringstream os;
     os << Crossing::Falling << ' ' << static_cast<Crossing>(42);
     EXPECT_EQ(os.str(), "Crossing::Falling Crossing::INVALID_VALUE");
+}
+
+TEST(PropagationEvent, AscendingNodesOnAJ2OrbitFollowTheSecularRates) {
+    // With J2 the node regresses and the nodal period differs from the Keplerian one. Over a day of
+    // ascending nodes found as events (each search starts 100 s past the previous node), the right
+    // ascension of the node and the time between nodes are compared with Brouwer's secular rates at
+    // the mean elements, taken as the averages of the osculating ones over the same day (as in
+    // orbit_test.cpp). On a near-circular orbit the short-period terms are sampled at the same
+    // argument of latitude every time, so they drop out of the drift.
+    const double              J2    = constants::J2;
+    const auto                field = std::make_shared<GravityField>(std::vector<double>{0.0, 0.0, J2});
+    const StateVector         s0    = elementsToState({7000 * km, 0.001, deg2rad(51.6), 0.3, 0.6, 2.0});
+    const NumericalPropagator start(Time(), s0, {field});
+    std::vector<double>       times, nodes;
+    double                    offset = 0.0; // epoch of the current search, seconds after Time()
+    StateVector               from   = s0;
+    for (int k = 0; k < 16; ++k) {
+        const NumericalPropagator prop(Time(), from, {field});
+        const auto                node = prop.propagateToEvent(z, 7000.0, Crossing::Rising);
+        ASSERT_TRUE(node.has_value()) << "node " << k;
+        times.push_back(offset + node->dt);
+        nodes.push_back(std::atan2(node->state.r.y, node->state.r.x));
+        from    = prop.propagate(node->dt + 100.0);
+        offset += node->dt + 100.0;
+    }
+    // Mean elements over the same span.
+    const std::size_t n    = 1440;
+    const auto        grid = start.propagateGrid(times.front(), (times.back() - times.front()) / n, n + 1);
+    double            a = 0.0, e = 0.0, i = 0.0;
+    for (const StateVector& s : grid) {
+        const KeplerianElements o  = stateToElements(s);
+        a                         += o.a / (n + 1);
+        e                         += o.e / (n + 1);
+        i                         += o.i / (n + 1);
+    }
+    const ZonalParameters zp{constants::gmEarth, constants::earthRadiusEgm2008, J2, 0.0};
+    const SecularRates    r      = secularRates(a, e, i, zp, SecularOrder::J2SquaredJ4);
+    const double          span   = times.back() - times.front();
+    const double          drift  = wrapPi(nodes.back() - nodes.front() - r.raanDot * span);
+    const double          period = span / static_cast<double>(times.size() - 1);
+    // Measured: 1.8e-6 of the node's drift over the day (0.079 rad) and 2.2e-7 of the nodal period.
+    EXPECT_LT(std::abs(drift), 1e-5 * std::abs(r.raanDot * span));
+    EXPECT_NEAR(period / (constants::twoPi / (r.argpDot + r.meanAnomalyDot)), 1.0, 1e-6);
+    // The events agree with the trajectory: each node is where z = 0 on a direct propagation (to
+    // |vz| ~ 6 km/s times the 1e-6 s time tolerance, plus the integration error of the two paths).
+    for (std::size_t k = 0; k < times.size(); k += 5) {
+        EXPECT_LT(std::abs(start.propagate(times[k]).r.z), 1e-2) << "node " << k;
+    }
 }
