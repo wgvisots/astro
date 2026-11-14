@@ -66,15 +66,15 @@ public:
     /// Rotation from GCRS to ITRS at start + dt: r_itrs = M r_gcrs. Throws astro::Error if dt is
     /// outside the window by more than 1 s.
     [[nodiscard]] Mat3 gcrsToItrsMatrix(double dt) const;
-    /// GCRS position to ITRS at start + dt. Throws astro::Error as gcrsToItrsMatrix does.
-    [[nodiscard]] Vec3 gcrsToItrs(double dt, const Vec3& r) const;
-    /// GCRS position and velocity to ITRS at start + dt. The velocity is relative to the rotating
-    /// Earth (includes -omega x r), as for FrameTransformer::transform. Throws astro::Error as
-    /// gcrsToItrsMatrix does.
-    [[nodiscard]] StateVector gcrsToItrs(double dt, const StateVector& s) const;
-    /// ITRS position and velocity to GCRS at start + dt (inverse of gcrsToItrs). Throws astro::Error
-    /// as gcrsToItrsMatrix does.
-    [[nodiscard]] StateVector itrsToGcrs(double dt, const StateVector& s) const;
+    /// GCRS position `r` (m) to ITRS at start + `dt` (s). Throws astro::Error as gcrsToItrsMatrix does.
+    [[nodiscard]] Vec3 gcrsToItrs(const Vec3& r, double dt) const;
+    /// GCRS position and velocity `s` (m, m/s) to ITRS at start + `dt` (s). The velocity is relative
+    /// to the rotating Earth (includes -omega x r), as for FrameTransformer::transform. Throws
+    /// astro::Error as gcrsToItrsMatrix does.
+    [[nodiscard]] StateVector gcrsToItrs(const StateVector& s, double dt) const;
+    /// ITRS position and velocity `s` (m, m/s) to GCRS at start + `dt` (s) (inverse of gcrsToItrs).
+    /// Throws astro::Error as gcrsToItrsMatrix does.
+    [[nodiscard]] StateVector itrsToGcrs(const StateVector& s, double dt) const;
     /// Earth's rotation rate at start + dt (rad/s). It comes from the UT1 elapsed between nodes, so
     /// it is exactly the rate of the rotation above and includes the length-of-day variation.
     /// (FrameTransformer takes it from the EOP length of day instead. The two agree where the EOP

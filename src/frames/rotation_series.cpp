@@ -91,12 +91,12 @@ Mat3 ItrsRotationSeries::gcrsToItrsMatrix(double dt) const {
     return p.W * R3(p.era) * p.Q;
 }
 
-Vec3 ItrsRotationSeries::gcrsToItrs(double dt, const Vec3& r) const {
+Vec3 ItrsRotationSeries::gcrsToItrs(const Vec3& r, double dt) const {
     const Parts p = at(dt);
     return p.W * (R3(p.era) * (p.Q * r));
 }
 
-StateVector ItrsRotationSeries::gcrsToItrs(double dt, const StateVector& s) const {
+StateVector ItrsRotationSeries::gcrsToItrs(const StateVector& s, double dt) const {
     // TIRS position and velocity relative to the rotating Earth: v_t = R3 Q v - omega x r_t, with
     // omega = rate * z (the CIP); then polar motion.
     const Parts p  = at(dt);
@@ -106,7 +106,7 @@ StateVector ItrsRotationSeries::gcrsToItrs(double dt, const StateVector& s) cons
     return {p.W * rt, p.W * vt};
 }
 
-StateVector ItrsRotationSeries::itrsToGcrs(double dt, const StateVector& s) const {
+StateVector ItrsRotationSeries::itrsToGcrs(const StateVector& s, double dt) const {
     const Parts p  = at(dt);
     const Mat3  Rt = R3(p.era).transpose();
     const Mat3  Wt = p.W.transpose();

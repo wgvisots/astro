@@ -96,7 +96,7 @@ TEST(ItrsRotationSeries, MatchesFrameTransformerBetweenTheNodes) {
         const FrameTransformer ft(kStart + dt, eop);
         worstM                  = std::max(worstM, maxAbsDiff(series.gcrsToItrsMatrix(dt), ft.gcrsTo(Frame::ITRS)));
         const StateVector exact = ft.transform(s, Frame::GCRS, Frame::ITRS);
-        worstV                  = std::max(worstV, norm(series.gcrsToItrs(dt, s).v - exact.v));
+        worstV                  = std::max(worstV, norm(series.gcrsToItrs(s, dt).v - exact.v));
     }
     // Measured 2.8e-11 (0.18 mm at the surface) and 1.4e-7 m/s, the matrix error times the 7 km/s
     // speed and the Earth-rotation term.
@@ -111,10 +111,10 @@ TEST(ItrsRotationSeries, RoundTripRateAndErrors) {
                {-4.1e6, 3.3e6, 4.4e6 },
                {2.0e3,  6.0e3, -1.0e3}
     };
-    const StateVector back = series.itrsToGcrs(900.0, series.gcrsToItrs(900.0, s));
+    const StateVector back = series.itrsToGcrs(series.gcrsToItrs(s, 900.0), 900.0);
     test::expectVecNear(back.r, s.r, 1e-8);
     test::expectVecNear(back.v, s.v, 1e-11);
-    test::expectVecNear(series.gcrsToItrs(900.0, s.r), series.gcrsToItrs(900.0, s).r, 1e-8);
+    test::expectVecNear(series.gcrsToItrs(s.r, 900.0), series.gcrsToItrs(s, 900.0).r, 1e-8);
     // The rotation rate includes the length of day: omega = 7.292115e-5 (1 - LOD / 86400).
     EXPECT_NEAR(series.rotationRate(100.0) / (7.2921151467064e-5 * (1.0 - DriftingEop::kLod / 86400.0)), 1.0, 1e-11);
     EXPECT_DOUBLE_EQ(series.duration(), 1800.0);

@@ -27,6 +27,10 @@ Names follow one pattern, so that a reader who has learned one part of the libra
 - **Accessors are nouns; `to` means a conversion** to another type or scale: `Time::calendar()`,
   `Time::sysTime()`, `Time::unixSeconds()`, `JulianDate::calendar()`, but `Time::to(TimeScale)`,
   `Quat::toMatrix()` and `toString(TimeScale)`.
+- **Data, then time.** A transformation takes the data first and the time after it:
+  `gcrsToItrs(r, t, eop)` and `ItrsRotationSeries::gcrsToItrs(r, dt)`, as `propagateKepler(s0, dt)`.
+  (Force models, the right-hand side of an ordinary differential equation, keep the usual `f(t, y)`
+  order: `ForceModel::acceleration(t, r, v)`.)
 
 ## Rotations
 
