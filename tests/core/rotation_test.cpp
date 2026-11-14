@@ -29,6 +29,7 @@
 #include <boost/describe/enum_to_string.hpp>
 
 #include "astro/core/angle.h"
+#include "astro/core/error.h"
 #include "test_util.h"
 
 using namespace astro;
@@ -194,16 +195,18 @@ TEST(Quat, MatrixRoundTripAndTransform) {
     for (int i = 0; i < 500; ++i) {
         const Quat q = Quat(n(rng), n(rng), n(rng), n(rng)).normalized();
         const Mat3 A = q.toMatrix();
-        expectOrthonormal(A, 1e-14);
+        // Tolerances: a few rounding errors (worst seen 1.3e-15 for the matrix, 3.3e-16 for the quaternion and
+        // 8.9e-16 for the vectors, whose components are of order 1). This test once allowed 1e-14 and 1e-13.
+        expectOrthonormal(A, 3e-15);
         Quat       r  = Quat::fromMatrix(A);
         const Quat qq = q.w < 0 ? Quat{-q.w, -q.x, -q.y, -q.z} : q;
-        EXPECT_NEAR(r.w, qq.w, 1e-13);
-        EXPECT_NEAR(r.x, qq.x, 1e-13);
-        EXPECT_NEAR(r.y, qq.y, 1e-13);
-        EXPECT_NEAR(r.z, qq.z, 1e-13);
+        EXPECT_NEAR(r.w, qq.w, 1e-15);
+        EXPECT_NEAR(r.x, qq.x, 1e-15);
+        EXPECT_NEAR(r.y, qq.y, 1e-15);
+        EXPECT_NEAR(r.z, qq.z, 1e-15);
         const Vec3 v{n(rng), n(rng), n(rng)};
-        expectVecNear(q.transform(v), A * v, 1e-13);
-        expectVecNear(q.rotate(v), A.transpose() * v, 1e-13);
+        expectVecNear(q.transform(v), A * v, 3e-15);
+        expectVecNear(q.rotate(v), A.transpose() * v, 3e-15);
     }
 }
 
@@ -352,6 +355,99 @@ TEST(Quat, SlerpTakesTheShorterArc) {
         for (double t : {0.0, 0.25, 0.5, 1.0}) {
             SCOPED_TRACE(testing::Message() << "sep " << sep << ", t " << t);
             expectQuatNear(slerp(aboutZ(0.0), aboutZ(sep), t), aboutZ(t * (sep - constants::twoPi)), 1e-15);
+        }
+    }
+}
+
+// rotation.h: "Throws astro::Error for any other `axis`" than 1, 2 or 3.
+TEST(Rotation, RotationAboutAxisRejectsOtherAxes) {
+    for (int axis : {0, 4, -1, 12}) {
+        try {
+            (void)rotationAboutAxis(axis, 0.5);
+            ADD_FAILURE() << "axis " << axis << ": no error";
+        } catch (const Error& e) {
+            EXPECT_NE(std::string(e.what()).find("axis"), std::string::npos) << e.what();
+        }
+    }
+}
+
+// Whole-number components, so the truth is exact: |q|^2 = 1 + 4 + 4 + 16 = 25, and q times its conjugate is
+// |q|^2 with no vector part (an identity of the Hamilton product that the library does not use).
+TEST(Quat, ConjugateNormAndVectorPart) {
+    const Quat q{1.0, 2.0, -2.0, 4.0};
+    EXPECT_EQ(q.norm(), 5.0);
+    EXPECT_EQ(q.vec(), Vec3(2.0, -2.0, 4.0));
+    EXPECT_EQ(q.conjugate(), Quat(1.0, -2.0, 2.0, -4.0));
+    EXPECT_EQ(q * q.conjugate(), Quat(25.0, 0.0, 0.0, 0.0));
+    EXPECT_EQ(q.conjugate() * q, Quat(25.0, 0.0, 0.0, 0.0));
+    // For a unit quaternion the conjugate is the inverse rotation: its matrix is the transpose, and it undoes
+    // transform(). Tolerance: a few rounding errors of 1.1e-16 in each element (worst seen 2.2e-16).
+    const Quat u = q.normalized();
+    expectMatNear(u.conjugate().toMatrix(), u.toMatrix().transpose(), 5e-16);
+    const Vec3 v{0.3, -1.2, 2.0};
+    expectVecNear(u.conjugate().transform(u.transform(v)), v, 1e-15);
+    expectVecNear(u.rotate(v), u.conjugate().transform(v), 1e-15);
+}
+
+// A half turn about the unit axis n is the matrix 2 n n^T - I (Rodrigues' formula with cos = -1 and sin = 0):
+// the trace is -1 and the scalar part of the quaternion is zero, the case Shepperd's method exists for. The
+// quaternion is (0, n) or (0, -n), the same rotation. Tolerance: the matrix carries a rounding error or two of
+// 1.1e-16 per element, and the square root halves its relative size (worst seen 2.2e-16).
+TEST(Quat, FromMatrixOfAHalfTurn) {
+    for (const Vec3& n : {
+             Vec3{1.0,        0.0,         0.0        },
+             Vec3{0.0,        1.0,         0.0        },
+             Vec3{0.0,        0.0,         1.0        },
+             Vec3{3.0 / 13.0, -4.0 / 13.0, 12.0 / 13.0},
+             Vec3{-0.6,       0.0,         0.8        },
+             Vec3{2.0 / 3.0,  2.0 / 3.0,   -1.0 / 3.0 }
+    }) {
+        const Mat3 a = 2.0 * outer(n, n) - Mat3::identity();
+        const Quat q = Quat::fromMatrix(a);
+        SCOPED_TRACE(testing::Message() << "axis " << n);
+        EXPECT_NEAR(q.w, 0.0, 5e-16);
+        const double sign = dot(q.vec(), n) < 0.0 ? -1.0 : 1.0;
+        expectVecNear(sign * q.vec(), n, 5e-16);
+        expectMatNear(q.toMatrix(), a, 5e-16);
+    }
+}
+
+// Three properties that fix a rotation, none of which the library uses: the axis is left where it is
+// (A n = n), the trace is 1 + 2 cos(theta), and a vector v at right angles to n turns by theta in the passive
+// sense, n . (v x A v) = -sin(theta). Axes of any length, angles in all quadrants. Tolerance: a few rounding
+// errors in each element and in the sums (worst seen 1.0e-15, in the determinant).
+TEST(Quat, AxisAngleMatrixFixesTheAxisAndTurnsByTheAngle) {
+    std::mt19937                           rng(3);
+    std::normal_distribution<double>       g(0.0, 1.0);
+    std::uniform_real_distribution<double> angle(-constants::pi, constants::pi);
+    for (int k = 0; k < 200; ++k) {
+        const Vec3   axis{g(rng), g(rng), g(rng)};
+        const double theta = angle(rng);
+        const Vec3   n     = normalized(axis);
+        const Vec3   v     = normalized(cross(n, Vec3{g(rng), g(rng), g(rng)}));
+        const Mat3   a     = axisAngleToMatrix(1e3 * axis, theta);
+        SCOPED_TRACE(testing::Message() << "axis " << axis << ", theta " << theta);
+        expectVecNear(a * n, n, 2e-15);
+        EXPECT_NEAR(a.trace(), 1.0 + 2.0 * std::cos(theta), 2e-15);
+        EXPECT_NEAR(dot(n, cross(v, a * v)), -std::sin(theta), 2e-15);
+        expectOrthonormal(a, 2e-15);
+    }
+}
+
+// orthonormalize() takes a matrix that has drifted from a rotation and returns a rotation. Truth: the
+// rotation the matrix drifted from, R, and the properties of a rotation (A A^T = I, det A = +1, to a few
+// rounding errors: worst seen 1.3e-15). A drift of size e in each element moves the result by up to a few e
+// (worst seen 2.7 e over these cases); an exact rotation comes back to rounding (worst seen 4.4e-16).
+TEST(Quat, OrthonormalizeRestoresARotation) {
+    std::mt19937                           rng(5);
+    std::uniform_real_distribution<double> u(-1.0, 1.0);
+    for (int k = 0; k < 100; ++k) {
+        const Mat3 r = Quat(u(rng), u(rng), u(rng), u(rng)).normalized().toMatrix();
+        for (double e : {0.0, 1e-12, 1e-9, 1e-6}) {
+            const Mat3 drifted = r + e * Mat3(u(rng), u(rng), u(rng), u(rng), u(rng), u(rng), u(rng), u(rng), u(rng));
+            const Mat3 a       = orthonormalize(drifted);
+            expectOrthonormal(a, 3e-15);
+            expectMatNear(a, r, 4.0 * e + 1e-15, "drift");
         }
     }
 }
