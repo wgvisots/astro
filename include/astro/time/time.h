@@ -228,8 +228,9 @@ private:
     TimeScale  scale_{TimeScale::TT};
 };
 
-/// TDB - TT in seconds (Fairhead & Bretagnon 1990, full 787-term series plus
-/// topocentric terms; ~3 ns over 1950-2050). `tt` is TT (or TDB; the difference
+/// TDB - TT in seconds: the model of Fairhead & Bretagnon (1990) in its full form (787 terms)
+/// with the topocentric terms of Moyer (1981) and Murray (1983), as distributed in ERFA's
+/// eraDtdb, which this function follows; ~3 ns over 1950-2050. `tt` is TT (or TDB; the difference
 /// is negligible). For the geocentric value leave the observer terms at zero.
 /// @param ut1Fraction  UT1 fraction of day (only needed for topocentric terms)
 /// @param elong        observer east longitude, rad

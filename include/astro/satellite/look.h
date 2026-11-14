@@ -40,7 +40,9 @@ struct LookAngles {
     double rangeRate{0.0}; ///< m/s, positive receding
 };
 
-/// Look angles from a site to a satellite whose state is given in the ITRS (ECEF).
+/// Look angles from a site to a satellite whose state is given in the ITRS (ECEF). For a
+/// satellite exactly at the site (zero range) the direction and the range rate do not exist:
+/// the range rate is NaN.
 [[nodiscard]] LookAngles
 lookAngles(const StateVector& satItrs, const Geodetic& site, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
@@ -48,6 +50,8 @@ lookAngles(const StateVector& satItrs, const Geodetic& site, const Ellipsoid& el
 /// first order, -f * rangeRate / c.
 [[nodiscard]] double dopplerShift(double frequencyHz, double rangeRate) noexcept;
 /// Exact relativistic shift for purely radial motion: f (sqrt((1-b)/(1+b)) - 1), b = rangeRate / c.
+/// At a range rate of +c the result is -f, at -c it is infinite, and beyond the speed of light
+/// it is NaN.
 [[nodiscard]] double dopplerShiftRelativistic(double frequencyHz, double rangeRate) noexcept;
 
 /// A visibility pass of a satellite over a site.
@@ -89,7 +93,8 @@ using ItrsStateFunction = std::function<StateVector(const Time&)>;
                                            const Ellipsoid&         ell          = Ellipsoid::wgs84());
 
 /// ITRS state function for an SGP4 satellite (TEME -> ITRS with the given EOP;
-/// the IAU 2000B nutation model is used for speed). The function returned throws
+/// the IAU 2000B nutation model is used for speed). The function returned refers to
+/// `sgp4` and `eop`: both must outlive it. It throws
 /// astro::Error when it is called for a time at which `eop` has no data or which
 /// is before 1960 (see FrameTransformer), and as Sgp4::propagate does.
 [[nodiscard]] ItrsStateFunction sgp4ItrsFunction(const Sgp4& sgp4, const EopProvider& eop);

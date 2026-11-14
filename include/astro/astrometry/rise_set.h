@@ -119,6 +119,7 @@ bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider&
                                              const EopProvider& eop,
                                              const Ephemeris&   eph);
 /// Moonrise/moonset of the upper limb with 34' refraction (topocentric, so parallax is included).
+/// Like sunRiseSet(), it also returns the transits.
 /// Throws astro::Error as sunRiseSet() does.
 [[nodiscard]] std::vector<SkyEvent>
 moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop, const Ephemeris& eph);

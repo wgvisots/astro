@@ -256,7 +256,8 @@ public:
     /// steps instead of stopping on every output time, and outputs between steps come from a
     /// degree-7 Hermite polynomial that matches position, velocity, acceleration and jerk at both
     /// ends of the step. The cost therefore hardly depends on `step`. Positions agree with
-    /// propagate(dts) to about the integrator tolerance (micrometres in LEO with the defaults).
+    /// propagate(dts), which takes different steps, to about the accuracy of the integration
+    /// itself: 0.15 mm after 4 h in LEO with the defaults, 0.2 m at relTol = 1e-9.
     ///
     /// The grid may lie anywhere relative to the epoch (dt = 0) and run in either direction. The
     /// integration only ever moves away from the epoch: to the grid's nearest point and on through
@@ -285,8 +286,9 @@ public:
     ///
     /// The integrator takes exactly the steps of propagateGrid, so the states are identical to it.
     /// Between steps Phi and Q are interpolated with quintic Hermite polynomials (values, first and
-    /// second derivatives at both ends of the step): relative error about 2e-9 at the default
-    /// tolerance and 4e-7 at relTol = 1e-9.
+    /// second derivatives at both ends of the step). Against stopping exactly at each output,
+    /// over 4 h at 10 s: about 1e-8 relative at the default tolerance and 1e-6 at relTol = 1e-9
+    /// for near-circular orbits, ten times that for a 1000 x 20000 km orbit.
     ///
     /// Q(t) is the process noise from white, isotropic acceleration noise with power spectral
     /// density accelerationNoisePsd (m^2/s^3), standing in for forces the model leaves out (drag,

@@ -107,6 +107,9 @@ public:
     /// IERS EOP C04 series, either the classic "14" format
     /// (YYYY MM DD MJD x y UT1-UTC LOD dX dY ...) or the newer "20" format
     /// (YYYY MM DD HH MJD x y UT1-UTC dX dY xrt yrt LOD ...). Angles in arcsec.
+    /// The dX, dY of the "14" series are relative to the IAU 2000A model, not
+    /// 2006/2000A: a difference of about 0.14 mas (6 mm at the Earth's surface),
+    /// which is not removed here.
     /// Throws astro::Error if the file cannot be opened, or as parseC04() does.
     [[nodiscard]] static EopTable loadC04(const std::string& path,
                                           EopInterpolation   interp = EopInterpolation::Lagrange4);

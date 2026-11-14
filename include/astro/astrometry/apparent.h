@@ -32,6 +32,10 @@
 /// -> gravitational light deflection by the Sun -> aberration (annual and
 /// diurnal, from the observer's barycentric velocity) -> GCRS apparent
 /// direction -> ITRS -> local horizon -> optional refraction.
+///
+/// Two small differences from ERFA's chain: the proper-motion interval leaves out the light-time
+/// (Roemer) term, worth up to 0.15 mas for the fastest stars, and the limit that keeps the light
+/// deflection finite at the Sun's limb is fixed (1e-9), not a parameter.
 namespace astro {
 
 /// A catalog star (ICRS).

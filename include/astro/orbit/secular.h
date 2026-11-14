@@ -34,7 +34,9 @@
 /// after Brouwer (1959): first order in J2, plus J2^2 and J4.
 namespace astro {
 
-/// Central-body constants for the secular theory (defaults: Earth, EGM2008).
+/// Central-body constants for the secular theory. Defaults: the Earth, with the radius and zonal
+/// coefficients of EGM2008 and the gravitational parameter of constants::gmEarth, which is the
+/// TCG-compatible IERS value and 7.5e-10 larger than EGM2008's own (see its description).
 struct ZonalParameters {
     double mu{constants::gmEarth};            ///< gravitational parameter (m^3/s^2)
     double re{constants::earthRadiusEgm2008}; ///< reference radius of the harmonics (m)

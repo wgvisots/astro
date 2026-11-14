@@ -30,7 +30,7 @@ namespace astro {
 
 /// One step of the TAI-UTC history. From the given UTC date (0h) onward,
 ///   TAI - UTC = offset + (MJD_UTC - mjdRef) * rate   [seconds]
-/// The rate term is non-zero only for 1961-1971 ("rubber second" UTC).
+/// The rate term is non-zero only for 1960-1971 ("rubber second" UTC).
 struct LeapSecondEntry {
     int    year;        ///< UTC year in which the step takes effect
     int    month;       ///< steps always occur on the 1st of a month

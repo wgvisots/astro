@@ -116,7 +116,9 @@ struct ImpactOptions {
     /// (3 cm at the surface) and about 20x cheaper to set up.
     FrameOptions frameOptions{PrecessionNutationModel::IAU2006_2000B, true};
     /// Precomputed GCRS <-> ITRS rotations covering [epoch, epoch + maxFlightTime], shared between
-    /// calls for speed (many predictions in the same time window). nullptr: built per call.
+    /// calls for speed (many predictions in the same time window). nullptr: built per call. When
+    /// set, the series is used as it is: the `eop` argument of predictImpact and `frameOptions`
+    /// above play no part.
     const ItrsRotationSeries* rotations{nullptr};
 };
 
