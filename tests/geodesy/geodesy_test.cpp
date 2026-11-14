@@ -47,6 +47,67 @@ TEST(Ellipsoid, DerivedQuantities) {
     EXPECT_NEAR(w.geocentricRadius(constants::halfPi), w.b(), 1e-6);
 }
 
+TEST(Ellipsoid, PublishedAndClosedFormValues) {
+    // WGS84 derived constants published in NIMA TR8350.2 (3rd edition, 2000), table 3.3, to their
+    // printed precision: second eccentricity squared 6.73949674228e-3, mean radius R1 6371008.7714 m.
+    const Ellipsoid w = Ellipsoid::wgs84();
+    EXPECT_NEAR(w.ep2(), 6.73949674228e-3, 0.5e-14);
+    EXPECT_NEAR(w.meanRadius(), 6371008.7714, 0.5e-4);
+    // Third flattening n = (a - b) / (a + b), from the axes rather than from f. a - b = 21 km loses the
+    // rounding of b (1e-9 m), 4e-14 of it, so 1e-16 on n (measured 1.6e-17).
+    EXPECT_NEAR(w.n(), (w.a - w.b()) / (w.a + w.b()), 1e-16);
+    // The Gaussian radius sqrt(M N) is a sqrt(1 - e^2) = b on the equator (M = a (1 - e^2), N = a) and
+    // a^2 / b at the poles (M = N); between, it lies between the two radii it is the mean of.
+    EXPECT_NEAR(w.gaussianRadius(0.0), w.b(), 1e-8); // a few units in the last place of 6.4e6 m
+    EXPECT_NEAR(w.gaussianRadius(constants::halfPi), w.a * w.a / w.b(), 1e-8);
+    const double lat = 0.8;
+    EXPECT_GT(w.gaussianRadius(lat), w.meridionalRadius(lat));
+    EXPECT_LT(w.gaussianRadius(lat), w.primeVerticalRadius(lat));
+    // IERS Conventions (2010), table 1.1: a = 6378136.6 m, 1/f = 298.25642.
+    const Ellipsoid iers = Ellipsoid::iers2010();
+    EXPECT_EQ(iers.a, 6378136.6);
+    EXPECT_NEAR(1.0 / iers.f, 298.25642, 1e-9);
+    // GRS80 (Moritz 2000): 1/f = 298.257222101.
+    EXPECT_NEAR(1.0 / Ellipsoid::grs80().f, 298.257222101, 1e-9);
+}
+
+TEST(Ellipsoid, SphereHasEveryRadiusEqualToItsOwn) {
+    const double    r = 6371000.0;
+    const Ellipsoid s = Ellipsoid::sphere(r);
+    EXPECT_EQ(s.a, r);
+    EXPECT_EQ(s.f, 0.0);
+    EXPECT_EQ(s.b(), r);
+    EXPECT_EQ(s.e2(), 0.0);
+    EXPECT_EQ(s.ep2(), 0.0);
+    EXPECT_EQ(s.n(), 0.0);
+    EXPECT_EQ(s.meanRadius(), r);
+    for (double lat : {0.0, 0.7, constants::halfPi}) {
+        EXPECT_EQ(s.primeVerticalRadius(lat), r);
+        EXPECT_EQ(s.meridionalRadius(lat), r);
+        EXPECT_EQ(s.gaussianRadius(lat), r);
+        EXPECT_NEAR(s.geocentricRadius(lat), r, 1e-9);
+    }
+}
+
+TEST(Geodetic, OnASphereLatitudeIsGeocentricAndHeightIsRadialDistance) {
+    // With no flattening the normal through a point passes through the centre: the geodetic latitude is
+    // atan2(z, rho) and the height |r| - R, for points outside, on and inside the sphere. This is the
+    // f = 0 branch of ecefToGeodetic().
+    const double    r   = 6371000.0;
+    const Ellipsoid sph = Ellipsoid::sphere(r);
+    for (const Vec3& p : {
+             Vec3{7.0e6,  -2.0e6, 3.0e6 },
+             Vec3{-1.0e6, 1.0e5,  -6.0e6},
+             Vec3{3.0e5,  4.0e5,  1.0e5 }
+    }) {
+        const Geodetic g = ecefToGeodetic(p, sph);
+        EXPECT_NEAR(g.lat, std::atan2(p.z, std::hypot(p.x, p.y)), 1e-15);
+        EXPECT_NEAR(g.lon, std::atan2(p.y, p.x), 1e-15);
+        EXPECT_NEAR(g.h, norm(p) - r, 1e-8); // rounding of terms of size r
+        expectVecNear(geodeticToEcef(g, sph), p, 1e-8, "sphere round trip");
+    }
+}
+
 TEST(Geodetic, KnownPoint) {
     // Equator / prime meridian / poles.
     expectVecNear(geodeticToEcef({0, 0, 0}), {constants::wgs84A, 0, 0}, 1e-9);
@@ -73,21 +134,12 @@ TEST(Geodetic, MatchesErfaAndRoundTrips) {
         EXPECT_NEAR(wrapPi(g.lon - lon), 0.0, 1e-15) << "lon";
         EXPECT_NEAR(g.h, h, 1e-8 * std::max(1.0, std::abs(h) / 1e6)) << "h, h=" << h;
         if (std::abs(h) < 1e5) {
-            EXPECT_NEAR(g.lat, std::stod(r[6]), 2e-12) << "lat vs ERFA, h=" << h;
-            EXPECT_NEAR(g.h, std::stod(r[8]), 1e-5) << "h vs ERFA, h=" << h;
+            // Measured: 3.3e-16 rad and 2.5e-9 m from ERFA's gc2gd. Tolerances: three units in the last
+            // place of the latitude, and the library's own 1e-8 m bound for the height.
+            EXPECT_NEAR(g.lat, std::stod(r[6]), 1e-15) << "lat vs ERFA, h=" << h;
+            EXPECT_NEAR(g.h, std::stod(r[8]), 1e-8) << "h vs ERFA, h=" << h;
         }
         expectVecNear(geodeticToEcef(g), xyz, tol, "round trip");
-    }
-}
-
-TEST(Geodetic, InsideEvoluteFallback) {
-    // Points within ~43 km of the center exercise the bracketed root search inside the evolute.
-    std::mt19937                           rng(3);
-    std::uniform_real_distribution<double> u(-40000.0, 40000.0);
-    for (int i = 0; i < 200; ++i) {
-        const Vec3     p{u(rng), u(rng), u(rng)};
-        const Geodetic g = ecefToGeodetic(p);
-        expectVecNear(geodeticToEcef(g), p, 1e-6, "evolute");
     }
 }
 
@@ -183,12 +235,51 @@ TEST(Geodetic, OnAndNextToThePolarAxisMatchesExtendedPrecision) {
     EXPECT_NEAR(g.h, 1000.0 - ell.b(), 1e-8);
 }
 
+TEST(Geodetic, InsideTheEvoluteMatchesExtendedPrecision) {
+    // Within about 43 km of the centre (inside the evolute of the meridian ellipse) a point has several
+    // normals to the ellipsoid and the library falls back to a bracketed root search; the answer is the
+    // nearest foot of a normal, found by meridianReference() in long double.
+    const Ellipsoid                        ell = Ellipsoid::wgs84();
+    std::mt19937                           rng(3);
+    std::uniform_real_distribution<double> u(-40000.0, 40000.0);
+    for (int i = 0; i < 40; ++i) {
+        const Vec3              p{u(rng), u(rng), u(rng)};
+        const MeridianReference ref = meridianReference(std::hypot(p.x, p.y), std::abs(p.z), ell);
+        const Geodetic          g   = ecefToGeodetic(p, ell);
+        SCOPED_TRACE(testing::Message() << "point " << p.x << ", " << p.y << ", " << p.z);
+        const double lat = static_cast<double>(std::numbers::pi_v<long double> / 2.0L - ref.colatitude);
+        EXPECT_NEAR(g.lat, p.z < 0.0 ? -lat : lat, 1e-15); // a few units in the last place of pi/2
+        EXPECT_NEAR(g.h, static_cast<double>(ref.height), 1e-8);
+        EXPECT_NEAR(g.lon, std::atan2(p.y, p.x), 1e-15);
+        expectVecNear(geodeticToEcef(g, ell), p, 1e-8, "round trip");
+    }
+}
+
 TEST(Geodetic, Latitudes) {
     const double phi = deg2rad(45.0);
     const double psi = geodeticToGeocentricLatitude(phi);
     EXPECT_NEAR(rad2deg(phi - psi) * 3600.0, 692.7, 0.1); // ~11.5 arcmin at 45 deg
     EXPECT_NEAR(geocentricToGeodeticLatitude(psi), phi, 1e-15);
     EXPECT_NEAR(reducedToGeodeticLatitude(geodeticToReducedLatitude(phi)), phi, 1e-15);
+    // The definitions, on WGS84 and on a strongly flattened ellipsoid: tan(geocentric) = (1 - f)^2
+    // tan(geodetic) and tan(reduced) = (1 - f) tan(geodetic). The point (a cos(beta), b sin(beta)) of
+    // the meridian ellipse has geocentric latitude atan2(b sin(beta), a cos(beta)).
+    for (const Ellipsoid& ell : {
+             Ellipsoid::wgs84(),
+             Ellipsoid{1.0, 0.3}
+    }) {
+        const double k = 1.0 - ell.f;
+        for (double lat : {-1.2, -0.3, 0.4, 1.0, 1.5}) {
+            SCOPED_TRACE(testing::Message() << "f = " << ell.f << ", lat = " << lat);
+            const double beta = std::atan(k * std::tan(lat));
+            EXPECT_NEAR(geodeticToGeocentricLatitude(lat, ell), std::atan(k * k * std::tan(lat)), 1e-15);
+            EXPECT_NEAR(geodeticToReducedLatitude(lat, ell), beta, 1e-15);
+            EXPECT_NEAR(reducedToGeodeticLatitude(beta, ell), lat, 1e-15);
+            EXPECT_NEAR(geocentricToGeodeticLatitude(std::atan2(ell.b() * std::sin(beta), ell.a * std::cos(beta)), ell),
+                        lat,
+                        1e-15);
+        }
+    }
     const Spherical s = cartesianToSpherical({1, 1, std::sqrt(2.0)});
     EXPECT_NEAR(s.lat, deg2rad(45.0), 1e-15);
     EXPECT_NEAR(s.lon, deg2rad(45.0), 1e-15);
@@ -197,30 +288,72 @@ TEST(Geodetic, Latitudes) {
 }
 
 TEST(LocalFrames, EnuNedAer) {
-    const Geodetic o{deg2rad(40.0), deg2rad(-105.0), 1600.0};
-    expectOrthonormal(ecefToEnuMatrix(o.lat, o.lon));
-    expectOrthonormal(ecefToNedMatrix(o.lat, o.lon));
-    const Vec3 base = geodeticToEcef(o);
-    // Up is along the ellipsoid normal.
-    const Vec3 up = ecefToEnuMatrix(o.lat, o.lon).row(2);
-    expectVecNear(ecefToEnu(base + 1000.0 * up, o), {0, 0, 1000}, 1e-6);
-    expectVecNear(ecefToNed(base + 1000.0 * up, o), {0, 0, -1000}, 1e-6);
-    // A point due north at the horizon has azimuth 0.
-    const Vec3 north = ecefToEnuMatrix(o.lat, o.lon).row(1);
-    const Aer  a     = ecefToAer(base + 5000.0 * north, o);
-    EXPECT_NEAR(wrapPi(a.az), 0.0, 1e-12);
-    EXPECT_NEAR(a.el, 0.0, 1e-12);
-    EXPECT_NEAR(a.range, 5000.0, 1e-6);
-    // East is 90 deg; round trips.
+    // "Up" and "north" from geometry written here, not from the matrices under test: up is the outward
+    // normal of the ellipsoid (x^2 + y^2) / a^2 + z^2 / b^2 = 1 at the origin's foot, the gradient
+    // (x / a^2, y / a^2, z / b^2); north is the direction of the polar axis within the horizontal plane;
+    // east = north x up. Both WGS84 and a more flattened ellipsoid (1/f = 150).
+    for (const Ellipsoid& ell : {
+             Ellipsoid::wgs84(),
+             Ellipsoid{6.4e6, 1.0 / 150.0}
+    }) {
+        SCOPED_TRACE(testing::Message() << "f = " << ell.f);
+        const Geodetic o{deg2rad(40.0), deg2rad(-105.0), 1600.0};
+        const Vec3     foot  = geodeticToEcef({o.lat, o.lon, 0.0}, ell);
+        const Vec3     base  = geodeticToEcef(o, ell);
+        const double   b     = ell.b();
+        const Vec3     up    = normalized(Vec3{foot.x / (ell.a * ell.a), foot.y / (ell.a * ell.a), foot.z / (b * b)});
+        const Vec3     north = normalized(Vec3{0, 0, 1} - up.z * up);
+        const Vec3     east  = cross(north, up);
+        // 1e-15: rounding in unit vectors (the normal is computed from coordinates of 6e6 m).
+        expectMatNear(ecefToEnuMatrix(o.lat, o.lon), Mat3::fromRows(east, north, up), 1e-15, "ENU rows");
+        expectMatNear(ecefToNedMatrix(o.lat, o.lon), Mat3::fromRows(north, east, -up), 1e-15, "NED rows");
+        expectVecNear(base, foot + o.h * up, 1e-8, "height along the normal");
+
+        // An arbitrary offset, its components along the three axes, and its look angles.
+        const Vec3 d{-3456.0, 2345.0, 1234.0};
+        const Vec3 enu{dot(d, east), dot(d, north), dot(d, up)};
+        // 1e-8 m: rounding of coordinates of 6e6 m (1e-9 m) subtracted from one another.
+        expectVecNear(ecefToEnu(base + d, o, ell), enu, 1e-8, "ENU");
+        expectVecNear(ecefToNed(base + d, o, ell), {enu.y, enu.x, -enu.z}, 1e-8, "NED");
+        expectVecNear(enuToEcef(enu, o, ell), base + d, 1e-8, "ENU to ECEF");
+        expectVecNear(nedToEcef({enu.y, enu.x, -enu.z}, o, ell), base + d, 1e-8, "NED to ECEF");
+        const Aer a = ecefToAer(base + d, o, ell);
+        EXPECT_NEAR(a.az, wrapTwoPi(std::atan2(enu.x, enu.y)), 1e-12); // 1e-8 m seen from 4 km
+        EXPECT_NEAR(a.el, std::asin(enu.z / norm(d)), 1e-12);
+        EXPECT_NEAR(a.range, norm(d), 1e-8);
+        expectVecNear(aerToEcef(a, o, ell), base + d, 1e-8, "AER to ECEF");
+
+        // Due north, east, south and west on the horizon, and straight up.
+        const double r = 5000.0;
+        EXPECT_NEAR(wrapPi(ecefToAer(base + r * north, o, ell).az), 0.0, 1e-12);
+        EXPECT_NEAR(ecefToAer(base + r * east, o, ell).az, constants::halfPi, 1e-12);
+        EXPECT_NEAR(ecefToAer(base - r * north, o, ell).az, constants::pi, 1e-12);
+        EXPECT_NEAR(ecefToAer(base - r * east, o, ell).az, 1.5 * constants::pi, 1e-12);
+        EXPECT_NEAR(ecefToAer(base + r * north, o, ell).el, 0.0, 1e-12);
+        EXPECT_NEAR(ecefToAer(base + r * up, o, ell).el, constants::halfPi, 1e-12);
+    }
+    // enuToAer and aerToEnu with the angles written out.
     EXPECT_NEAR(enuToAer({10, 0, 0}).az, constants::halfPi, 1e-15);
     EXPECT_NEAR(enuToAer({-10, 0, 0}).az, 1.5 * constants::pi, 1e-15);
     const Aer x{deg2rad(123.0), deg2rad(17.0), 1.2e6};
-    const Aer y = ecefToAer(aerToEcef(x, o), o);
-    EXPECT_NEAR(y.az, x.az, 1e-12);
-    EXPECT_NEAR(y.el, x.el, 1e-12);
-    EXPECT_NEAR(y.range, x.range, 1e-6);
-    const Vec3 p{1234.0, -567.0, 89.0};
-    expectVecNear(nedToEcef(ecefToNed(enuToEcef(p, o), o), o), enuToEcef(p, o), 1e-6);
+    expectVecNear(aerToEnu(x),
+                  {x.range * std::cos(x.el) * std::sin(x.az),
+                   x.range * std::cos(x.el) * std::cos(x.az),
+                   x.range * std::sin(x.el)},
+                  1e-9,
+                  "AER to ENU");
+}
+
+TEST(LocalFrames, AtAPoleNorthPointsAlongTheOriginsMeridian) {
+    // At the north pole every direction is south; the ENU axes there are the limit of those of a point
+    // just short of the pole on the meridian `lon`: north is -(cos lon, sin lon, 0), east is
+    // (-sin lon, cos lon, 0), up is z. At the south pole north is +(cos lon, sin lon, 0) and up is -z.
+    const double lon = 0.7;
+    const Vec3   east{-std::sin(lon), std::cos(lon), 0.0};
+    const Vec3   alongMeridian{std::cos(lon), std::sin(lon), 0.0};
+    // 1e-15: cos(pi/2) is 6e-17, not 0.
+    expectMatNear(ecefToEnuMatrix(constants::halfPi, lon), Mat3::fromRows(east, -alongMeridian, {0, 0, 1}), 1e-15);
+    expectMatNear(ecefToEnuMatrix(-constants::halfPi, lon), Mat3::fromRows(east, alongMeridian, {0, 0, -1}), 1e-15);
 }
 
 TEST(Geodesic, VincentyFlindersPeakToBuninyong) {
@@ -479,12 +612,15 @@ TEST(Helmert, TransformAndInverse) {
     expectVecNear(y,
                   {x.x + 1.0 + 1e-9 * x.x - rz * x.y, x.y - 2.0 + 1e-9 * x.y + rz * x.x, x.z + 3.0 + 1e-9 * x.z},
                   1e-9);
-    expectVecNear(helmertTransform(y, inverse(p)), x, 1e-4);
+    // inverse() negates the parameters, which undoes the transformation to first order; what is left
+    // is second order (s t, r t, s^2 x, r^2 x, r s x), about 2e-8 m here (measured 1.1e-8 m).
+    expectVecNear(helmertTransform(y, inverse(p)), x, 5e-8);
     // Coordinate-frame convention flips rotation sign only.
     HelmertParams cf = p;
     cf.convention    = HelmertConvention::CoordinateFrame;
-    const Vec3 yc    = helmertTransform(x, cf);
-    EXPECT_NEAR(yc.x, x.x + 1.0 + 1e-9 * x.x + rz * x.y, 1e-9);
+    expectVecNear(helmertTransform(x, cf),
+                  {x.x + 1.0 + 1e-9 * x.x + rz * x.y, x.y - 2.0 + 1e-9 * x.y - rz * x.x, x.z + 3.0 + 1e-9 * x.z},
+                  1e-9);
     // Time-dependent parameters.
     HelmertTimeDependent h{
         p,
