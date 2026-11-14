@@ -40,16 +40,19 @@ Things to know about `Sgp4`:
 
 ## Passes over a ground station
 
-`findPasses` takes any function giving the satellite's ITRS state at a time, so it works with SGP4,
-`NumericalPropagator` or an ephemeris. It samples the elevation and refines rise, set and maximum with
-Brent's method:
+`findPasses` takes the satellite as a `Trajectory` (`orbit/trajectory.h`): a state as a function of
+time that carries its frame. It needs the Earth-fixed ITRS, and throws `astro::Error` for any other
+frame. `sgp4Trajectory(sgp4, eop, Frame::ITRS)` gives one from SGP4; any other source works as
+`{Frame::ITRS, function}`, for example a `NumericalPropagator` whose states are converted with
+`gcrsToItrs`. It samples the elevation and refines rise, set and maximum with Brent's method:
 
 <!-- snippet: examples/sgp4_passes.cpp#passes -->
 ```cpp
-// Passes above 10 deg over a station during the day after the epoch.
-const Geodetic station{degToRad(38.8895), degToRad(-77.0353), 100.0};
-const auto     passes =
-    findPasses(sgp4ItrsFunction(sgp4, eop), station, sgp4.epoch(), sgp4.epoch() + 86400.0, degToRad(10.0));
+// Passes above 10 deg over a station during the day after the epoch. findPasses needs the
+// satellite in the Earth-fixed ITRS: sgp4Trajectory converts the SGP4 output (TEME) to it.
+const Geodetic   station{degToRad(38.8895), degToRad(-77.0353), 100.0};
+const Trajectory iss    = sgp4Trajectory(sgp4, eop, Frame::ITRS);
+const auto       passes = findPasses(iss, station, sgp4.epoch(), sgp4.epoch() + 86400.0, degToRad(10.0));
 for (const Pass& p : passes) {
     std::cout << "  AOS " << p.aos.iso8601(0) << "  max el " << std::fixed << std::setprecision(1)
               << radToDeg(p.maxElevation) << " deg  LOS " << p.los.iso8601(0) << '\n';
@@ -62,7 +65,7 @@ for (const Pass& p : passes) {
 ```cpp
 // Look angles and the Doppler shift of a 437 MHz downlink at the first pass's closest approach.
 if (!passes.empty()) {
-    const LookAngles look = lookAngles(temeToItrs(sgp4.propagate(passes[0].tca), passes[0].tca, eop), station);
+    const LookAngles look = lookAngles(iss.state(passes[0].tca), station);
     std::cout << "  at maximum elevation: range " << look.range / 1e3 << " km, range rate " << look.rangeRate
               << " m/s, Doppler " << dopplerShift(437e6, look.rangeRate) << " Hz\n";
 }
@@ -83,10 +86,14 @@ std::cout << "satellite: " << s.state << ", illumination " << s.illumination << 
 `earthShadow` uses a cylindrical or conical (umbra, penumbra, annular, with the visible fraction of the
 solar disk) model [Montenbruck & Gill (2000), sec. 3.4](https://doi.org/10.1007/978-3-642-58351-3); `findEclipses` finds the
 entry and exit times over a span; `betaAngle` is the Sun's elevation above the orbit plane.
+`findEclipses(sat, sun, start, end)` takes two geocentric trajectories in the same frame (any frame:
+it uses positions only), such as `sgp4Trajectory(sgp4, eop, Frame::GCRS)` and
+`bodyTrajectory(eph, Body::Sun)`, which is in `Frame::GCRS`; different frames throw `astro::Error`.
 
 ## Ground track, footprint, line of sight
 
-`subSatellitePoint` and `groundTrack` give the point below the satellite; `coverageHalfAngle` and
+`subSatellitePoint` and `groundTrack` give the point below the satellite (`groundTrack` takes a
+`Trajectory` in `Frame::ITRS`, as `findPasses` does); `coverageHalfAngle` and
 `maxSlantRange` give the coverage for an altitude and minimum elevation, and `coverageFootprint` the circle
 of that half angle as latitude/longitude points; `lineOfSight` says whether the Earth's ellipsoid
 blocks the line between two points. All are in `satellite/ground.h`.

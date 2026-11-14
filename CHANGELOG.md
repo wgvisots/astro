@@ -4,6 +4,47 @@ All notable changes to astro. The format follows [Keep a Changelog](https://keep
 and the version numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html): before 1.0, a
 change that breaks existing code raises the minor number.
 
+## [0.3.0] - unreleased
+
+### Breaking changes
+
+- **A trajectory carries its frame.** "A state as a function of time" is one type, `Trajectory`,
+  now in its own header `astro/orbit/trajectory.h` (with `TrajectoryModel` and
+  `UncertainTrajectory`; `close_approach.h` includes it). Every constructor takes a `Frame`, with no
+  default, and `frame()` returns it. The two-body and secular models are inertial and throw
+  `astro::Error` for an Earth-fixed frame (TIRS, PEF, ITRS); a function may be in any frame.
+  `UncertainTrajectory(epoch, state, covariance, frame, ...)` takes the frame after the covariance.
+- **The search functions take a `Trajectory` and check its frame**, throwing `astro::Error` that
+  names the frame given and the one needed: `findPasses` and `groundTrack` need `Frame::ITRS`;
+  `findEclipses(sat, sun, ...)` needs one frame for both (any frame; it uses positions); and
+  `closestApproach`, `closeApproaches`, `assessConjunction` and `assessConjunctions` need one inertial
+  frame for both objects. The results for valid input are unchanged.
+- **Removed:** `ItrsStateFunction`, `sgp4ItrsFunction`, and the `std::function<Vec3(const Time&)>`
+  parameters of `groundTrack` and `findEclipses`. New helpers make the usual trajectories:
+  `sgp4Trajectory(sgp4, eop, frame)` (SGP4's TEME output converted to `frame`; in `Frame::ITRS` it
+  gives the same numbers as `sgp4ItrsFunction` did) and `bodyTrajectory(eph, target)` (an
+  ephemeris state, in `Frame::GCRS`).
+
+Before / after:
+
+```cpp
+// 0.2.0
+findPasses(sgp4ItrsFunction(sgp4, eop), site, start, end, mask);
+groundTrack([&](const Time& t) { return itrsPosition(t); }, start, end, 60.0);
+findEclipses(satGcrsPosition, sunGcrsPosition, start, end);
+closestApproach({epoch, state1}, {epoch, elements2}, start, end);
+UncertainTrajectory a{epoch, state1, P1};
+Trajectory numerical([&prop](const Time& t) { return prop.propagate(t); });
+
+// 0.3.0
+findPasses(sgp4Trajectory(sgp4, eop, Frame::ITRS), site, start, end, mask);
+groundTrack({Frame::ITRS, [&](const Time& t) { return itrsState(t); }}, start, end, 60.0);
+findEclipses(sgp4Trajectory(sgp4, eop, Frame::GCRS), bodyTrajectory(eph, Body::Sun), start, end);
+closestApproach({epoch, state1, Frame::GCRS}, {epoch, elements2, Frame::GCRS}, start, end);
+UncertainTrajectory a{epoch, state1, P1, Frame::GCRS};
+Trajectory numerical(Frame::GCRS, [&prop](const Time& t) { return prop.propagate(t); });
+```
+
 ## [0.2.0] - unreleased
 
 The first tagged release. It follows a top-to-bottom review of the library (November 2026), which

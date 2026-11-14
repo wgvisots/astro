@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include <functional>
 #include <iosfwd>
 #include <vector>
 
@@ -26,6 +25,7 @@
 
 #include "astro/core/constants.h"
 #include "astro/core/vec.h"
+#include "astro/orbit/trajectory.h"
 #include "astro/time/time.h"
 
 /// \file
@@ -85,22 +85,22 @@ struct EclipseInterval {
     bool umbral{true};  ///< false for a penumbral-only (grazing) eclipse
 };
 
-/// Find eclipse intervals in [start, end] given geocentric satellite and Sun
-/// position functions (same frame). Sampled every `step` s and refined with Brent.
-/// Eclipses already in progress at `start` or `end` are clipped to the window. An
-/// eclipse (or a sunlit gap) shorter than `step` can fall between two samples and be
-/// missed. The Sun's radius is the nominal one (constants::sunRadius).
-/// An empty window (end == start) returns no eclipse. Throws astro::Error if `end`
-/// is before `start`, if either time is NaN, if `step` is not positive and finite,
-/// or if the window holds more than 2e9 steps. Also throws if `end - start` does
-/// (one of the two in UT1, or a UTC time before 1960; see Time). An exception
-/// thrown by `satPosition` or `sunPosition` passes through.
-[[nodiscard]] std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>& satPosition,
-                                                        const std::function<Vec3(const Time&)>& sunPosition,
-                                                        const Time&                             start,
-                                                        const Time&                             end,
-                                                        double                                  step = 30.0,
-                                                        ShadowModel model       = ShadowModel::Conical,
-                                                        double      earthRadius = constants::wgs84A);
+/// Find the eclipses of satellite `sat` in [start, end], with the Sun's motion given by `sun`
+/// (e.g. `bodyTrajectory(eph, Body::Sun)`). Both are geocentric trajectories in the same frame, any
+/// frame (only their positions are used). Sampled every `step` s and refined with Brent's method.
+/// Eclipses already in progress at `start` or `end` are clipped to the window. An eclipse (or a
+/// sunlit gap) shorter than `step` can fall between two samples and be missed. The Sun's radius is
+/// the nominal one (constants::sunRadius). An empty window (end == start) returns no eclipse.
+/// Throws astro::Error if `sat` and `sun` are in different frames, if `end` is before `start`, if
+/// either time is NaN, if `step` is not positive and finite, or if the window holds more than 2e9
+/// steps. Also throws if `end - start` does (one of the two in UT1, or a UTC time before 1960; see
+/// Time). An exception thrown by `sat` or `sun` passes through.
+[[nodiscard]] std::vector<EclipseInterval> findEclipses(const Trajectory& sat,
+                                                        const Trajectory& sun,
+                                                        const Time&       start,
+                                                        const Time&       end,
+                                                        double            step        = 30.0,
+                                                        ShadowModel       model       = ShadowModel::Conical,
+                                                        double            earthRadius = constants::wgs84A);
 
 } // namespace astro

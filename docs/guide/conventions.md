@@ -56,7 +56,8 @@ Names follow one pattern, so that a reader who has learned one part of the libra
   is a member (`HelmertParams::inverse()`).
 - **A constructor from one number or state is `explicit`** (`JulianDate(jd1, jd2 = 0)`,
   `SecularPropagator(s0, ...)`), so a bare value never converts silently. (A `Trajectory` is made
-  implicitly from a function of time, so that one can be passed where a trajectory is expected.)
+  implicitly from its frame and a function of time, `{Frame::ITRS, function}`, so that the pair can
+  be passed where a trajectory is expected.)
 - **Every struct member has a default value**, so a default-constructed struct holds no garbage.
 
 ## Rotations
@@ -72,6 +73,14 @@ axes turned by theta. `Quat` converts to and from matrices (Shepperd's method
 A `Time` carries its time scale and converts on demand. States carry no frame tag, so the API
 asks for the frame where it matters (`NumericalPropagator::j2j4(..., Frame::GCRS)`,
 `TrackerOptions::frame`).
+
+A state as a function of time is a `Trajectory` (`orbit/trajectory.h`), and a trajectory carries
+its frame: every constructor takes one (`{epoch, state, Frame::GCRS}`, `{Frame::ITRS, function}`,
+`sgp4Trajectory(sgp4, eop, Frame::ITRS)`). The functions that take one check it and throw
+`astro::Error` naming the frame they got and the one they need: `findPasses` and `groundTrack` need
+`Frame::ITRS`, `findEclipses` the same frame for the satellite and the Sun, and `closestApproach`
+and the conjunction functions the same inertial frame for both objects. A trajectory in the wrong
+frame is then an error message, not a quietly different number.
 
 ## Propagators
 

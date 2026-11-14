@@ -20,6 +20,7 @@
 
 #include <cmath>
 
+#include "../orbit/trajectory_detail.h"
 #include "astro/astrometry/rise_set.h"
 #include "astro/core/error.h"
 #include "astro/frames/transform.h"
@@ -42,13 +43,14 @@ double dopplerShiftRelativistic(double f, double rangeRate) noexcept {
     return f * (std::sqrt((1.0 - b) / (1.0 + b)) - 1.0);
 }
 
-std::vector<Pass> findPasses(const ItrsStateFunction& sat,
-                             const Geodetic&          site,
-                             const Time&              start,
-                             const Time&              end,
-                             double                   minElevation,
-                             double                   step,
-                             const Ellipsoid&         ell) {
+std::vector<Pass> findPasses(const Trajectory& sat,
+                             const Geodetic&   site,
+                             const Time&       start,
+                             const Time&       end,
+                             double            minElevation,
+                             double            step,
+                             const Ellipsoid&  ell) {
+    detail::requireFrame(sat, Frame::ITRS, "findPasses", "the satellite trajectory");
     const double span = end - start;
     if (!std::isfinite(span) || span < 0.0) {
         throw Error("findPasses: start and end must be finite, with end not before start");
@@ -66,7 +68,7 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
     if (span == 0.0) {
         return passes; // an empty window holds no pass
     }
-    auto         elevation = [&](const Time& t) { return lookAngles(sat(t), site, ell).el; };
+    auto         elevation = [&](const Time& t) { return lookAngles(sat.state(t), site, ell).el; };
     const auto   events    = findElevationEvents(elevation, start, end, minElevation, step);
     const double elStart   = elevation(start);
     bool         open      = elStart > minElevation;
@@ -76,7 +78,7 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
         // the start, unless a transit inside the window is higher (the pass was still rising).
         cur.aos                = start;
         cur.startsBeforeWindow = true;
-        cur.aosAzimuth         = lookAngles(sat(start), site, ell).az;
+        cur.aosAzimuth         = lookAngles(sat.state(start), site, ell).az;
         cur.maxElevation       = elStart;
         cur.tca                = start;
     }
@@ -85,7 +87,7 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
         case SkyEventType::Rise:
             cur              = Pass{};
             cur.aos          = e.time;
-            cur.aosAzimuth   = lookAngles(sat(e.time), site, ell).az;
+            cur.aosAzimuth   = lookAngles(sat.state(e.time), site, ell).az;
             cur.maxElevation = -1e9;
             open             = true;
             break;
@@ -98,7 +100,7 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
         case SkyEventType::Set:
             if (open) {
                 cur.los        = e.time;
-                cur.losAzimuth = lookAngles(sat(e.time), site, ell).az;
+                cur.losAzimuth = lookAngles(sat.state(e.time), site, ell).az;
                 if (cur.maxElevation < minElevation) { // no interior maximum sampled: use the endpoints
                     cur.maxElevation = minElevation;
                     cur.tca          = cur.aos + 0.5 * (cur.los - cur.aos);
@@ -114,7 +116,7 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
         // within the window unless a transit (or the start) was higher.
         cur.los             = end;
         cur.endsAfterWindow = true;
-        cur.losAzimuth      = lookAngles(sat(end), site, ell).az;
+        cur.losAzimuth      = lookAngles(sat.state(end), site, ell).az;
         const double elEnd  = elevation(end);
         if (elEnd > cur.maxElevation) {
             cur.maxElevation = elEnd;
@@ -123,13 +125,6 @@ std::vector<Pass> findPasses(const ItrsStateFunction& sat,
         passes.push_back(cur);
     }
     return passes;
-}
-
-ItrsStateFunction sgp4ItrsFunction(const Sgp4& sgp4, const EopProvider& eop) {
-    return [&sgp4, &eop](const Time& t) {
-        const FrameTransformer ft(t, eop, {.model = PrecessionNutationModel::IAU2006_2000B});
-        return ft.transform(sgp4.propagate(t), Frame::TEME, Frame::ITRS);
-    };
 }
 
 } // namespace astro

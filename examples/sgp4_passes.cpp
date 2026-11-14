@@ -26,6 +26,7 @@
 #include "astro/frames/transform.h"
 #include "astro/orbit/sgp4.h"
 #include "astro/orbit/tle.h"
+#include "astro/orbit/trajectory.h"
 #include "astro/satellite/look.h"
 
 using namespace astro;
@@ -45,10 +46,11 @@ int main() {
     //! [sgp4]
 
     //! [passes]
-    // Passes above 10 deg over a station during the day after the epoch.
-    const Geodetic station{degToRad(38.8895), degToRad(-77.0353), 100.0};
-    const auto     passes =
-        findPasses(sgp4ItrsFunction(sgp4, eop), station, sgp4.epoch(), sgp4.epoch() + 86400.0, degToRad(10.0));
+    // Passes above 10 deg over a station during the day after the epoch. findPasses needs the
+    // satellite in the Earth-fixed ITRS: sgp4Trajectory converts the SGP4 output (TEME) to it.
+    const Geodetic   station{degToRad(38.8895), degToRad(-77.0353), 100.0};
+    const Trajectory iss    = sgp4Trajectory(sgp4, eop, Frame::ITRS);
+    const auto       passes = findPasses(iss, station, sgp4.epoch(), sgp4.epoch() + 86400.0, degToRad(10.0));
     for (const Pass& p : passes) {
         std::cout << "  AOS " << p.aos.iso8601(0) << "  max el " << std::fixed << std::setprecision(1)
                   << radToDeg(p.maxElevation) << " deg  LOS " << p.los.iso8601(0) << '\n';
@@ -58,7 +60,7 @@ int main() {
     //! [look]
     // Look angles and the Doppler shift of a 437 MHz downlink at the first pass's closest approach.
     if (!passes.empty()) {
-        const LookAngles look = lookAngles(temeToItrs(sgp4.propagate(passes[0].tca), passes[0].tca, eop), station);
+        const LookAngles look = lookAngles(iss.state(passes[0].tca), station);
         std::cout << "  at maximum elevation: range " << look.range / 1e3 << " km, range rate " << look.rangeRate
                   << " m/s, Doppler " << dopplerShift(437e6, look.rangeRate) << " Hz\n";
     }
