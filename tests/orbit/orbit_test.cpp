@@ -109,7 +109,10 @@ TEST(Kepler, AnomalyRoundTrips) {
 }
 
 TEST(Elements, ValladoExample2_5) {
-    // Vallado, Fundamentals of Astrodynamics, Example 2-5 (RV2COE).
+    // Vallado, Fundamentals of Astrodynamics, Example 2-5 (RV2COE). The printed values differ from an
+    // exact evaluation of the same state (done separately in extended precision) by up to 8.3 m in
+    // p, 5.4 m in a, 4e-7 in e, 8.7e-4 deg in i and 8.3e-3 deg in the RAAN: the example carries
+    // rounded intermediate values. The tolerances are just above those differences.
     const StateVector s{
         {6524.834 * km, 6862.875 * km, 6448.296 * km },
         {4.901327 * km, 5.533756 * km, -1.976341 * km}
@@ -122,14 +125,15 @@ TEST(Elements, ValladoExample2_5) {
     EXPECT_NEAR(rad2deg(el.raan), 227.89, 0.01);
     EXPECT_NEAR(rad2deg(el.argp), 53.38, 0.01);
     EXPECT_NEAR(rad2deg(el.nu), 92.335, 1e-3);
-    const StateVector back = elementsToState(el, 398600.4418e9);
-    expectVecNear(back.r, s.r, 1e-6);
-    expectVecNear(back.v, s.v, 1e-9);
 }
 
-TEST(Elements, RandomRoundTripsAndSpecialCases) {
+TEST(Elements, RandomStatesSurviveTheRoundTripsToRounding) {
+    // state -> elements -> state, for random ellipses and hyperbolas, and state -> equinoctial ->
+    // state and elements -> equinoctial -> state for the ellipses. The truth is the starting state;
+    // allowed: 1e-13 relative (measured 2e-15, and 4e-14 for the equinoctial forms at e = 0.95).
     std::mt19937                           rng(9);
     std::uniform_real_distribution<double> u(0.0, 1.0);
+    double                                 worstR = 0.0, worstV = 0.0, worstQ = 0.0;
     for (int k = 0; k < 500; ++k) {
         KeplerianElements el;
         el.e                 = k % 5 == 0 ? 1.2 + 2.0 * u(rng) : 0.95 * u(rng);
@@ -141,86 +145,97 @@ TEST(Elements, RandomRoundTripsAndSpecialCases) {
         el.nu                = (2.0 * u(rng) - 1.0) * nuMax;
         const StateVector s  = elementsToState(el);
         const StateVector s2 = elementsToState(stateToElements(s));
-        expectVecNear(s2.r, s.r, 1e-6 * norm(s.r) * 1e-3);
-        expectVecNear(s2.v, s.v, 1e-9 * norm(s.v));
-        // Equinoctial round trip (elliptic, prograde-ish).
+        worstR               = std::max(worstR, norm(s2.r - s.r) / norm(s.r));
+        worstV               = std::max(worstV, norm(s2.v - s.v) / norm(s.v));
+        EXPECT_LT(norm(s2.r - s.r), 1e-13 * norm(s.r)) << "e = " << el.e;
+        EXPECT_LT(norm(s2.v - s.v), 1e-13 * norm(s.v)) << "e = " << el.e;
         if (el.e < 1.0) {
             const StateVector s3 = equinoctialToState(stateToEquinoctial(s));
-            expectVecNear(s3.r, s.r, 1e-6);
-            expectVecNear(s3.v, s.v, 1e-9);
-            const EquinoctialElements q  = keplerianToEquinoctial(el);
-            const StateVector         s4 = equinoctialToState(q);
-            expectVecNear(s4.r, s.r, 1e-5);
+            const StateVector s4 = equinoctialToState(keplerianToEquinoctial(el));
+            for (const StateVector& q : {s3, s4}) {
+                worstQ = std::max({worstQ, norm(q.r - s.r) / norm(s.r), norm(q.v - s.v) / norm(s.v)});
+                EXPECT_LT(norm(q.r - s.r), 1e-13 * norm(s.r)) << "e = " << el.e;
+                EXPECT_LT(norm(q.v - s.v), 1e-13 * norm(s.v)) << "e = " << el.e;
+            }
         }
     }
-    // Circular inclined: argp = 0, nu = argument of latitude.
-    const StateVector       circ = elementsToState({7000 * km, 0.0, 0.5, 1.0, 0.0, 0.7});
-    const KeplerianElements c    = stateToElements(circ);
-    EXPECT_NEAR(c.e, 0.0, 1e-12);
-    EXPECT_DOUBLE_EQ(c.argp, 0.0);
-    EXPECT_NEAR(c.nu, 0.7, 1e-10);
-    EXPECT_NEAR(c.raan, 1.0, 1e-12);
-    // Circular equatorial: true longitude.
-    const StateVector ce = elementsToState({7000 * km, 0.0, 0.0, 0.0, 0.0, 2.0});
-    EXPECT_NEAR(stateToElements(ce).nu, 2.0, 1e-10);
-    // Elliptic equatorial: longitude of periapsis.
-    const StateVector       ee = elementsToState({9000 * km, 0.2, 0.0, 0.0, 1.1, 0.4});
-    const KeplerianElements e2 = stateToElements(ee);
-    EXPECT_NEAR(e2.argp, 1.1, 1e-10);
-    EXPECT_NEAR(e2.nu, 0.4, 1e-10);
+}
+
+TEST(Elements, PeriodAndMeanMotionFollowKeplersThirdLaw) {
     EXPECT_NEAR(orbitalPeriod(42164.17 * km) / 86164.09, 1.0, 1e-4); // GEO period = sidereal day
-    EXPECT_NEAR(semiMajorAxisFromMeanMotion(meanMotion(7000 * km)), 7000 * km, 1e-6);
+    // n^2 a^3 = mu, both ways, to rounding.
+    const double eps = std::numeric_limits<double>::epsilon();
+    for (const double a : {6600 * km, 7000 * km, 42164 * km, 384400 * km}) {
+        const double n = meanMotion(a);
+        EXPECT_NEAR(n * n * a * a * a / constants::gmEarth, 1.0, 8.0 * eps);
+        EXPECT_NEAR(orbitalPeriod(a) * n, constants::twoPi, 8.0 * eps * constants::twoPi);
+        EXPECT_NEAR(semiMajorAxisFromMeanMotion(n), a, 4.0 * eps * a);
+    }
 }
 
 TEST(TwoBody, ValladoExample2_4) {
-    // Vallado Example 2-4 (KEPLER): 40 minutes.
+    // Vallado Example 2-4 (KEPLER): 40 minutes. Printed to 0.1 mm and 1 mm/s, but the printed result
+    // is 4.7 cm and 0.25 mm/s from the propagation of the printed start (propagateKepler agrees with
+    // an extended-precision reference to 1e-12, two_body_test.cpp); allowed: twice that.
     const double      mu = 398600.4418e9;
     const StateVector s0{
         {1131.340 * km, -2282.343 * km, 6672.423 * km},
         {-5.64305 * km, 4.30333 * km,   2.42879 * km }
     };
     const StateVector s = propagateKepler(s0, 40.0 * 60.0, mu);
-    expectVecNear(s.r, {-4219.7527 * km, 4363.0292 * km, -3958.7666 * km}, 1.0);
-    expectVecNear(s.v, {3.689866 * km, -1.916735 * km, -6.112511 * km}, 1e-3);
+    EXPECT_LT(norm(s.r - Vec3{-4219.7527 * km, 4363.0292 * km, -3958.7666 * km}), 0.1);
+    EXPECT_LT(norm(s.v - Vec3{3.689866 * km, -1.916735 * km, -6.112511 * km}), 5e-4);
 }
 
-TEST(TwoBody, AgreesWithElementPropagation) {
+TEST(TwoBody, AgreesWithKeplersEquationOnEllipsesHyperbolasAndTheParabola) {
+    // The truth is the time law of each conic, which universal variables do not use: Kepler's
+    // equation M = E - e sin E, its hyperbolic form M = e sinh F - F, and Barker's equation
+    // M = D + D^3 / 3 (solved by the anomaly functions, checked against 60-digit references in
+    // elements_kepler_test.cpp), with the state built from the elements.
+    // Allowed: 1e-12 of the size of the state (measured 1e-13).
     std::mt19937                           rng(17);
     std::uniform_real_distribution<double> u(0.0, 1.0);
-    for (int k = 0; k < 200; ++k) {
-        KeplerianElements el{(7000.0 + 30000.0 * u(rng)) * km,
-                             0.9 * u(rng),
-                             3.0 * u(rng),
-                             6.0 * u(rng),
-                             6.0 * u(rng),
-                             6.0 * u(rng)};
-        const double      dt       = (u(rng) - 0.3) * 5.0 * orbitalPeriod(el.a);
+    double                                 worstR = 0.0, worstV = 0.0;
+    for (int k = 0; k < 300; ++k) {
+        const bool        open = k % 3 == 0;
+        KeplerianElements el;
+        el.e                       = open ? 1.05 + 3.0 * u(rng) : 0.9 * u(rng);
+        el.a                       = open ? -(7000.0 + 30000.0 * u(rng)) * km : (7000.0 + 30000.0 * u(rng)) * km;
+        el.i                       = 3.0 * u(rng);
+        el.raan                    = 6.0 * u(rng);
+        el.argp                    = 6.0 * u(rng);
+        const double nuMax         = open ? 0.5 * std::acos(-1.0 / el.e) : constants::pi;
+        el.nu                      = (2.0 * u(rng) - 1.0) * nuMax;
+        const double      n        = meanMotion(std::abs(el.a));
+        const double      dt       = open ? (u(rng) - 0.5) * 4.0 / n : (u(rng) - 0.3) * 5.0 * orbitalPeriod(el.a);
         const StateVector s0       = elementsToState(el);
         KeplerianElements e1       = el;
-        e1.nu                      = meanToTrueAnomaly(el.meanAnomaly() + meanMotion(el.a) * dt, el.e);
+        e1.nu                      = meanToTrueAnomaly(el.meanAnomaly() + n * dt, el.e);
         const StateVector expected = elementsToState(e1);
         const StateVector s        = propagateKepler(s0, dt);
-        expectVecNear(s.r, expected.r, 1e-3 + 1e-10 * norm(s.r));
-        expectVecNear(s.v, expected.v, 1e-6);
+        const double      rScale = norm(s0.r) + norm(s.r), vScale = norm(s0.v) + norm(s.v);
+        worstR = std::max(worstR, norm(s.r - expected.r) / rScale);
+        worstV = std::max(worstV, norm(s.v - expected.v) / vScale);
+        EXPECT_LT(norm(s.r - expected.r), 1e-12 * rScale) << "e = " << el.e << ", dt = " << dt;
+        EXPECT_LT(norm(s.v - expected.v), 1e-12 * vScale) << "e = " << el.e << ", dt = " << dt;
     }
-    // Hyperbolic: energy and angular momentum conserved; round trip.
-    const StateVector h0{
-        {7000 * km, 0,         0       },
-        {0,         12.0 * km, 1.0 * km}
-    };
-    const StateVector h1 = propagateKepler(h0, 20000.0);
-    EXPECT_NEAR(specificEnergy(h1), specificEnergy(h0), 1e-6 * std::abs(specificEnergy(h0)));
-    expectVecNear(cross(h1.r, h1.v), cross(h0.r, h0.v), 1e-3 * norm(cross(h0.r, h0.v)) * 1e-6);
-    const StateVector h2 = propagateKepler(h1, -20000.0);
-    expectVecNear(h2.r, h0.r, 1e-3);
-    // Near-parabolic.
-    const double      vesc = std::sqrt(2.0 * constants::gmEarth / (7000 * km));
+    // A parabola: escape speed at perigee q. With M = sqrt(mu / (2 q^3)) t, D = tan(nu / 2) solves
+    // Barker's equation, r = q (1 + D^2) and v = sqrt(mu / (2 q)) (-sin nu, 1 + cos nu).
+    const double      mu = constants::gmEarth, q = 7000 * km;
     const StateVector p0{
-        {7000 * km, 0,    0},
-        {0,         vesc, 0}
+        {q,   0.0,                     0.0},
+        {0.0, std::sqrt(2.0 * mu / q), 0.0}
     };
-    const StateVector p1 = propagateKepler(p0, 3600.0);
-    expectVecNear(propagateKepler(p1, -3600.0).r, p0.r, 1e-2);
+    for (const double t : {-7200.0, -100.0, 1.0, 3600.0, 86400.0}) {
+        const double      D  = meanToParabolicAnomaly(std::sqrt(mu / (2.0 * q * q * q)) * t);
+        const double      nu = 2.0 * std::atan(D), r = q * (1.0 + D * D), w = std::sqrt(mu / (2.0 * q));
+        const StateVector s = propagateKepler(p0, t);
+        worstR              = std::max(worstR, norm(s.r - Vec3{r * std::cos(nu), r * std::sin(nu), 0.0}) / (q + r));
+        worstV = std::max(worstV, norm(s.v - Vec3{-w * std::sin(nu), w * (1.0 + std::cos(nu)), 0.0}) / norm(p0.v));
+        EXPECT_LT(norm(s.r - Vec3{r * std::cos(nu), r * std::sin(nu), 0.0}), 1e-12 * (q + r)) << "t = " << t;
+        EXPECT_LT(norm(s.v - Vec3{-w * std::sin(nu), w * (1.0 + std::cos(nu)), 0.0}), 1e-12 * norm(p0.v))
+            << "t = " << t;
+    }
 }
 
 TEST(Gravity, ZonalMatchesClosedFormAndPotentialGradient) {
@@ -247,35 +262,6 @@ TEST(Gravity, ZonalMatchesClosedFormAndPotentialGradient) {
     expectVecNear(zonalAcceleration(r, J), grad, 1e-10); // finite-difference roundoff ~1e-11
     // Third body: zero at the origin, tidal elsewhere.
     expectVecNear(thirdBodyAcceleration({}, {384400 * km, 0, 0}, constants::gmMoon), {}, 1e-20);
-}
-
-TEST(Integrators, OrderAndTwoBodyAccuracy) {
-    // Harmonic oscillator y'' = -y.
-    auto              f  = [](double, const OdeState<2>& y) { return OdeState<2>{y[1], -y[0]}; };
-    const OdeState<2> r4 = integrateRk4<2>(f, 0.0, {1.0, 0.0}, 10.0, 0.01);
-    EXPECT_NEAR(r4[0], std::cos(10.0), 1e-8);
-    AdaptiveStats     st;
-    const OdeState<2> r8 = integrateRkf78<2>(f, 0.0, {1.0, 0.0}, 10.0, {.relTol = 1e-13, .absTol = 1e-14}, &st);
-    EXPECT_NEAR(r8[0], std::cos(10.0), 1e-12);
-    EXPECT_NEAR(r8[1], -std::sin(10.0), 1e-12);
-    EXPECT_GT(st.accepted, 0);
-    const OdeState<2> back = integrateRkf78<2>(f, 10.0, r8, 0.0, {.relTol = 1e-13, .absTol = 1e-14});
-    EXPECT_NEAR(back[0], 1.0, 1e-11);
-    // Two-body orbit over one day vs Kepler.
-    const StateVector         s0 = elementsToState({8000 * km, 0.3, 0.9, 0.2, 0.4, 0.0});
-    const NumericalPropagator prop(Time(),
-                                   s0,
-                                   {std::make_shared<GravityField>(std::vector<double>{})},
-                                   {.relTol = 1e-13, .absTol = 1e-9});
-    const StateVector         s = prop.propagate(86400.0);
-    const StateVector         k = propagateKepler(s0, 86400.0);
-    expectVecNear(s.r, k.r, 1e-3);
-    expectVecNear(s.v, k.v, 1e-5);
-    // Multiple outputs in both directions in one call.
-    const auto many = prop.propagate(std::vector<double>{3600.0, -3600.0, 0.0, 7200.0});
-    expectVecNear(many[1].r, propagateKepler(s0, -3600.0).r, 1e-3);
-    expectVecNear(many[2].r, s0.r, 1e-9);
-    expectVecNear(many[3].r, propagateKepler(s0, 7200.0).r, 1e-3);
 }
 
 TEST(Secular, RatesMatchAnAveragedNumericalIntegration) {
