@@ -22,27 +22,14 @@
 
 #include "astro/core/vec.h"
 #include "astro/geodesy/geodetic.h"
+#include "astro/geodesy/local.h"
 #include "astro/orbit/trajectory.h"
 #include "astro/time/time.h"
 
 /// \file
-/// Ground-station geometry: look angles, range rate, Doppler, and pass prediction.
+/// Ground-station geometry: Doppler shift and pass prediction. The look angles and range rate
+/// from a site to a satellite are `ecefToLookAngles` (astro/geodesy/local.h).
 namespace astro {
-
-/// Topocentric look angles from a site to a satellite, relative to the site's geodetic horizon
-/// (geometric: no refraction or light time).
-struct LookAngles {
-    double az{0.0};        ///< azimuth, rad [0, 2pi), clockwise from north
-    double el{0.0};        ///< elevation, rad
-    double range{0.0};     ///< m
-    double rangeRate{0.0}; ///< m/s, positive receding
-};
-
-/// Look angles from a site to a satellite whose state is given in the ITRS (ECEF). For a
-/// satellite exactly at the site (zero range) the direction and the range rate do not exist:
-/// the range rate is NaN.
-[[nodiscard]] LookAngles
-lookAngles(const StateVector& satItrs, const Geodetic& site, const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Received-frequency shift (Hz) for transmit frequency `f` and range rate:
 /// first order, -f * rangeRate / c.

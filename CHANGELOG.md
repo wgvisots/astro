@@ -24,6 +24,14 @@ change that breaks existing code raises the minor number.
   `sgp4Trajectory(sgp4, eop, frame)` (SGP4's TEME output converted to `frame`; in `Frame::ITRS` it
   gives the same numbers as `sgp4ItrsFunction` did) and `bodyTrajectory(eph, target)` (an
   ephemeris state, in `Frame::GCRS`).
+- **One look-angle type, `LookAngles`** (`astro/geodesy/local.h`), with `az`, `el`, `range` and
+  `rangeRate`. It replaces `Aer` and moves from `astro/satellite/look.h` (which includes it).
+  `rangeRate` is NaN unless the function was given a velocity, so a missing value never reads as
+  "not moving". The functions follow the `xToY` rule: `enuToAer` is `enuToLookAngles`, `aerToEnu`
+  is `lookAnglesToEnu`, `ecefToAer` is `ecefToLookAngles`, `aerToEcef` is `lookAnglesToEcef`, and
+  `lookAngles(satItrs, site, ell)` is the `StateVector` overload `ecefToLookAngles(satItrs, site,
+  ell)`. `starObserved`, `bodyObserved` and `gcrsToTopocentric` return `LookAngles` with
+  `rangeRate` NaN. Every computed number is unchanged.
 
 Before / after:
 
@@ -35,6 +43,8 @@ findEclipses(satGcrsPosition, sunGcrsPosition, start, end);
 closestApproach({epoch, state1}, {epoch, elements2}, start, end);
 UncertainTrajectory a{epoch, state1, P1};
 Trajectory numerical([&prop](const Time& t) { return prop.propagate(t); });
+Aer        aer  = ecefToAer(target, site);
+LookAngles look = lookAngles(satItrs, site);
 
 // 0.3.0
 findPasses(sgp4Trajectory(sgp4, eop, Frame::ITRS), site, start, end, mask);
@@ -43,6 +53,8 @@ findEclipses(sgp4Trajectory(sgp4, eop, Frame::GCRS), bodyTrajectory(eph, Body::S
 closestApproach({epoch, state1, Frame::GCRS}, {epoch, elements2, Frame::GCRS}, start, end);
 UncertainTrajectory a{epoch, state1, P1, Frame::GCRS};
 Trajectory numerical(Frame::GCRS, [&prop](const Time& t) { return prop.propagate(t); });
+LookAngles aer  = ecefToLookAngles(target, site); // aer.rangeRate is NaN
+LookAngles look = ecefToLookAngles(satItrs, site);
 ```
 
 ## [0.2.0] - unreleased

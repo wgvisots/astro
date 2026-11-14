@@ -40,12 +40,13 @@ int main() {
     std::cout << "lat " << radToDeg(back.lat) << " deg, lon " << radToDeg(back.lon) << " deg, h " << back.h << " m\n";
     //! [ecef]
 
-    //! [aer]
+    //! [look_angles]
     // Where is a point 10 km east, 5 km north and 3 km up, as seen from the site?
-    const Vec3 target = enuToEcef({10e3, 5e3, 3e3}, site);
-    const Aer  aer    = enuToAer(ecefToEnu(target, site));
-    std::cout << "az " << radToDeg(aer.az) << " deg, el " << radToDeg(aer.el) << " deg, range " << aer.range << " m\n";
-    //! [aer]
+    const Vec3       target = enuToEcef({10e3, 5e3, 3e3}, site);
+    const LookAngles look   = ecefToLookAngles(target, site);
+    std::cout << "az " << radToDeg(look.az) << " deg, el " << radToDeg(look.el) << " deg, range " << look.range
+              << " m\n";
+    //! [look_angles]
 
     //! [geodesic]
     // Ellipsoidal distance and initial azimuth from Washington to Paris (Vincenty).

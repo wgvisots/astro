@@ -58,22 +58,29 @@ Vec3 nedToEcef(const Vec3& ned, const Geodetic& o, const Ellipsoid& ell) noexcep
     return geodeticToEcef(o, ell) + ecefToNedMatrix(o.lat, o.lon).transpose() * ned;
 }
 
-Aer enuToAer(const Vec3& enu) noexcept {
+LookAngles enuToLookAngles(const Vec3& enu) noexcept {
     const double horiz = std::hypot(enu.x, enu.y);
     return {wrapTwoPi(std::atan2(enu.x, enu.y)), std::atan2(enu.z, horiz), std::hypot(horiz, enu.z)};
 }
 
-Vec3 aerToEnu(const Aer& a) noexcept {
+Vec3 lookAnglesToEnu(const LookAngles& a) noexcept {
     const double ce = std::cos(a.el);
     return {a.range * ce * std::sin(a.az), a.range * ce * std::cos(a.az), a.range * std::sin(a.el)};
 }
 
-Aer ecefToAer(const Vec3& target, const Geodetic& observer, const Ellipsoid& ell) noexcept {
-    return enuToAer(ecefToEnu(target, observer, ell));
+LookAngles ecefToLookAngles(const Vec3& target, const Geodetic& observer, const Ellipsoid& ell) noexcept {
+    return enuToLookAngles(ecefToEnu(target, observer, ell));
 }
 
-Vec3 aerToEcef(const Aer& aer, const Geodetic& observer, const Ellipsoid& ell) noexcept {
-    return enuToEcef(aerToEnu(aer), observer, ell);
+LookAngles ecefToLookAngles(const StateVector& target, const Geodetic& observer, const Ellipsoid& ell) noexcept {
+    const Vec3 rho = target.r - geodeticToEcef(observer, ell);
+    LookAngles a   = enuToLookAngles(ecefToEnuMatrix(observer.lat, observer.lon) * rho);
+    a.rangeRate    = dot(rho, target.v) / a.range;
+    return a;
+}
+
+Vec3 lookAnglesToEcef(const LookAngles& look, const Geodetic& observer, const Ellipsoid& ell) noexcept {
+    return enuToEcef(lookAnglesToEnu(look), observer, ell);
 }
 
 } // namespace astro
