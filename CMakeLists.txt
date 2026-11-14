@@ -34,8 +34,18 @@ option(ASTRO_BUILD_STUDIES "Build the accuracy studies behind docs/accuracy.md" 
 option(ASTRO_DOCS_WARNINGS_AS_ERRORS "Fail the docs target on Doxygen warnings" OFF)
 option(ASTRO_BUILD_EXAMPLES "Build (and test) the astro examples" ${PROJECT_IS_TOP_LEVEL})
 option(ASTRO_BUILD_FUZZERS "Build libFuzzer targets for the parsers (needs Clang)" OFF)
+option(ASTRO_COVERAGE "Instrument the build for line coverage (GCC; see tools/coverage_report.py)" OFF)
 
 include(GNUInstallDirs)
+
+if(ASTRO_COVERAGE)
+    # Counts how often each line runs (gcov). Use an unoptimized build so that lines map to code.
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        message(FATAL_ERROR "ASTRO_COVERAGE needs GCC (gcov)")
+    endif()
+    add_compile_options(--coverage -O0)
+    add_link_options(--coverage)
+endif()
 
 if(ASTRO_BUILD_FUZZERS)
     # Fuzzing instruments everything: coverage feedback for libFuzzer, and the address and
