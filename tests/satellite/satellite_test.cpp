@@ -16,6 +16,7 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -74,15 +75,25 @@ TEST(Passes, IssOverSiteMatchesBruteForce) {
     const auto        passes = findPasses(sat, site, start, end, mask, 30.0);
     ASSERT_GE(passes.size(), 2u);
     for (const Pass& p : passes) {
-        if (p.startsBeforeWindow || p.endsAfterWindow) {
-            continue;
-        }
-        EXPECT_LT(p.aos, p.tca);
-        EXPECT_LT(p.tca, p.los);
+        // A pass cut by the window starts (ends) at its edge, with the satellite above the mask there;
+        // otherwise rise and set are where the elevation crosses the mask.
+        EXPECT_LE(p.aos, p.tca);
+        EXPECT_LE(p.tca, p.los);
         EXPECT_LT(p.los - p.aos, 15 * 60.0); // ISS passes last < 15 minutes
-        EXPECT_NEAR(lookAngles(sat(p.aos), site).el, mask, 1e-5);
-        EXPECT_NEAR(lookAngles(sat(p.los), site).el, mask, 1e-5);
-        // Brute-force maximum elevation: 1 s scan, then 10 ms around the best sample (high passes peak sharply).
+        if (p.startsBeforeWindow) {
+            EXPECT_EQ(p.aos, start);
+            EXPECT_GT(lookAngles(sat(start), site).el, mask);
+        } else {
+            EXPECT_NEAR(lookAngles(sat(p.aos), site).el, mask, 1e-5);
+        }
+        if (p.endsAfterWindow) {
+            EXPECT_EQ(p.los, end);
+            EXPECT_GT(lookAngles(sat(end), site).el, mask);
+        } else {
+            EXPECT_NEAR(lookAngles(sat(p.los), site).el, mask, 1e-5);
+        }
+        // Brute-force maximum elevation within the pass (and the window): 1 s scan, then 10 ms around the
+        // best sample (high passes peak sharply).
         double best = -1.0, bestS = 0.0;
         for (double s = 0.0; s <= p.los - p.aos; s += 1.0) {
             const double el = lookAngles(sat(p.aos + s), site).el;
@@ -91,7 +102,7 @@ TEST(Passes, IssOverSiteMatchesBruteForce) {
                 bestS = s;
             }
         }
-        for (double s = bestS - 1.0; s <= bestS + 1.0; s += 0.01) {
+        for (double s = std::max(0.0, bestS - 1.0); s <= std::min(p.los - p.aos, bestS + 1.0); s += 0.01) {
             best = std::max(best, lookAngles(sat(p.aos + s), site).el);
         }
         EXPECT_NEAR(p.maxElevation, best, deg2rad(0.001));
@@ -182,6 +193,129 @@ TEST(Passes, PassStillRisingAtWindowEndPeaksAtTheEnd) {
     EXPECT_EQ(passes[0].tca, end);
     EXPECT_NEAR(passes[0].maxElevation, p.elevation(-100.0), kAngleTolerance);
     EXPECT_NEAR(passes[0].losAzimuth, p.azimuth(-100.0), kAngleTolerance);
+}
+
+namespace {
+
+/// A satellite on a circular equatorial orbit of radius r over a spherical Earth of radius R, seen from
+/// a site at latitude `lat` on the prime meridian. At angle th = w (t - peak) east of the site's
+/// meridian the satellite is at r (cos th, sin th, 0) in the ITRS. With the site's east (0, 1, 0),
+/// north (-sin lat, 0, cos lat) and up (cos lat, 0, sin lat), the line of sight has components
+///     east r sin th,   north -r cos th sin lat,   up r cos th cos lat - R,
+/// its length is rho = sqrt(r^2 + R^2 - 2 r R cos th cos lat), and the range rate is
+/// r R w cos lat sin th / rho. The elevation is `mask` where cos th cos lat = k with
+///     k = (R cos^2 mask + sin mask sqrt(r^2 - R^2 cos^2 mask)) / r,
+/// the root of the quadratic (r k - R)^2 = sin^2 mask (r^2 + R^2 - 2 r R k) on the visible side.
+struct EquatorialPass {
+    double   R = 6371 * km, r = R + 1000 * km, lat = deg2rad(10.0), w = constants::twoPi / 6000.0;
+    Time     peak = Time::fromIso8601("2024-03-01T12:00:00Z");
+    Geodetic site{lat, 0.0, 0.0};
+
+    [[nodiscard]] Ellipsoid   sphere() const { return Ellipsoid::sphere(R); }
+    [[nodiscard]] double      angle(const Time& t) const { return w * (t - peak); }
+    [[nodiscard]] StateVector at(double th) const {
+        return {
+            {r * std::cos(th),      r * std::sin(th),     0.0},
+            {-r * w * std::sin(th), r * w * std::cos(th), 0.0}
+        };
+    }
+    [[nodiscard]] ItrsStateFunction state() const {
+        return [*this](const Time& t) { return at(angle(t)); };
+    }
+    [[nodiscard]] double east(double th) const { return r * std::sin(th); }
+    [[nodiscard]] double north(double th) const { return -r * std::cos(th) * std::sin(lat); }
+    [[nodiscard]] double up(double th) const { return r * std::cos(th) * std::cos(lat) - R; }
+    [[nodiscard]] double range(double th) const {
+        return std::sqrt(r * r + R * R - 2.0 * r * R * std::cos(th) * std::cos(lat));
+    }
+    [[nodiscard]] double azimuth(double th) const { return wrapTwoPi(std::atan2(east(th), north(th))); }
+    [[nodiscard]] double elevation(double th) const { return std::asin(up(th) / range(th)); }
+    [[nodiscard]] double rangeRate(double th) const { return r * R * w * std::cos(lat) * std::sin(th) / range(th); }
+    /// cos th cos lat where the elevation is `mask`.
+    [[nodiscard]] double k(double mask) const {
+        const double c = std::cos(mask);
+        return (R * c * c + std::sin(mask) * std::sqrt(r * r - R * R * c * c)) / r;
+    }
+    /// Angle th > 0 at which the satellite sets below `mask`.
+    [[nodiscard]] double setAngle(double mask) const { return std::acos(k(mask) / std::cos(lat)); }
+};
+
+} // namespace
+
+TEST(Look, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
+    // Look angles of EquatorialPass at angles before, at and after the meridian, and below the horizon.
+    const EquatorialPass p;
+    for (double th : {-0.6, -0.2, -1e-3, 0.0, 0.15, 0.4, 1.2}) {
+        SCOPED_TRACE(testing::Message() << "angle " << th);
+        const LookAngles la = lookAngles(p.at(th), p.site, p.sphere());
+        // Coordinates of 7e6 m carry 1e-9 m of rounding: 1e-15 rad seen from 1000 km or more (measured
+        // 8.9e-16 rad, 1.9e-9 m, 3.6e-12 m/s).
+        EXPECT_NEAR(wrapPi(la.az - p.azimuth(th)), 0.0, 5e-15);
+        EXPECT_NEAR(la.el, p.elevation(th), 5e-15);
+        EXPECT_NEAR(la.range, p.range(th), 1e-8);
+        EXPECT_NEAR(la.rangeRate, p.rangeRate(th), 2e-11);
+    }
+    // On the meridian the satellite is due south (the site is north of the orbit) and the range rate is 0.
+    EXPECT_NEAR(lookAngles(p.at(0.0), p.site, p.sphere()).az, constants::pi, 1e-15);
+}
+
+TEST(Passes, CircularEquatorialOrbitOverASphereMatchesClosedForm) {
+    // Rise, set, culmination and the azimuths at rise and set of EquatorialPass, from the closed form.
+    const EquatorialPass p;
+    const double         mask   = deg2rad(10.0);
+    const double         th     = p.setAngle(mask); // 0.228 rad: 218 s from the meridian
+    const auto           passes = findPasses(p.state(), p.site, p.peak - 900.0, p.peak + 900.0, mask, 30.0, p.sphere());
+    ASSERT_EQ(passes.size(), 1u);
+    const Pass& pass = passes[0];
+    EXPECT_FALSE(pass.startsBeforeWindow);
+    EXPECT_FALSE(pass.endsAfterWindow);
+    EXPECT_NEAR(pass.aos - p.peak, -th / p.w, kCrossingTolerance);
+    EXPECT_NEAR(pass.los - p.peak, th / p.w, kCrossingTolerance);
+    EXPECT_NEAR(pass.tca - p.peak, 0.0, 1e-3);
+    // Highest on the meridian: tan(el) = (r cos lat - R) / (r sin lat), 34.7 deg. The elevation is
+    // flat there (its second derivative is about w^2 = 1e-6 rad/s^2), so even 1 ms of timing is 5e-13
+    // rad; measured 1.1e-16 rad (the time came within 1.3e-6 s).
+    EXPECT_NEAR(pass.maxElevation, std::atan2(p.r * std::cos(p.lat) - p.R, p.r * std::sin(p.lat)), 1e-12);
+    // The azimuth turns by 4e-3 rad/s at rise and set: 1 ms is 4e-6 rad.
+    EXPECT_NEAR(pass.aosAzimuth, p.azimuth(-th), 4e-6); // south-west
+    EXPECT_NEAR(pass.losAzimuth, p.azimuth(th), 4e-6);  // south-east
+    // The same circle seen as coverage: the central angle from the site to the sub-satellite point at
+    // rise is acos(k), and the slant range then is rho at that angle.
+    const double central = std::acos(p.k(mask));
+    EXPECT_NEAR(coverageHalfAngle(p.r - p.R, mask, p.R), central, 2e-15); // measured 3.9e-16
+    EXPECT_NEAR(maxSlantRange(p.r - p.R, mask, p.R), p.range(th), 1e-8);  // measured 2.8e-9 m
+}
+
+TEST(Look, SatelliteAtTheSiteHasNoDirectionAndNaNRangeRate) {
+    // Documented: at zero range the range rate does not exist and is NaN.
+    const Geodetic   site{deg2rad(30.0), deg2rad(-90.0), 0.0};
+    const LookAngles la = lookAngles(
+        {
+            geodeticToEcef(site),
+            {1.0, 2.0, 3.0}
+    },
+        site);
+    EXPECT_EQ(la.range, 0.0);
+    EXPECT_TRUE(std::isnan(la.rangeRate));
+}
+
+TEST(Ground, GroundTrackOfACircularEquatorialOrbitRunsAlongTheEquator) {
+    // The sub-satellite point of EquatorialPass is on the equator at longitude th, at height r - R, at
+    // start, start + step, ... and at `end`.
+    const EquatorialPass p;
+    const auto           sat   = [&](const Time& t) { return p.state()(t).r; };
+    const Time           start = p.peak - 1000.0;
+    const auto           track = groundTrack(sat, start, p.peak + 1100.0, 600.0, p.sphere());
+    ASSERT_EQ(track.size(), 5u); // -1000, -400, 200, 800 s and the end at 1100 s
+    const double times[] = {-1000.0, -400.0, 200.0, 800.0, 1100.0};
+    for (std::size_t i = 0; i < track.size(); ++i) {
+        SCOPED_TRACE(testing::Message() << "point " << i);
+        EXPECT_NEAR(track[i].lat, 0.0, 1e-15);
+        // The times differ from `peak` by 1e-11 s of Julian-date rounding, 1e-14 rad at w = 1e-3 rad/s
+        // (measured 1.4e-14 rad).
+        EXPECT_NEAR(wrapPi(track[i].lon - p.w * times[i]), 0.0, 5e-14);
+        EXPECT_NEAR(track[i].h, p.r - p.R, 1e-8);
+    }
 }
 
 TEST(Passes, MaximumInsideAWindowThatCutsThePassIsFound) {
