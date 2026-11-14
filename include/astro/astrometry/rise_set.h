@@ -52,7 +52,21 @@ struct SkyEvent {
 /// Find upward/downward crossings of `threshold` by `elevation(t)` and its local
 /// maxima (transits) in [start, end]. The function is sampled every `step`
 /// seconds and events are refined with Brent's method to ~1 ms; features
-/// shorter than `step` can be missed.
+/// shorter than `step` can be missed. `elevation` is only called for times in
+/// [start, end].
+///
+/// A transit is a maximum strictly inside the window, wherever it falls,
+/// including the first and the last sample interval. A window edge is never a
+/// transit: where the elevation is highest at `start` or at `end` itself, it
+/// cannot be told, from inside the window, whether it turns there or is still
+/// falling (or rising) through the edge. So with windows laid end to end, each
+/// transit is found in exactly one of them, unless it falls on a shared edge.
+///
+/// An empty window (end == start) returns no event. A step longer than the
+/// window is allowed: the window is always sampled at its two ends and at least
+/// once between. Throws astro::Error if `end` is before `start`, if either time
+/// or `threshold` is NaN, if `step` is not positive and finite, or if the window
+/// holds more than 2e9 steps.
 [[nodiscard]] std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&)>& elevation,
                                                         const Time&                               start,
                                                         const Time&                               end,
@@ -82,6 +96,9 @@ std::ostream& operator<<(std::ostream& os, Twilight value);
 bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider& eop, const Ephemeris& eph);
 
 /// Sunrise/sunset (and solar transits) in [start, end] for a horizon elevation.
+/// The window is treated as by findElevationEvents(): empty gives no event, and
+/// `end` before `start` throws astro::Error. The same holds for twilight() and
+/// moonRiseSet().
 [[nodiscard]] std::vector<SkyEvent> sunRiseSet(const Geodetic&    site,
                                                const Time&        start,
                                                const Time&        end,

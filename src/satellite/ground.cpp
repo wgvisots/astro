@@ -22,6 +22,7 @@
 #include <cmath>
 
 #include "astro/core/angle.h"
+#include "astro/core/error.h"
 
 namespace astro {
 
@@ -34,12 +35,18 @@ std::vector<Geodetic> groundTrack(const std::function<Vec3(const Time&)>& satItr
                                   const Time&                             end,
                                   double                                  step,
                                   const Ellipsoid&                        ell) {
-    std::vector<Geodetic> out;
-    const double          span = end - start;
-    if (step <= 0.0 || span < 0.0) {
-        return out;
+    const double span = end - start;
+    if (!std::isfinite(span) || span < 0.0) {
+        throw Error("groundTrack: start and end must be finite, with end not before start");
     }
-    const auto n = static_cast<int>(std::floor(span / step + 1e-9));
+    if (!(step > 0.0) || !std::isfinite(step)) {
+        throw Error("groundTrack: step must be positive and finite");
+    }
+    if (!(span / step <= 2e9)) { // the count of steps is kept in an int
+        throw Error("groundTrack: the window holds more than 2e9 steps");
+    }
+    std::vector<Geodetic> out;
+    const auto            n = static_cast<int>(std::floor(span / step + 1e-9));
     for (int i = 0; i <= n; ++i) {
         out.push_back(subSatellitePoint(satItrs(start + i * step), ell));
     }
@@ -67,7 +74,11 @@ std::vector<Geodetic> footprint(double lat, double lon, double halfAngle, int n)
     for (int i = 0; i < n; ++i) {
         const double az   = constants::twoPi * i / n;
         const double lat2 = std::asin(std::clamp(sl * cd + cl * sd * std::cos(az), -1.0, 1.0));
-        const double lon2 = lon + std::atan2(std::sin(az) * sd * cl, cd - sl * std::sin(lat2));
+        // Longitude difference atan2(sin az sd cl, cd - sl sin lat2) with the factor cl that both
+        // arguments share taken out: cd - sl sin lat2 = cl (cl cd - sl sd cos az). With cl left in, the
+        // second argument cancels to rounding noise at a pole; without it the pole is the limit
+        // along the meridian `lon` (pi - az at the north pole, az at the south).
+        const double lon2 = lon + std::atan2(std::sin(az) * sd, cl * cd - sl * sd * std::cos(az));
         out.push_back({lat2, wrapPi(lon2), 0.0});
     }
     return out;

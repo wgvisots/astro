@@ -115,9 +115,6 @@ ported code included in the repository are credited in
   curves that Izzo's method iterates on.
 - **Conway, B. A. (1986).** An improved algorithm due to Laguerre for the solution of Kepler's
   equation. *Celest. Mech.* 39, 199-211. <https://doi.org/10.1007/BF01230852>.
-- **Danby, J. M. A. (1987).** The solution of Kepler's equation, III. *Celest. Mech.* 40, 303-312.
-  <https://doi.org/10.1007/BF01235847>; and *Fundamentals of Celestial Mechanics*, 2nd ed.,
-  Willmann-Bell, 1988. Starting value for Kepler's equation.
 - **Broucke, R. A. & Cefola, P. J. (1972).** On the equinoctial orbit elements. *Celest. Mech.* 5,
   303-310. <https://doi.org/10.1007/BF01228432>.
 - **Fehlberg, E. (1968).** *Classical fifth-, sixth-, seventh-, and eighth-order Runge-Kutta

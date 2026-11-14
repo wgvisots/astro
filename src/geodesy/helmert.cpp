@@ -19,6 +19,7 @@
 #include "astro/geodesy/helmert.h"
 
 #include "../core/enum_io.h"
+#include "astro/core/constants.h"
 
 namespace astro {
 
@@ -46,9 +47,11 @@ StateVector helmertTransform(const StateVector& x, const HelmertTimeDependent& h
     const HelmertParams p = h.at(decimalYear);
     StateVector         out;
     out.r = helmertTransform(x.r, p);
-    // V2 = V1 + Tdot + sdot X1 + Rdot X1 (+ s V1 + R V1, retained for consistency)
-    out.v = x.v + h.tRate + h.sRate * x.r + rotationMatrix(h.rRate, p.convention) * x.r + p.s * x.v
-          + rotationMatrix(p.r, p.convention) * x.v;
+    // The time derivative of the position: V2 = V1 + Tdot + sdot X1 + Rdot X1 (+ s V1 + R V1, retained
+    // for consistency). The rates are per Julian year and the velocity is in m/s.
+    constexpr double perSecond = 1.0 / (constants::daysPerJulianYear * constants::secondsPerDay);
+    const Vec3       drift     = h.tRate + h.sRate * x.r + rotationMatrix(h.rRate, p.convention) * x.r;
+    out.v                      = x.v + drift * perSecond + p.s * x.v + rotationMatrix(p.r, p.convention) * x.v;
     return out;
 }
 

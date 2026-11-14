@@ -16,7 +16,12 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <cmath>
+#include <limits>
+#include <string>
+
 #include "astro/core/angle.h"
+#include "astro/core/error.h"
 #include "astro/ephemeris/low_precision.h"
 #include "astro/frames/transform.h"
 #include "astro/geodesy/local.h"
@@ -92,6 +97,110 @@ TEST(Passes, IssOverSiteMatchesBruteForce) {
         EXPECT_NEAR(p.maxElevation, best, deg2rad(0.001));
         EXPECT_GE(p.maxElevation, best - 1e-9);
     }
+}
+
+namespace {
+
+/// A satellite flying due east at a constant height above a site's horizontal plane, passing
+/// `offset` metres north of the zenith at time `peak`. `s` seconds after the peak its east, north, up
+/// position is (speed s, offset, height), so every quantity of the pass has a closed form.
+struct StraightPass {
+    Geodetic site{deg2rad(40.0), deg2rad(-105.0), 1600.0};
+    Time     peak   = Time::fromIso8601("2024-03-01T12:00:00Z");
+    double   height = 400 * km, offset = 50 * km, speed = 7 * km;
+
+    [[nodiscard]] ItrsStateFunction state() const {
+        return [*this](const Time& t) {
+            const Vec3 velocity = ecefToEnuMatrix(site.lat, site.lon).transpose() * Vec3{speed, 0.0, 0.0};
+            return StateVector{enuToEcef({speed * (t - peak), offset, height}, site), velocity};
+        };
+    }
+    /// Elevation (rad) `s` seconds after the peak; the greatest is atan(height / offset), 82.9 deg.
+    [[nodiscard]] double elevation(double s) const { return std::atan2(height, std::hypot(speed * s, offset)); }
+    /// Azimuth (rad, [0, 2 pi), clockwise from north) `s` seconds after the peak.
+    [[nodiscard]] double azimuth(double s) const { return wrapTwoPi(std::atan2(speed * s, offset)); }
+    /// Seconds from the peak to where the elevation is `mask`, on either side.
+    [[nodiscard]] double crossing(double mask) const {
+        return std::sqrt(std::pow(height / std::tan(mask), 2) - offset * offset) / speed;
+    }
+};
+
+// Rise and set are refined to 1 ms (the tolerance given to the root finder).
+constexpr double kCrossingTolerance = 1e-3;
+// Angles of the closed form against those from the ITRS position: 1e-9 m of rounding in coordinates
+// of 6e6 m, seen from 400 km, is 3e-15 rad.
+constexpr double kAngleTolerance = 1e-13;
+
+} // namespace
+
+TEST(Passes, WholePassMatchesClosedForm) {
+    const StraightPass p;
+    const double       mask = deg2rad(10.0), half = p.crossing(mask); // 324 s
+    const auto         passes = findPasses(p.state(), p.site, p.peak - 900.0, p.peak + 900.0, mask, 30.0);
+    ASSERT_EQ(passes.size(), 1u);
+    EXPECT_FALSE(passes[0].startsBeforeWindow);
+    EXPECT_FALSE(passes[0].endsAfterWindow);
+    EXPECT_NEAR(passes[0].aos - p.peak, -half, kCrossingTolerance);
+    EXPECT_NEAR(passes[0].los - p.peak, half, kCrossingTolerance);
+    // The elevation falls off as 1.2e-3 rad/s^2 times the square of the time from the peak, so the
+    // 1 ms the search promises for the time of the maximum is 1.2e-9 rad of elevation.
+    EXPECT_NEAR(passes[0].tca - p.peak, 0.0, 1e-3);
+    EXPECT_NEAR(passes[0].maxElevation, p.elevation(0.0), 1.2e-9);
+    // The azimuth turns by 6.8e-5 rad/s at rise and set: 1 ms is 7e-8 rad.
+    EXPECT_NEAR(passes[0].aosAzimuth, p.azimuth(-half), 7e-8);
+    EXPECT_NEAR(passes[0].losAzimuth, p.azimuth(half), 7e-8);
+}
+
+TEST(Passes, PassAlreadyDescendingAtWindowStartPeaksAtTheStart) {
+    // The window opens 100 s after the peak: within the window the elevation only falls, so its
+    // maximum is at the window's start.
+    const StraightPass p;
+    const double       mask   = deg2rad(10.0);
+    const Time         start  = p.peak + 100.0;
+    const auto         passes = findPasses(p.state(), p.site, start, start + 900.0, mask, 30.0);
+    ASSERT_EQ(passes.size(), 1u);
+    EXPECT_TRUE(passes[0].startsBeforeWindow);
+    EXPECT_FALSE(passes[0].endsAfterWindow);
+    EXPECT_EQ(passes[0].aos, start);
+    EXPECT_EQ(passes[0].tca, start);
+    EXPECT_NEAR(passes[0].maxElevation, p.elevation(100.0), kAngleTolerance); // 29.6 deg
+    EXPECT_NEAR(passes[0].aosAzimuth, p.azimuth(100.0), kAngleTolerance);
+    EXPECT_NEAR(passes[0].los - p.peak, p.crossing(mask), kCrossingTolerance);
+}
+
+TEST(Passes, PassStillRisingAtWindowEndPeaksAtTheEnd) {
+    // The window closes 100 s before the peak.
+    const StraightPass p;
+    const double       mask   = deg2rad(10.0);
+    const Time         end    = p.peak - 100.0;
+    const auto         passes = findPasses(p.state(), p.site, end - 900.0, end, mask, 30.0);
+    ASSERT_EQ(passes.size(), 1u);
+    EXPECT_FALSE(passes[0].startsBeforeWindow);
+    EXPECT_TRUE(passes[0].endsAfterWindow);
+    EXPECT_NEAR(passes[0].aos - p.peak, -p.crossing(mask), kCrossingTolerance);
+    EXPECT_EQ(passes[0].los, end);
+    EXPECT_EQ(passes[0].tca, end);
+    EXPECT_NEAR(passes[0].maxElevation, p.elevation(-100.0), kAngleTolerance);
+    EXPECT_NEAR(passes[0].losAzimuth, p.azimuth(-100.0), kAngleTolerance);
+}
+
+TEST(Passes, MaximumInsideAWindowThatCutsThePassIsFound) {
+    // The window opens 7 s before the peak, or closes 7 s after it: the pass is cut, and its maximum
+    // is inside the window, in the first or the last sample interval.
+    const StraightPass p;
+    const double       mask = deg2rad(10.0);
+    const auto         late = findPasses(p.state(), p.site, p.peak - 7.0, p.peak + 893.0, mask, 30.0);
+    ASSERT_EQ(late.size(), 1u);
+    EXPECT_TRUE(late[0].startsBeforeWindow);
+    EXPECT_EQ(late[0].aos, p.peak - 7.0);
+    EXPECT_NEAR(late[0].tca - p.peak, 0.0, 1e-3);
+    EXPECT_NEAR(late[0].maxElevation, p.elevation(0.0), 1.2e-9); // see WholePassMatchesClosedForm
+    const auto early = findPasses(p.state(), p.site, p.peak - 893.0, p.peak + 7.0, mask, 30.0);
+    ASSERT_EQ(early.size(), 1u);
+    EXPECT_TRUE(early[0].endsAfterWindow);
+    EXPECT_EQ(early[0].los, p.peak + 7.0);
+    EXPECT_NEAR(early[0].tca - p.peak, 0.0, 1e-3);
+    EXPECT_NEAR(early[0].maxElevation, p.elevation(0.0), 1.2e-9);
 }
 
 TEST(Eclipse, ShadowGeometry) {
@@ -204,6 +313,113 @@ TEST(Ground, SubpointFootprintAndLineOfSight) {
     // Ground track sampling.
     auto geo = [](const Time&) { return Vec3{42164.17 * km, 0, 0}; };
     EXPECT_EQ(groundTrack(geo, Time(), Time() + 3600.0, 600.0).size(), 7u);
+}
+
+TEST(Ground, FootprintAboutAPoleIsAnEvenlySpacedParallel) {
+    // About a pole, the circle of angular radius `lam` is the parallel of latitude 90 deg - lam, and
+    // its n points are 360/n deg of longitude apart. Every azimuth at a pole points along a meridian:
+    // the one reached is the limit for a center just short of the pole on the meridian `lon0`. So from
+    // the north pole azimuth 180 deg (south) runs down `lon0` itself and azimuth 0 down the opposite
+    // meridian, and from the south pole azimuth 0 (north) runs up `lon0`.
+    const double lam = deg2rad(20.0), lon0 = deg2rad(10.0);
+    const int    n = 12;
+    for (double pole : {constants::halfPi, -constants::halfPi}) {
+        const auto ring = footprint(pole, lon0, lam, n);
+        // The same circle about a center 1e-9 rad (6 mm) short of the pole.
+        const auto nearby = footprint(pole > 0.0 ? pole - 1e-9 : pole + 1e-9, lon0, lam, n);
+        ASSERT_EQ(ring.size(), 12u);
+        ASSERT_EQ(nearby.size(), 12u);
+        for (std::size_t i = 0; i < ring.size(); ++i) {
+            SCOPED_TRACE(testing::Message() << (pole > 0.0 ? "north" : "south") << " pole, point " << i);
+            const double az  = constants::twoPi * static_cast<double>(i) / n;
+            const double lon = pole > 0.0 ? lon0 + constants::pi - az : lon0 + az;
+            // 1e-14 rad: asin near 1 magnifies rounding by 1 / sin(lam) = 3.
+            EXPECT_NEAR(ring[i].lat, pole > 0.0 ? constants::halfPi - lam : lam - constants::halfPi, 1e-14);
+            EXPECT_NEAR(wrapPi(ring[i].lon - lon), 0.0, 1e-14);
+            // Moving the center by 1e-9 rad moves no point of the circle by more than 1e-9 rad of
+            // latitude, or 1e-9 / sin(lam) = 3e-9 rad of longitude.
+            EXPECT_NEAR(nearby[i].lat, ring[i].lat, 1e-8);
+            EXPECT_NEAR(wrapPi(nearby[i].lon - ring[i].lon), 0.0, 1e-8);
+        }
+    }
+}
+
+namespace {
+
+/// The message of the astro::Error that `call` throws, or "no error" if it throws nothing.
+template <class Call>
+std::string errorMessage(Call&& call) {
+    try {
+        call();
+    } catch (const Error& e) {
+        return e.what();
+    }
+    return "no error";
+}
+
+/// Whether `call` throws an astro::Error whose message names both `function` and `what`.
+template <class Call>
+testing::AssertionResult throwsNaming(Call&& call, const std::string& function, const std::string& what) {
+    const std::string message = errorMessage(call);
+    if (message.find(function) != std::string::npos && message.find(what) != std::string::npos) {
+        return testing::AssertionSuccess();
+    }
+    return testing::AssertionFailure() << "got \"" << message << "\"";
+}
+
+constexpr double kNan = std::numeric_limits<double>::quiet_NaN();
+constexpr double kInf = std::numeric_limits<double>::infinity();
+
+} // namespace
+
+TEST(Passes, BadWindowOrStepThrows) {
+    const StraightPass p;
+    const auto         sat = p.state();
+    const Time         a = p.peak - 600.0, b = p.peak + 600.0;
+    // The satellite is up at `b`: the old code returned a "pass" from b back to a.
+    EXPECT_TRUE(throwsNaming([&] { (void)findPasses(sat, p.site, b, a); }, "findPasses", "end"));
+    for (double step : {0.0, -60.0, kNan, kInf}) {
+        EXPECT_TRUE(throwsNaming([&] { (void)findPasses(sat, p.site, a, b, 0.0, step); }, "findPasses", "step"))
+            << step;
+    }
+    EXPECT_TRUE(throwsNaming([&] { (void)findPasses(sat, p.site, a, b, kNan); }, "findPasses", "minElevation"));
+    // More steps than can be counted.
+    EXPECT_THROW((void)findPasses(sat, p.site, a, a + 1e9, 0.0, 1e-3), Error);
+    // An empty window holds no pass, even at a moment when the satellite is up.
+    EXPECT_TRUE(findPasses(sat, p.site, p.peak, p.peak).empty());
+}
+
+TEST(Eclipse, BadWindowOrStepThrows) {
+    const double      r  = constants::wgs84A + 500 * km;
+    const StateVector s0 = elementsToState({r, 0.0, 0.0, 0.0, 0.0, 0.0});
+    const Time        t0;
+    auto              sat = [&](const Time& t) { return propagateKepler(s0, t - t0).r; };
+    auto              sun = [](const Time&) { return Vec3{constants::au, 0, 0}; };
+    const Time        mid = t0 + 0.5 * orbitalPeriod(r); // behind the Earth: in eclipse
+    ASSERT_EQ(shadow(sat(mid), sun(mid)).state, ShadowState::Umbra);
+    EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, mid, t0); }, "findEclipses", "end"));
+    for (double step : {0.0, -30.0, kNan, kInf}) {
+        EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, t0, mid, step); }, "findEclipses", "step")) << step;
+    }
+    EXPECT_TRUE(throwsNaming([&] { (void)findEclipses(sat, sun, t0, t0 + 1e9, 1e-3); }, "findEclipses", "step"));
+    // An empty window holds no eclipse, even at a moment in the umbra.
+    EXPECT_TRUE(findEclipses(sat, sun, mid, mid).empty());
+}
+
+TEST(Ground, GroundTrackBadWindowOrStepThrows) {
+    auto       geo = [](const Time&) { return Vec3{42164.17 * km, 0, 0}; };
+    const Time t0;
+    EXPECT_TRUE(throwsNaming([&] { (void)groundTrack(geo, t0 + 3600.0, t0, 600.0); }, "groundTrack", "end"));
+    for (double step : {0.0, -600.0, kNan, kInf}) {
+        EXPECT_TRUE(throwsNaming([&] { (void)groundTrack(geo, t0, t0 + 3600.0, step); }, "groundTrack", "step"))
+            << step;
+    }
+    EXPECT_TRUE(throwsNaming([&] { (void)groundTrack(geo, t0, t0 + 1e9, 1e-3); }, "groundTrack", "step"));
+    // start, start + step, ..., and `end` itself when it is not a whole number of steps from start.
+    EXPECT_EQ(groundTrack(geo, t0, t0 + 3600.0, 600.0).size(), 7u);
+    EXPECT_EQ(groundTrack(geo, t0, t0 + 3700.0, 600.0).size(), 8u);
+    // An empty window is the one point at `start`.
+    EXPECT_EQ(groundTrack(geo, t0, t0, 600.0).size(), 1u);
 }
 
 TEST(OrbitalFrames, DefinitionsAndRelativeMotion) {

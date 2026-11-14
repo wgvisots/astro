@@ -29,7 +29,11 @@ namespace astro {
 [[nodiscard]] double eccentricToTrueAnomaly(double E, double e) noexcept;
 /// Kepler's equation M = E - e sin E.
 [[nodiscard]] double eccentricToMeanAnomaly(double E, double e) noexcept;
-/// Solve Kepler's equation for E (Newton-Raphson with a robust starter), e in [0, 1).
+/// Solve Kepler's equation M = E - e sin E for E, for e in [0, 1) and any M (Newton-Raphson from a
+/// starting value that guarantees convergence). E is on the same revolution as M (|E - M| <= e)
+/// and satisfies the equation to rounding for every e < 1, including e within 1e-12 of 1 near
+/// perigee. A NaN or infinite M gives NaN. Throws astro::Error unless 0 <= e < 1, or if the
+/// iteration fails to converge (a guard: it is not known to happen).
 [[nodiscard]] double meanToEccentricAnomaly(double M, double e);
 
 /// Hyperbolic: true -> hyperbolic anomaly F (tanh(F/2) = sqrt((e-1)/(e+1)) tan(nu/2)).
@@ -38,8 +42,11 @@ namespace astro {
 [[nodiscard]] double hyperbolicToTrueAnomaly(double F, double e) noexcept;
 /// M = e sinh F - F.
 [[nodiscard]] double hyperbolicToMeanAnomaly(double F, double e) noexcept;
-/// Solve M = e sinh F - F for F (Newton-Raphson), e > 1. Throws astro::Error if e <= 1 or the
-/// iteration does not converge.
+/// Solve M = e sinh F - F for F, for e > 1 and any M (Newton-Raphson from a starting value that
+/// guarantees convergence). F has the sign of M and satisfies the equation to rounding for every
+/// e > 1, including e within 1e-12 of 1. An infinite M gives an infinite F, a NaN M gives NaN.
+/// Throws astro::Error unless e is finite and greater than 1, or if the iteration fails to converge
+/// (a guard: it is not known to happen).
 [[nodiscard]] double meanToHyperbolicAnomaly(double M, double e);
 
 /// Parabolic: D = tan(nu/2); Barker's equation M = D + D^3/3.
@@ -48,7 +55,9 @@ namespace astro {
 [[nodiscard]] double parabolicToTrueAnomaly(double D) noexcept;
 /// Barker's equation M = D + D^3/3.
 [[nodiscard]] double parabolicToMeanAnomaly(double D) noexcept;
-/// Solve Barker's equation for D (closed form).
+/// Solve Barker's equation M = D + D^3/3 for D (closed form), to rounding for every M of either
+/// sign. D has the sign of M and is finite for every finite M; an infinite M gives an infinite D
+/// and a NaN M gives NaN.
 [[nodiscard]] double meanToParabolicAnomaly(double M) noexcept;
 
 /// Mean anomaly <-> true anomaly for any eccentricity.

@@ -25,6 +25,7 @@ the end of the page).
 | Low-precision Sun / Moon | DE440 | tested 0.01 deg / 0.1 deg; measured 1950-2050: Sun < 30", 6e-5 in distance; Moon < 6', 0.14% |
 | SGP4 / SDP4 | Vallado's verification set, all cases [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/) | 1 mm, 1 um/s (largest difference measured: 0.12 mm) |
 | Kepler, elements, Lambert | Vallado Examples 2-4, 2-5, 7-5; Curtis Example 5.2 [Curtis](https://shop.elsevier.com/books/orbital-mechanics-for-engineering-students/curtis/978-0-12-824025-0) | about the printed precision (Kepler 1 m, 1 mm/s; Lambert 2 mm/s and 0.06 m/s) |
+| Two-body propagation (`propagateKepler`), every conic | extended-precision universal variables solved by bisection: e from 0 to 50, both sides of e = 1, steps of 0.01 s to 1e5 s | 1e-12 of the state (largest measured: 1.5e-13) |
 | Numerical J2/J4 | energy integral; Brouwer secular rates | energy 1e-10 over 10 days; node rate 0.3% |
 | State transition matrix | finite differences of propagations; symplectic identity | 1e-6 relative; 1e-8 |
 | Interpolated STM between steps | integration to the exact time | 2e-8 (default tolerance), 2e-6 (relTol 1e-9) |
@@ -113,8 +114,8 @@ Two-body, closed form (`propagateKeplerStm`):
 | LEO 400 km | 1 day | 2.5e-10 | 2.3e-12 | 5.6e-9 |
 | LEO 400 km | 1 week | 2.5e-10 | 8.1e-11 | 1.2e-7 |
 | HEO 1000 x 20000 km | 1 day | 1.1e-10 | 8.4e-12 | 5.6e-9 |
-| e = 0.9 | 2.5 days | 1.4e-10 | 6.9e-11 | 1.4e-9 |
-| hyperbola, e = 1.5 | 5.6 h | 4.4e-10 | 1.1e-13 | 2.9e-11 |
+| e = 0.9 | 2.5 days | 1.3e-10 | 6.9e-11 | 1.2e-9 |
+| hyperbola, e = 1.5 | 5.6 h | 5.1e-10 | 1.1e-13 | 3.1e-11 |
 
 The differences are limited by their own truncation and rounding; the integrated variational
 equations agree to 1e-11. The symplectic residual grows with |Phi_rv| (3e5 s after a week).
@@ -125,17 +126,17 @@ answer is the two-body Phi:
 | Orbit | 4 h | 1 day | 1 week |
 |---|---|---|---|
 | LEO 400 km i=51.6 | 1.6e-11 | 1.5e-11 | 5.3e-9 |
-| SSO 800 km e=0.01 | 1.3e-11 | 9.3e-12 | 4.0e-9 |
-| HEO 1000 x 20000 km | 2.4e-7 | 4.5e-8 | 1.9e-8 |
-| near-equatorial i=0.5 | 5.7e-10 | 8.6e-11 | 2.7e-9 |
-| polar i=90 | 1.6e-11 | 1.5e-11 | 3.9e-9 |
-| retrograde i=140 | 9.9e-12 | 1.1e-11 | 2.4e-9 |
-| e = 0.74 | 1.6e-11 | 1.0e-7 | 1.6e-5 |
+| SSO 800 km e=0.01 | 1.1e-11 | 9.3e-12 | 4.0e-9 |
+| HEO 1000 x 20000 km | 1.1e-11 | 3.1e-9 | 2.1e-8 |
+| near-equatorial i=0.5 | 1.5e-11 | 2.3e-11 | 2.7e-9 |
+| polar i=90 | 9.5e-12 | 1.2e-11 | 3.9e-9 |
+| retrograde i=140 | 9.8e-12 | 1.1e-11 | 2.4e-9 |
+| e = 0.74 | 1.7e-11 | 1.0e-7 | 1.6e-5 |
 
 The step (1e-5 of |r0| and |v0|, fourth-order stencil) balances the truncation error, which grows
-with the number of revolutions and the eccentricity (e = 0.74 over a week), against the ~1e-8 rad
-noise of the element conversion near e = 0 and i = 0 (smaller steps cost three orders of magnitude
-on a near-circular, near-equatorial orbit). The tests also check the linearization against two
+with the number of revolutions and the eccentricity (e = 0.74 over a week), against the rounding
+error of the differences, which grows as the step shrinks: a step ten times smaller gives 2e-10 in
+every cell of this table, and 1.6e-9 for e = 0.74 over a week. The tests also check the linearization against two
 propagations with J2/J4 on, to the expected second-order 3e-4 over a day.
 
 Covariances (100 m and 0.1 m/s per axis at the epoch, no process noise): radial / in-track /

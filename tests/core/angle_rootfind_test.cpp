@@ -18,12 +18,29 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
+#include <random>
+
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
 #include "astro/core/rootfind.h"
 
 using namespace astro;
 using constants::pi;
+using constants::twoPi;
+
+namespace {
+
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+constexpr double kInf = std::numeric_limits<double>::infinity();
+
+/// True if a and b are the same double, bit for bit (so +0 and -0 differ).
+bool sameBits(double a, double b) {
+    return a == b && std::signbit(a) == std::signbit(b);
+}
+
+} // namespace
 
 TEST(Angle, Wrap) {
     EXPECT_NEAR(wrapTwoPi(-0.5), 2 * pi - 0.5, 1e-15);
@@ -34,6 +51,224 @@ TEST(Angle, Wrap) {
     EXPECT_NEAR(wrapPi(-pi - 0.1), pi - 0.1, 1e-15);
     EXPECT_DOUBLE_EQ(wrap360(-90.0), 270.0);
     EXPECT_DOUBLE_EQ(wrap180(270.0), -90.0);
+}
+
+// Wrapping is the identity on its own range, so a value already in range must come back bit for bit.
+TEST(Angle, WrapLeavesValuesAlreadyInRangeUnchanged) {
+    const double belowPi    = std::nextafter(pi, 0.0);
+    const double belowTwoPi = std::nextafter(twoPi, 0.0);
+    const double below180   = std::nextafter(180.0, 0.0);
+    const double below360   = std::nextafter(360.0, 0.0);
+    for (double x : {0.0, -0.0, 0.1, -0.1, 1e-20, -1e-17, 5e-324, -5e-324, 3.0, -3.0, belowPi, -belowPi, -pi}) {
+        EXPECT_TRUE(sameBits(wrapPi(x), x)) << "wrapPi(" << x << ") = " << wrapPi(x);
+    }
+    for (double x : {0.0, -0.0, 0.1, -0.1, 1e-20, -1e-17, 5e-324, -5e-324, 179.0, below180, -below180, -180.0}) {
+        EXPECT_TRUE(sameBits(wrap180(x), x)) << "wrap180(" << x << ") = " << wrap180(x);
+    }
+    for (double x : {0.0, -0.0, 0.1, 1e-20, 5e-324, 3.0, pi, 6.0, belowTwoPi}) {
+        EXPECT_TRUE(sameBits(wrapTwoPi(x), x)) << "wrapTwoPi(" << x << ") = " << wrapTwoPi(x);
+    }
+    for (double x : {0.0, -0.0, 0.1, 1e-20, 5e-324, 180.0, 359.0, below360}) {
+        EXPECT_TRUE(sameBits(wrap360(x), x)) << "wrap360(" << x << ") = " << wrap360(x);
+    }
+
+    // Random values, each scaled by the largest double inside the range so that it is in range itself.
+    std::mt19937_64                        rng(5);
+    std::uniform_real_distribution<double> half(-1.0, 1.0);
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+    int                                    changed = 0;
+    for (int i = 0; i < 100000; ++i) {
+        const double h = half(rng), u = unit(rng);
+        changed += wrapPi(h * belowPi) != h * belowPi;
+        changed += wrap180(h * below180) != h * below180;
+        changed += wrapTwoPi(u * belowTwoPi) != u * belowTwoPi;
+        changed += wrap360(u * below360) != u * below360;
+    }
+    EXPECT_EQ(changed, 0);
+}
+
+// Out of range, the result is the input less a whole number of turns. Checked against the same sum in
+// long double, where it is exact: one turn (the double twoPi, or 360) is subtracted from a double within a
+// factor of two of it, so no rounding is involved and the comparison is for equality.
+TEST(Angle, WrapPiAnd180SubtractWholeTurnsExactly) {
+    const long double turn = twoPi;
+    for (double x : {pi, pi + 0.1, 4.0, 6.0, std::nextafter(pi, 4.0)}) {
+        EXPECT_EQ(wrapPi(x), static_cast<double>(x - turn)) << x;
+    }
+    for (double x : {-pi - 0.1, -4.0, -6.0, std::nextafter(-pi, -4.0)}) {
+        EXPECT_EQ(wrapPi(x), static_cast<double>(x + turn)) << x;
+    }
+    for (double x : {180.0, 180.1, 270.0, 359.9, std::nextafter(180.0, 400.0)}) {
+        EXPECT_EQ(wrap180(x), static_cast<double>(x - 360.0L)) << x;
+    }
+    for (double x : {-180.1, -270.0, -359.9, std::nextafter(-180.0, -400.0)}) {
+        EXPECT_EQ(wrap180(x), static_cast<double>(x + 360.0L)) << x;
+    }
+    // The upper end of each range is excluded: it maps to the lower end.
+    EXPECT_EQ(wrapPi(pi), -pi);
+    EXPECT_EQ(wrap180(180.0), -180.0);
+    EXPECT_EQ(wrapTwoPi(twoPi), 0.0);
+    EXPECT_EQ(wrap360(360.0), 0.0);
+    // Not-a-number and infinity have no wrapped value.
+    for (double x : {kNaN, kInf, -kInf}) {
+        EXPECT_TRUE(std::isnan(wrapPi(x)));
+        EXPECT_TRUE(std::isnan(wrap180(x)));
+        EXPECT_TRUE(std::isnan(wrapTwoPi(x)));
+        EXPECT_TRUE(std::isnan(wrap360(x)));
+    }
+}
+
+// A negative first argument makes the whole angle negative, as "-5 deg 30 min" does on paper. Truth: the
+// same angle written as a decimal, -(5 + 30/60) = -5.5 degrees; both sides round the same way, so the
+// comparison is for equality.
+TEST(Angle, DmsAndHmsToRadTakeTheSignOfTheFirstArgument) {
+    EXPECT_EQ(dmsToRad(-5, 30, 0.0), deg2rad(-5.5));
+    EXPECT_EQ(hmsToRad(-1, 30, 0.0), deg2rad(-22.5));
+    // `negative` is still how to write an angle between 0 and -1: an int has no negative zero.
+    EXPECT_EQ(dmsToRad(0, 30, 0.0, true), deg2rad(-0.5));
+    EXPECT_EQ(hmsToRad(0, 30, 0.0, true), deg2rad(-7.5));
+    // The two ways of giving the sign agree; they do not cancel.
+    EXPECT_EQ(dmsToRad(-5, 30, 0.0, true), deg2rad(-5.5));
+    EXPECT_EQ(hmsToRad(-1, 30, 0.0, true), deg2rad(-22.5));
+    // Positive angles, and the flag alone, are as before.
+    EXPECT_EQ(dmsToRad(5, 30, 0.0), deg2rad(5.5));
+    EXPECT_EQ(dmsToRad(5, 30, 0.0, true), deg2rad(-5.5));
+    // Minutes and seconds are magnitudes: their signs do not change the sign of the angle.
+    EXPECT_EQ(dmsToRad(5, -30, -0.0), deg2rad(5.5));
+    EXPECT_EQ(dmsToRad(-5, -30, -0.0), deg2rad(-5.5));
+}
+
+// Every form the grammar in angle.h allows. Truth: the same angle written as a decimal number of hours or
+// degrees. The parser adds the fields in the same order, so the two agree to a rounding error or two
+// (EXPECT_DOUBLE_EQ allows four).
+TEST(Angle, ParseAcceptsTheDocumentedSexagesimalForms) {
+    const double hms = deg2rad(15.0 * (12.0 + 34.0 / 60.0 + 56.7 / 3600.0));
+    for (const char* text : {"12:34:56.7",
+                             "12 34 56.7",
+                             "12h34m56.7s",
+                             "12h 34m 56.7s",
+                             "12 h 34 m 56.7 s",
+                             "12H34M56.7S",
+                             "12,34,56.7",
+                             "12: 34: 56.7",
+                             "12h34:56.7",
+                             "  12:34:56.7\t",
+                             "+12:34:56.7",
+                             "+ 12 34 56.7",
+                             "012:034:056.700"}) {
+        EXPECT_DOUBLE_EQ(parseHms(text), hms) << text;
+    }
+    const double dms = deg2rad(-(5.0 + 6.0 / 60.0 + 7.25 / 3600.0));
+    for (const char* text : {"-5:06:07.25",
+                             "-05 06 07.25",
+                             "- 5  6  7.25",
+                             "-5d6m7.25s",
+                             "-5D 6M 7.25S",
+                             "-5d6'7.25\"",
+                             "-5\xC2\xB0"
+                             "6'7.25\"", // degree sign in UTF-8
+                             "-5\xB0"
+                             "6'7.25\"", // degree sign in ISO 8859-1 (Latin-1)
+                             "-5\xC2\xB0 6' 7.25\" "}) {
+        EXPECT_DOUBLE_EQ(parseDms(text), dms) << text;
+    }
+    // One or two fields; only the last may have a fraction, and it may end or begin with the point.
+    EXPECT_DOUBLE_EQ(parseDms("12.5"), deg2rad(12.5));
+    EXPECT_DOUBLE_EQ(parseDms("12.5d"), deg2rad(12.5));
+    EXPECT_DOUBLE_EQ(parseDms("12."), deg2rad(12.0));
+    EXPECT_DOUBLE_EQ(parseDms(".5"), deg2rad(0.5));
+    EXPECT_DOUBLE_EQ(parseDms("12:30.5"), deg2rad(12.0 + 30.5 / 60.0));
+    EXPECT_DOUBLE_EQ(parseDms("12d30'"), deg2rad(12.5));
+    EXPECT_DOUBLE_EQ(parseHms("12.5h"), deg2rad(187.5));
+    EXPECT_DOUBLE_EQ(parseHms("12h30"), deg2rad(187.5));
+    // The first field has no upper limit; minutes and seconds just below 60 are in range.
+    EXPECT_DOUBLE_EQ(parseDms("360:00:00"), deg2rad(360.0));
+    EXPECT_DOUBLE_EQ(parseHms("24:00:00"), twoPi);
+    EXPECT_DOUBLE_EQ(parseDms("0:59:59.999"), deg2rad(59.0 / 60.0 + 59.999 / 3600.0));
+    // The sign applies to the whole angle, including an angle between 0 and -1.
+    EXPECT_DOUBLE_EQ(parseDms("-0:30"), deg2rad(-0.5));
+    EXPECT_TRUE(sameBits(parseDms("-0"), -0.0));
+}
+
+// Each string breaks one rule of the grammar in angle.h, and must throw as other malformed text does.
+// Before the parser was made strict, most of these returned a number (or NaN, or infinity).
+TEST(Angle, ParseRejectsMalformedSexagesimalText) {
+    for (const char* text : {
+             "nan",         "NaN",        "inf",     "-inf",        "infinity", // not numbers
+             "1e2",         "1:2e1:3",    "1:2:3e1", "1E2",         "0x10",     // exponents, hexadecimal
+             "5::30",       ":5:30",      "5:30:",   "5: :30",      "5,,30",    // an empty field
+             "12.5:30",     "12:30.5:30", "12.5 30", "12.5.5",                  // a fraction before the last field
+             "5:-30",       "--5",        "+-5",     "5 +30",       "5-",       // a sign that is not in front
+             "12:34:56.7x", "12x",        "x12",     "12:34:56.7\n"             // stray characters
+         }) {
+        EXPECT_THROW((void)parseDms(text), Error) << "parseDms(\"" << text << "\")";
+        EXPECT_THROW((void)parseHms(text), Error) << "parseHms(\"" << text << "\")";
+    }
+    for (const char* text : {"", " ", "+", "-", ".", "12:.", "1 2 3 4", "1:2:3:4", "12:60:00", "12:00:60"}) {
+        EXPECT_THROW((void)parseDms(text), Error) << "parseDms(\"" << text << "\")";
+        EXPECT_THROW((void)parseHms(text), Error) << "parseHms(\"" << text << "\")";
+    }
+    // A unit mark must fit the quantity: no degrees or arc marks in hours, no hours in degrees.
+    for (const char* text : {"12d", "12D", "12\xC2\xB0", "12\xB0", "12h30'", "12h30m15\"", "12d30m"}) {
+        EXPECT_THROW((void)parseHms(text), Error) << "parseHms(\"" << text << "\")";
+    }
+    for (const char* text : {"12h", "12H", "12h30m", "12h30'"}) {
+        EXPECT_THROW((void)parseDms(text), Error) << "parseDms(\"" << text << "\")";
+    }
+    // A unit mark must fit its field: the first number is hours or degrees, the second minutes, ...
+    for (const char* text : {"30m", "15s", "12h30h", "12h30s", "12m30s", "12:30:15m", "12h:30", "12hh", "h"}) {
+        EXPECT_THROW((void)parseHms(text), Error) << "parseHms(\"" << text << "\")";
+    }
+    for (const char* text : {"30m", "30'", "15\"", "12d30d", "12d30\"", "12'30\"", "12:30:15'", "12\xC2", "d"}) {
+        EXPECT_THROW((void)parseDms(text), Error) << "parseDms(\"" << text << "\")";
+    }
+}
+
+// An angle that is not finite has no sexagesimal digits. The result is the one stated in angle.h; before,
+// the hours or degrees were converted to int unchecked, which is undefined behaviour (it printed
+// "+-2147483648:-2147483648:nan").
+TEST(Angle, FormatAndDecomposeOfNonFiniteAnglesAreDefined) {
+    EXPECT_EQ(formatHms(kNaN), "nan");
+    EXPECT_EQ(formatDms(kNaN), "nan");
+    EXPECT_EQ(formatHms(kInf), "inf");
+    EXPECT_EQ(formatHms(-kInf), "-inf");
+    EXPECT_EQ(formatDms(kInf), "+inf");
+    EXPECT_EQ(formatDms(-kInf), "-inf");
+
+    for (const Sexagesimal& s : {radToHms(kNaN), radToDms(kNaN)}) {
+        EXPECT_FALSE(s.negative);
+        EXPECT_EQ(s.whole, 0);
+        EXPECT_EQ(s.minutes, 0);
+        EXPECT_TRUE(std::isnan(s.seconds));
+    }
+    for (double sign : {1.0, -1.0}) {
+        for (const Sexagesimal& s : {radToHms(sign * kInf), radToDms(sign * kInf)}) {
+            EXPECT_EQ(s.negative, sign < 0.0);
+            EXPECT_EQ(s.whole, 0);
+            EXPECT_EQ(s.minutes, 0);
+            EXPECT_EQ(s.seconds, kInf);
+        }
+    }
+}
+
+// The whole part is an int. The largest one still decomposes and prints; one degree more does not fit
+// and is reported like infinity, as angle.h says.
+TEST(Angle, FormatAndDecomposeAtTheLargestWholePart) {
+    const double      largest = std::numeric_limits<int>::max(); // 2147483647, exact in a double
+    const Sexagesimal fits    = radToDms(deg2rad(-largest));
+    EXPECT_TRUE(fits.negative);
+    EXPECT_EQ(fits.whole, std::numeric_limits<int>::max());
+    EXPECT_EQ(fits.minutes, 0);
+    EXPECT_EQ(fits.seconds, 0.0);
+    EXPECT_EQ(formatDms(deg2rad(largest)), "+2147483647:00:00.00");
+
+    const Sexagesimal tooLarge = radToDms(deg2rad(-(largest + 1.0)));
+    EXPECT_TRUE(tooLarge.negative);
+    EXPECT_EQ(tooLarge.whole, 0);
+    EXPECT_EQ(tooLarge.minutes, 0);
+    EXPECT_EQ(tooLarge.seconds, kInf);
+    EXPECT_EQ(formatDms(deg2rad(largest + 1.0)), "+inf");
+    EXPECT_EQ(formatHms(-1e300), "-inf");
 }
 
 TEST(Angle, Sexagesimal) {
@@ -69,4 +304,76 @@ TEST(RootFind, BrentMinimize) {
     auto r = brentMinimize([](double x) { return (x - 1.234) * (x - 1.234) + 3.0; }, -10.0, 10.0, 1e-12);
     EXPECT_NEAR(r.x, 1.234, 5e-8); // minimizers are limited to ~sqrt(eps) in x
     EXPECT_NEAR(r.fx, 3.0, 1e-14);
+}
+
+// The two ends of the interval may be given in either order. Truth: the minimum of the parabola, at
+// x = 1.234 in closed form; and since [b, a] is the same interval as [a, b], the same answer from the
+// same number of evaluations. Before the fix a reversed interval returned its first trial point
+// (x = 2.36 for [10, -10]) after one evaluation.
+TEST(RootFind, BrentMinimizeAcceptsAReversedInterval) {
+    int        calls = 0;
+    const auto f     = [&](double x) {
+        ++calls;
+        return (x - 1.234) * (x - 1.234) + 3.0;
+    };
+    for (const auto& [lo, hi] : {
+             std::pair{-10.0, 10.0},
+             std::pair{1.0,   5.0 },
+             std::pair{-3.0,  1.3 }
+    }) {
+        calls                             = 0;
+        const MinimizeResult ordered      = brentMinimize(f, lo, hi);
+        const int            orderedCalls = calls;
+        calls                             = 0;
+        const MinimizeResult reversed     = brentMinimize(f, hi, lo);
+        EXPECT_NEAR(reversed.x, 1.234, 5e-8) << "[" << hi << ", " << lo << "]"; // sqrt(eps) limit, as above
+        EXPECT_NEAR(reversed.fx, 3.0, 1e-14);
+        EXPECT_EQ(reversed.x, ordered.x);
+        EXPECT_EQ(calls, orderedCalls);
+    }
+}
+
+// A minimum cannot be located more finely than about sqrt(eps) |x|: closer than that, f differs from
+// its least value by less than its own rounding error. Brent's tolerance has that floor built in, so a
+// tolerance below it must cost no more evaluations than one at it. Two functions with a minimum known
+// in closed form: a parabola at 1.234, and -sin(x) exp(-x / 10), whose minimum is where tan(x) = 10.
+// Before the fix `tol` was a relative tolerance with no floor: the parabola took 35 evaluations at the
+// default tolerance and 55 at 1e-300, against 6 now at any of them (21 and 36 against 10 for the other).
+TEST(RootFind, BrentMinimizeToleranceHasTheSqrtEpsFloor) {
+    const double sqrtEps = std::sqrt(std::numeric_limits<double>::epsilon());
+    struct Case {
+        double (*f)(double);
+        double lo, hi, minimum;
+    };
+    const Case cases[] = {
+        {[](double x) { return (x - 1.234) * (x - 1.234) + 3.0; },   -10.0, 10.0, 1.234          },
+        {[](double x) { return -std::sin(x) * std::exp(-0.1 * x); }, 0.0,   4.0,  std::atan(10.0)},
+    };
+    for (const Case& c : cases) {
+        int        calls   = 0;
+        const auto counted = [&](double x) {
+            ++calls;
+            return c.f(x);
+        };
+        // A tolerance at the floor: the yardstick for the count.
+        const double         floorTol     = 3.0 * sqrtEps * c.minimum;
+        const MinimizeResult atFloor      = brentMinimize(counted, c.lo, c.hi, floorTol);
+        const int            atFloorCalls = calls;
+        EXPECT_NEAR(atFloor.x, c.minimum, 2.0 * floorTol);
+
+        for (double tol : {1e-9, 1e-10, 1e-12, 1e-14, 1e-300}) {
+            calls                  = 0;
+            const MinimizeResult r = brentMinimize(counted, c.lo, c.hi, tol);
+            // The documented accuracy: tol plus the floor, 3 sqrt(eps) |x|.
+            EXPECT_NEAR(r.x, c.minimum, tol + 3.0 * sqrtEps * c.minimum) << "tol " << tol;
+            // No more work than at the floor. The counts are in fact equal; one evaluation of slack
+            // because the last steps of the search are a tolerance long, so a slightly different
+            // tolerance (or compiler) can end it one step later.
+            EXPECT_LE(calls, atFloorCalls + 1) << "tol " << tol;
+        }
+        // The default tolerance is below the floor as well.
+        calls = 0;
+        (void)brentMinimize(counted, c.lo, c.hi);
+        EXPECT_LE(calls, atFloorCalls + 1);
+    }
 }

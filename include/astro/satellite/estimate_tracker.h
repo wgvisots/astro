@@ -71,6 +71,12 @@ enum class ConsistencyTest {
     /// longitude), against the predicted covariance mapped into elements (6 degrees of freedom). The
     /// error stays nearly linear in elements (it grows mostly in mean longitude), so this has the
     /// sensitivity of PositionVelocity with the nominal false-alarm rate of Position.
+    ///
+    /// The elements exist for elliptic orbits only. A new estimate on an open orbit is infinitely
+    /// far from an elliptic prediction (p-value 0). If the prediction itself is on an open orbit
+    /// this statistic does not exist: it is reported as NaN and, if this is the selected test,
+    /// the delivery counts as not consistent. Select Position or PositionVelocity for such an
+    /// object.
     Elements,
 };
 
@@ -115,30 +121,32 @@ struct TrackerOptions {
 /// conservative. A large d^2 means the new state is not where the previous estimate said it would
 /// be. See ConsistencyTest for which statistic sets `consistent`.
 struct ConsistencyCheck {
-    double      dt{0.0};                    ///< new epoch minus previous epoch (s)
-    StateVector predicted;                  ///< previous estimate propagated to the new epoch
-    Mat6        predictedCovariance{};      ///< covariance of `predicted`, including process noise
-    Vec3        positionResidualRic;        ///< new - predicted position along radial, in-track, cross-track (m)
-    Vec3        velocityResidualRic;        ///< new - predicted inertial velocity in the same axes (m/s)
-    Vec3        positionSigmaRic;           ///< predicted 1-sigma position along R, I, C (m)
-    Vec3        velocitySigmaRic;           ///< predicted 1-sigma velocity along R, I, C (m/s)
-    double      mahalanobis2{0.0};          ///< 6-D squared distance
-    double      positionMahalanobis2{0.0};  ///< position-only (3-D) squared distance
-    double      pValue{1.0};                ///< P(chi^2 with 6 dof >= mahalanobis2)
-    double      positionPValue{1.0};        ///< P(chi^2 with 3 dof >= positionMahalanobis2)
-    double      elementsMahalanobis2{0.0};  ///< 6-D squared distance in equinoctial elements
-    double      elementsPValue{1.0};        ///< P(chi^2 with 6 dof >= elementsMahalanobis2)
-    double      semiMajorAxisResidual{0.0}; ///< new - predicted osculating semi-major axis (m)
-    double      semiMajorAxisSigma{0.0};    ///< predicted 1-sigma of the semi-major axis (m)
-    bool        valid{false};               ///< false if the predicted covariance is not positive definite
-    bool        consistent{false};          ///< valid and the selected test's p-value >= alarmProbability
-    bool        replaced{false};            ///< whether the tracker took the new estimate (it is not older)
+    double      dt{0.0};                   ///< new epoch minus previous epoch (s)
+    StateVector predicted;                 ///< previous estimate propagated to the new epoch
+    Mat6        predictedCovariance{};     ///< covariance of `predicted`, including process noise
+    Vec3        positionResidualRic;       ///< new - predicted position along radial, in-track, cross-track (m)
+    Vec3        velocityResidualRic;       ///< new - predicted inertial velocity in the same axes (m/s)
+    Vec3        positionSigmaRic;          ///< predicted 1-sigma position along R, I, C (m)
+    Vec3        velocitySigmaRic;          ///< predicted 1-sigma velocity along R, I, C (m/s)
+    double      mahalanobis2{0.0};         ///< 6-D squared distance
+    double      positionMahalanobis2{0.0}; ///< position-only (3-D) squared distance
+    double      pValue{1.0};               ///< P(chi^2 with 6 dof >= mahalanobis2)
+    double      positionPValue{1.0};       ///< P(chi^2 with 3 dof >= positionMahalanobis2)
+    double      elementsMahalanobis2{
+        0.0}; ///< 6-D squared distance in equinoctial elements (NaN if the prediction is not elliptic)
+    double elementsPValue{1.0};        ///< P(chi^2 with 6 dof >= elementsMahalanobis2) (NaN likewise)
+    double semiMajorAxisResidual{0.0}; ///< new - predicted osculating semi-major axis (m; NaN likewise, with its sigma)
+    double semiMajorAxisSigma{0.0};    ///< predicted 1-sigma of the semi-major axis (m)
+    bool   valid{false};               ///< false if the predicted covariance is not positive definite
+    bool   consistent{false};          ///< valid and the selected test's p-value >= alarmProbability
+    bool   replaced{false};            ///< whether the tracker took the new estimate (it is not older)
 };
 
 /// @{
 
 /// Survival function of the chi-square distribution with 3 and 6 degrees of freedom, P(X >= x).
-/// NaN for NaN, so a NaN statistic never passes a p-value test.
+/// 1 for x <= 0; 0 for +infinity and for any x so large that the value is below the smallest double
+/// (x > 1490). NaN for NaN, so a NaN statistic never passes a p-value test.
 [[nodiscard]] double chiSquareSurvival3(double x) noexcept;
 [[nodiscard]] double chiSquareSurvival6(double x) noexcept;
 /// @}

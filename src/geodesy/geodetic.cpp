@@ -42,7 +42,7 @@ double heightFor(double rho, double z, double lat, const Ellipsoid& ell) {
 
 // Inside the evolute up to four normals to the ellipse pass through the point.
 // Find every root of  f(phi) = rho sin(phi) - z cos(phi) - N(phi) e^2 sin(phi) cos(phi)
-// in [0, pi/2] (first quadrant, z >= 0) and keep the nearest foot point (largest h).
+// in [0, pi/2] (first quadrant, rho > 0, z >= 0) and keep the nearest foot point (largest h).
 double latitudeNearCenter(double rho, double z, const Ellipsoid& ell) {
     const double e2 = ell.e2();
     auto         f  = [&](double phi) {
@@ -72,6 +72,13 @@ double latitudeNearCenter(double rho, double z, const Ellipsoid& ell) {
         }
         prevPhi = phi;
         prevF   = fi;
+    }
+    // The scan ends at the double nearest pi/2, which is 6e-17 rad short of the pole. At the pole
+    // itself f is exactly rho, and rho > 0 here. So if f is still negative at the last sample, a foot
+    // point lies in that gap (the point is within about 5e-12 m of the polar axis): it is nearer the
+    // pole than a double can express, and the last sample is the latitude.
+    if (prevF < 0.0) {
+        consider(constants::halfPi);
     }
     return bestPhi;
 }

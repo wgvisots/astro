@@ -21,6 +21,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <random>
 #include <vector>
 
@@ -72,6 +73,90 @@ TEST(EstimateTracker, ChiSquareSurvival) {
     EXPECT_NEAR(chiSquareSurvival3(7.8147), 0.05, 1e-6);
     EXPECT_EQ(chiSquareSurvival6(0.0), 1.0);
     EXPECT_EQ(chiSquareSurvival3(-1.0), 1.0);
+}
+
+TEST(EstimateTracker, ChiSquareSurvivalOfAHugeStatisticIsZero) {
+    // P(X >= x) is erfc(sqrt(x/2)) + sqrt(2x/pi) exp(-x/2) for 3 degrees of freedom and
+    // exp(-x/2) (1 + x/2 + x^2/8) for 6. Evaluated in extended precision, both are still representable
+    // doubles at x = 1400 ...
+    for (long double x : {100.0L, 700.0L, 1400.0L}) {
+        const long double q3 = std::erfc(std::sqrt(0.5L * x))
+                             + std::sqrt(2.0L * x / std::numbers::pi_v<long double>) * std::exp(-0.5L * x);
+        const long double q6 = std::exp(-0.5L * x) * (1.0L + 0.5L * x + 0.125L * x * x);
+        EXPECT_NEAR(chiSquareSurvival3(static_cast<double>(x)) / static_cast<double>(q3), 1.0, 1e-12);
+        EXPECT_NEAR(chiSquareSurvival6(static_cast<double>(x)) / static_cast<double>(q6), 1.0, 1e-12);
+    }
+    // ... and from x = 1e4 on they are below 1e-2000, far under the smallest double: the value is 0,
+    // all the way to infinity.
+    const double inf = std::numeric_limits<double>::infinity();
+    for (double x : {1e4, 1e10, 1e154, 1e155, 1e300, std::numeric_limits<double>::max(), inf}) {
+        EXPECT_EQ(chiSquareSurvival3(x), 0.0) << x;
+        EXPECT_EQ(chiSquareSurvival6(x), 0.0) << x;
+    }
+}
+
+TEST(EstimateTracker, OrbitTurnedOverIsInfinitelyFarWithZeroPValue) {
+    // The same position with the velocity reversed: a retrograde orbit, 128.4 deg from the predicted
+    // plane. The tracker calls that infinitely far in elements; the chance of it is zero, not NaN.
+    const StateVector   s0 = leo();
+    const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
+    const StateVector   truth = truthAt(s0, 60.0);
+    const StateEstimate next{
+        kEpoch + 60.0,
+        {truth.r, -truth.v},
+        diagonal(100.0, 1e-4)
+    };
+    const auto c = checkConsistency(prior, next);
+    EXPECT_TRUE(c.valid);
+    EXPECT_EQ(c.elementsMahalanobis2, std::numeric_limits<double>::infinity());
+    EXPECT_EQ(c.elementsPValue, 0.0);
+    EXPECT_FALSE(c.consistent);
+}
+
+TEST(EstimateTracker, NewEstimateOnAnOpenOrbitIsInfinitelyFarInElements) {
+    // The same position at one and a half times the speed: a hyperbola, which has no equinoctial
+    // elements. Against an elliptic prediction that is infinitely far, with p-value 0; the other two
+    // tests still give their (finite, enormous) distances.
+    const StateVector   s0 = leo();
+    const StateEstimate prior{kEpoch, s0, diagonal(100.0, 1e-4)};
+    const StateVector   truth = truthAt(s0, 60.0);
+    const StateEstimate next{
+        kEpoch + 60.0,
+        {truth.r, 1.5 * truth.v},
+        diagonal(100.0, 1e-4)
+    };
+    const auto c = checkConsistency(prior, next);
+    EXPECT_TRUE(c.valid);
+    EXPECT_EQ(c.elementsMahalanobis2, std::numeric_limits<double>::infinity());
+    EXPECT_EQ(c.elementsPValue, 0.0);
+    EXPECT_FALSE(c.consistent);
+    EXPECT_TRUE(std::isfinite(c.mahalanobis2));
+    EXPECT_GT(c.mahalanobis2, 1e6);
+    // A prediction that is itself on an open orbit has no elements statistic: it is NaN, the other
+    // two statistics are unaffected, and nothing throws. With the (default) elements test the
+    // delivery counts as not consistent; with the position test a delivery that follows the
+    // hyperbola is accepted.
+    const StateVector   open{s0.r, 1.5 * s0.v};
+    const StateEstimate openPrior{kEpoch, open, diagonal(100.0, 1e-4)};
+    const StateEstimate onTheHyperbola{kEpoch + 60.0, truthAt(open, 60.0), diagonal(100.0, 1e-4)};
+    const auto          e = checkConsistency(openPrior, onTheHyperbola);
+    EXPECT_TRUE(e.valid);
+    EXPECT_TRUE(std::isnan(e.elementsMahalanobis2));
+    EXPECT_TRUE(std::isnan(e.elementsPValue));
+    EXPECT_TRUE(std::isnan(e.semiMajorAxisResidual));
+    EXPECT_LT(e.mahalanobis2, 1.0); // the new estimate is the prediction itself
+    EXPECT_GT(e.positionPValue, 0.9);
+    EXPECT_FALSE(e.consistent);
+    TrackerOptions byPosition;
+    byPosition.test = ConsistencyTest::Position;
+    EXPECT_TRUE(checkConsistency(openPrior, onTheHyperbola, byPosition).consistent);
+    // A tracker on such an object keeps taking deliveries.
+    EstimateTracker tracker(byPosition);
+    (void)tracker.update(openPrior);
+    const auto update = tracker.update(onTheHyperbola);
+    ASSERT_TRUE(update.has_value());
+    EXPECT_TRUE(update->consistent);
+    EXPECT_TRUE(update->replaced);
 }
 
 TEST(EstimateTracker, Mahalanobis) {

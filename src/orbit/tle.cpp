@@ -18,13 +18,18 @@
 
 #include "astro/orbit/tle.h"
 
+#include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <sstream>
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
+#include "astro/time/leap_seconds.h"
+#include "tle_detail.h"
 
 namespace astro {
 
@@ -41,88 +46,327 @@ std::string trim(std::string_view s) {
     return std::string(s.substr(b, e - b));
 }
 
-// Columns are 1-based inclusive as in the TLE specification.
-std::string_view cols(std::string_view line, std::size_t first, std::size_t last) {
-    if (line.size() < first) {
-        return {};
+// Columns `first` to `last` of `line`, counted from 1 and inclusive as in the TLE specification. The result always
+// has the full width of the field: columns past the end of a short line are blank.
+std::string cols(std::string_view line, std::size_t first, std::size_t last) {
+    std::string field(last - first + 1, ' ');
+    if (line.size() >= first) {
+        const std::string_view present = line.substr(first - 1, field.size());
+        field.replace(0, present.size(), present);
     }
-    return line.substr(first - 1, std::min(last, line.size()) - first + 1);
+    return field;
 }
 
+[[noreturn]] void badField(const char* what, std::string_view field) {
+    throw Error(std::string("TLE: bad ") + what + " field '" + std::string(field) + "'");
+}
+
+bool isDigit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+// `s` without the blanks at its two ends.
+std::string_view stripBlanks(std::string_view s) {
+    while (!s.empty() && s.front() == ' ') {
+        s.remove_prefix(1);
+    }
+    while (!s.empty() && s.back() == ' ') {
+        s.remove_suffix(1);
+    }
+    return s;
+}
+
+// The number fields are read as a fixed-format (Fortran) read would take them: digits, at most one sign and one
+// decimal point, and blanks, with an all-blank field read as zero. The C library's conversions (std::stod,
+// std::stoi) are not used to decide what a number is: they also take "nan", "inf", hexadecimal and exponents,
+// none of which a TLE field can hold, and they follow the program's locale.
+
+// A field with an explicit decimal point: blanks, an optional sign, digits with at most one decimal point, blanks.
 double toDouble(std::string_view s, const char* what) {
-    const std::string t = trim(s);
+    const std::string_view t = stripBlanks(s);
     if (t.empty()) {
         return 0.0;
     }
-    try {
-        std::size_t  pos = 0;
-        const double v   = std::stod(t, &pos);
-        if (pos != t.size()) {
-            throw std::invalid_argument("trailing");
+    const bool        negative = t[0] == '-';
+    const std::size_t start    = (negative || t[0] == '+') ? 1 : 0;
+    std::size_t       digits = 0, points = 0;
+    for (std::size_t i = start; i < t.size(); ++i) {
+        if (isDigit(t[i])) {
+            ++digits;
+        } else if (t[i] == '.') {
+            ++points;
+        } else {
+            badField(what, s);
         }
-        return v;
-    } catch (const std::exception&) {
-        throw Error(std::string("TLE: bad ") + what + " field '" + t + "'");
     }
+    if (digits == 0 || points > 1) {
+        badField(what, s);
+    }
+    double      v        = 0.0;
+    const char* end      = t.data() + t.size();
+    const auto [ptr, ec] = std::from_chars(t.data() + start, end, v, std::chars_format::fixed);
+    if (ec != std::errc{} || ptr != end) {
+        badField(what, s);
+    }
+    return negative ? -v : v;
 }
 
+// A whole-number field: blanks, digits, blanks. None of these fields is signed, and none is wider than five
+// columns, so the value cannot overflow.
 int toInt(std::string_view s, const char* what) {
-    const std::string t = trim(s);
-    if (t.empty()) {
-        return 0;
+    const std::string_view t = stripBlanks(s);
+    if (t.size() > 5) {
+        badField(what, s);
     }
-    try {
-        std::size_t pos = 0;
-        const int   v   = std::stoi(t, &pos);
-        if (pos != t.size()) {
-            throw std::invalid_argument("trailing");
+    int v = 0;
+    for (const char c : t) {
+        if (!isDigit(c)) {
+            badField(what, s);
         }
-        return v;
-    } catch (const std::exception&) {
-        throw Error(std::string("TLE: bad ") + what + " field '" + t + "'");
+        v = 10 * v + (c - '0');
     }
+    return v;
 }
 
-// "-12345-6" style assumed-decimal exponent field: -0.12345e-6.
+// A field of digits with the decimal point implied before the first column: "0006703" is 0.0006703. A blank column
+// is a zero digit wherever it is, as in Vallado's reference reader (twoline2rv fills these columns with zeros
+// before it reads the number). Taking the blanks for padding instead would move the digits up and make the value
+// ten times too large for every leading blank. Returns false if a column holds anything but a digit or a blank.
+bool toImpliedDecimal(std::string_view s, double& value) {
+    double digits = 0.0, scale = 1.0;
+    for (const char c : s) {
+        if (c != ' ' && !isDigit(c)) {
+            return false;
+        }
+        digits  = 10.0 * digits + (c == ' ' ? 0 : c - '0');
+        scale  *= 10.0;
+    }
+    // Both numbers are exact, so the quotient is the double nearest to the decimal number, as a decimal read of
+    // "0.NNNNNNN" would give.
+    value = digits / scale;
+    return true;
+}
+
+// The "+NNNNN-N" fields (second derivative of the mean motion, and B*): a sign, five mantissa digits with the
+// decimal point implied before them, the sign of the exponent and one exponent digit, so "-11606-4" is
+// -0.11606e-4. A blank sign is a plus and a blank digit is a zero. The value is formed as the reference reader
+// forms it, mantissa times pow(10, exponent), so that SGP4 starts from the same B* bit for bit.
 double parseExpField(std::string_view s, const char* what) {
-    std::string t = trim(s);
-    if (t.empty()) {
-        return 0.0;
+    const auto isSign   = [](char c) { return c == ' ' || c == '+' || c == '-'; };
+    double     mantissa = 0.0;
+    if (s.size() != 8 || !isSign(s[0]) || !isSign(s[6]) || (s[7] != ' ' && !isDigit(s[7]))
+        || !toImpliedDecimal(s.substr(1, 5), mantissa)) {
+        badField(what, s);
     }
-    double sign = 1.0;
-    if (t[0] == '-' || t[0] == '+') {
-        sign = t[0] == '-' ? -1.0 : 1.0;
-        t.erase(0, 1);
-    }
-    const auto epos = t.find_last_of("+-");
-    if (epos == std::string::npos || epos == 0) {
-        return sign * toDouble("0." + t, what);
-    }
-    const double mant = toDouble("0." + trim(t.substr(0, epos)), what);
-    const int    ex   = toInt(t.substr(epos), what);
-    return sign * mant * std::pow(10.0, ex);
+    const int    exponent = s[7] == ' ' ? 0 : s[7] - '0';
+    const double value    = mantissa * std::pow(10.0, s[6] == '-' ? -exponent : exponent);
+    return s[0] == '-' ? -value : value;
 }
 
-std::string formatExpField(double v) {
-    // Format as " 12345-6" (8 chars): sign, 5-digit mantissa, signed exponent digit.
-    if (v == 0.0) {
-        return " 00000-0";
+// The epoch from the two-digit year (columns 19-20) and the day of the year with its fraction (columns 21-32).
+Time parseEpoch(std::string_view yearField, std::string_view dayField) {
+    const int    yy   = toInt(yearField, "epoch year");
+    const double day  = toDouble(dayField, "epoch day");
+    const int    year = yy < 57 ? 2000 + yy : 1900 + yy;
+    // Days are numbered from 1, so the field runs from 1.0 to just under 366.0 (367.0 in a leap year).
+    const int    daysInYear = isLeapYear(year) ? 366 : 365;
+    const double wholeDay   = std::floor(day);
+    if (!(wholeDay >= 1.0 && wholeDay <= daysInYear)) {
+        throw Error("TLE: bad epoch day field '" + std::string(dayField) + "' (" + std::to_string(year)
+                    + " has days 1 to " + std::to_string(daysInYear) + ")");
     }
-    const char sign = v < 0.0 ? '-' : ' ';
-    double     a    = std::abs(v);
-    int        ex   = static_cast<int>(std::floor(std::log10(a))) + 1;
-    long       mant = std::lround(a / std::pow(10.0, ex) * 1e5);
-    if (mant >= 100000) {
-        mant /= 10;
-        ++ex;
+    // Two-digit years 57 to 59 are 1957 to 1959, before UTC and the leap-second table begin. Say so here: the time
+    // module could only report that TAI - UTC is undefined, which does not tell the caller what is wrong with the
+    // element set.
+    int month = 0, dayOfMonth = 0;
+    monthDayFromDayOfYear(year, static_cast<int>(wholeDay), month, dayOfMonth);
+    const auto             table = leapSecondTable();
+    const LeapSecondEntry& first = table->entries().front();
+    if (year < first.year || (year == first.year && month < first.month)) {
+        char text[96];
+        std::snprintf(text,
+                      sizeof(text),
+                      "TLE: epoch %04d-%02d-%02d is before UTC begins (%04d-%02d-01 in the leap-second table)",
+                      year,
+                      month,
+                      dayOfMonth,
+                      first.year,
+                      first.month);
+        throw Error(text);
     }
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "%c%05ld%c%d", sign, mant % 100000, ex < 0 ? '-' : '+', std::abs(ex) % 10);
+    const double midnight = static_cast<double>(julianDayNumber(year, 1, 1)) - 0.5 + (wholeDay - 1.0);
+    return Time(JulianDate{midnight, (day - wholeDay) * detail::tleDayPerUtcDay(midnight)}, TimeScale::UTC);
+}
+
+// Writes a "+NNNNN-N" field (see parseExpField) as the value nearest to `v` that the field can hold: five mantissa
+// digits and an exponent from -9 to +9. Below 0.1e-9 the exponent stays at -9 and the mantissa gets leading zeros,
+// down to the smallest step, 0.00001e-9 = 1e-14; a value nearer to zero than half a step is written as zero.
+// Throws astro::Error naming `what` if the value is not finite or rounds beyond the largest one, 0.99999e9.
+std::string formatExpField(double v, const char* what) {
+    if (!std::isfinite(v)) {
+        throw Error(std::string("Tle::line1: ") + what + " is not finite");
+    }
+    const double a    = std::abs(v);
+    const char*  zero = " 00000-0";
+    if (a == 0.0) {
+        return zero;
+    }
+    // The C library rounds correctly to the digits asked for, here five significant ones: "d.dddde-XX". Taking the
+    // exponent from a logarithm instead can be off by one next to a power of ten.
+    char text[32];
+    std::snprintf(text, sizeof(text), "%.4e", a);
+    long mantissa = 10000 * (text[0] - '0') + std::strtol(text + 2, nullptr, 10);
+    int  exponent = static_cast<int>(std::strtol(text + 7, nullptr, 10)) + 1; // of 0.ddddd, not of d.dddd
+    if (exponent > 9) {
+        std::snprintf(text, sizeof(text), "%g", v);
+        throw Error(std::string("Tle::line1: ") + what + " " + text
+                    + " is too large for its field (the largest value is 0.99999e9)");
+    }
+    if (exponent < -9) {
+        // Fourteen decimals, of which the first nine are zeros and the last five are the mantissa.
+        std::snprintf(text, sizeof(text), "%.14f", a);
+        mantissa = std::strtol(text + 11, nullptr, 10);
+        exponent = -9;
+        if (mantissa == 0) {
+            return zero;
+        }
+    }
+    std::snprintf(text,
+                  sizeof(text),
+                  "%c%05ld%c%d",
+                  v < 0.0 ? '-' : ' ',
+                  mantissa,
+                  exponent < 0 ? '-' : '+',
+                  std::abs(exponent));
+    return text;
+}
+
+// The writers below refuse a value its field cannot hold. Writing it anyway would push the later fields out of
+// their columns, or wrap the value into another one, and the line would still carry a valid checksum.
+
+[[noreturn]] void cannotWrite(const char* function, const char* what, double value, const char* why) {
+    char text[32];
+    std::snprintf(text, sizeof(text), "%.10g", value);
+    throw Error(std::string(function) + ": " + what + " " + text + " " + why);
+}
+
+// A number with `decimals` decimals, right-justified in `width` columns. Throws astro::Error naming `what` if it is
+// not finite or needs more columns than the field has.
+std::string fixedField(double v, int width, int decimals, const char* function, const char* what) {
+    if (!std::isfinite(v)) {
+        cannotWrite(function, what, v, "is not finite");
+    }
+    char buf[32];
+    if (std::snprintf(buf, sizeof(buf), "%*.*f", width, decimals, v) != width) {
+        cannotWrite(function, what, v, "does not fit its field");
+    }
     return buf;
 }
 
+// An angle of line 2 other than the inclination: degrees in [0, 360) with four decimals. An angle that rounds up to
+// 360.0000 is written as 0.0000, because the top of the range is not in it.
+std::string angleField(double rad, const char* what) {
+    if (!std::isfinite(rad)) {
+        cannotWrite("Tle::line2", what, rad, "is not finite");
+    }
+    const std::string text = fixedField(rad2deg(wrapTwoPi(rad)), 8, 4, "Tle::line2", what);
+    return text == "360.0000" ? "  0.0000" : text;
+}
+
+// The first derivative of the mean motion: a minus sign or a blank, then the decimal point and eight decimals. The
+// field has no column for a digit before the point.
+std::string ndotField(double v) {
+    if (!std::isfinite(v)) {
+        cannotWrite("Tle::line1", "n-dot", v, "is not finite");
+    }
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.8f", v);
+    const std::string text = buf; // "0.00002182" or "-0.00002182"
+    if (text.rfind("-0.", 0) == 0) {
+        return "-" + text.substr(2);
+    }
+    if (text.rfind("0.", 0) == 0) {
+        return " " + text.substr(1);
+    }
+    cannotWrite("Tle::line1", "n-dot", v, "does not fit its field (the magnitude must round to less than 1)");
+}
+
+// The epoch field: the two-digit year, the day of the year, and the time of day as a fraction of 86400 s to eight
+// decimals (see detail::tleDayPerUtcDay in tle_detail.h).
+std::string epochField(const Time& epoch) {
+    if (!std::isfinite(epoch.jd().jd1 + epoch.jd().jd2)) {
+        throw Error("Tle::line1: epoch is not finite");
+    }
+    const JulianDate utc  = epoch.to(TimeScale::UTC).jd();
+    int              year = 0, month = 0, dayOfMonth = 0;
+    dateFromJulianDayNumber(std::llround(utc.jd1 + 0.5), year, month, dayOfMonth);
+    const double perUtcDay = detail::tleDayPerUtcDay(utc.jd1);
+    const double fraction  = utc.jd2 / perUtcDay; // of 86400 s; it reaches 1 and goes on during a leap second
+    int          day       = dayOfYear(year, month, dayOfMonth);
+    long long    units     = std::llround(fraction * 1e8); // of 1e-8 day (0.864 ms), the resolution of the field
+    if (units >= 100000000) {
+        // The fraction rounds up to the end of an 86400 s day, which the field cannot say ("366.00000000" is not a
+        // time on day 365). Normally the end of the day is 0h of the next day, and that is the epoch to write. On
+        // a day with a leap second 0h is a second further on.
+        const double toNextDay = 1.0 / perUtcDay - fraction; // in days of 86400 s
+        if (toNextDay * 1e8 <= 0.5) {
+            units = 0;
+            if (++day > (isLeapYear(year) ? 366 : 365)) {
+                day = 1;
+                ++year;
+            }
+        } else if (fraction < 1.0) {
+            units = 99999999; // the last half step before a leap second: this is the nearest epoch the field holds
+        } else {
+            throw Error("Tle::line1: epoch " + epoch.to(TimeScale::UTC).iso8601(3)
+                        + " is inside a leap second, which a fraction of an 86400 s day cannot name");
+        }
+    }
+    if (year < 1957 || year > 2056) {
+        throw Error("Tle::line1: epoch year " + std::to_string(year)
+                    + " does not fit its two-digit field (1957 to 2056)");
+    }
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%02d%03d.%08lld", year % 100, day, units);
+    return buf;
+}
+
+// Verifying a checksum needs the checksum: all 69 columns, with a digit in the last. A line without one is not a
+// line whose checksum matches. `which` is "line 1" or "line 2".
+void requireChecksum(const std::string& line, const char* which) {
+    if (line.size() < 69) {
+        throw Error(std::string("TLE: ") + which + " has " + std::to_string(line.size())
+                    + " columns; its checksum is in column 69");
+    }
+    if (!isDigit(line[68])) {
+        throw Error(std::string("TLE: ") + which + " checksum '" + line[68] + "' is not a digit");
+    }
+    if (tleChecksum(line) != line[68] - '0') {
+        throw Error(std::string("TLE: ") + which + " checksum mismatch");
+    }
+}
+
+// The catalog number of columns 3-7. It is right-justified, and some writers pad a short one with blanks instead
+// of zeros ("    5"), so leading blanks are read as zeros; the rest is for decodeAlpha5 to judge.
+int parseCatalogNumber(std::string field) {
+    for (std::size_t i = 0; i + 1 < field.size() && field[i] == ' '; ++i) {
+        field[i] = '0';
+    }
+    return decodeAlpha5(field);
+}
+
+// Whether a character can stand in a line: printable ASCII, the blank included.
+bool isPrintable(char c) {
+    return c >= ' ' && c <= '~';
+}
+
+// Adds the checksum to the 68 columns of a line. Every field was written to its exact width, so the length is a
+// check on this file and not on the caller: a line cut or padded to 68 columns would be the malformed line with a
+// valid checksum that the field checks exist to prevent.
 std::string withChecksum(std::string line) {
-    line.resize(68, ' ');
+    if (line.size() != 68) {
+        throw Error("Tle: a line of " + std::to_string(line.size()) + " columns was formatted (internal error)");
+    }
     line += static_cast<char>('0' + tleChecksum(line));
     return line;
 }
@@ -144,38 +388,35 @@ int tleChecksum(std::string_view line) noexcept {
 }
 
 int decodeAlpha5(std::string_view s) {
-    const std::string t = trim(s);
-    if (t.empty()) {
-        throw Error("TLE: empty catalog number");
+    // Exactly the Alpha-5 alphabet: five digits, or a capital letter other than I and O (left out because they look
+    // like 1 and 0) followed by four digits. The letters count on from 10: A = 10 ... H = 17, J = 18 ... N = 22,
+    // P = 23 ... Z = 33.
+    const char lead  = s.empty() ? '\0' : s[0];
+    const bool digit = isDigit(lead);
+    const bool alpha = lead >= 'A' && lead <= 'Z' && lead != 'I' && lead != 'O';
+    if (s.size() != 5 || !(digit || alpha) || !std::all_of(s.begin() + 1, s.end(), isDigit)) {
+        throw Error("TLE: bad catalog number '" + std::string(s)
+                    + "' (5 characters: digits, or a capital letter other than I and O and 4 digits)");
     }
-    if (std::isalpha(static_cast<unsigned char>(t[0]))) {
-        const char c = static_cast<char>(std::toupper(static_cast<unsigned char>(t[0])));
-        if (c == 'I' || c == 'O') {
-            throw Error("TLE: invalid Alpha-5 letter");
-        }
-        int v = c - 'A' + 10;
-        if (c > 'I') {
-            --v;
-        }
-        if (c > 'O') {
-            --v;
-        }
-        return v * 10000 + toInt(t.substr(1), "catalog number");
+    int high = lead - '0';
+    if (alpha) {
+        high = lead - 'A' + 10 - (lead > 'I' ? 1 : 0) - (lead > 'O' ? 1 : 0);
     }
-    return toInt(t, "catalog number");
+    return high * 10000 + toInt(s.substr(1), "catalog number");
 }
 
 std::string encodeAlpha5(int satnum) {
+    if (satnum < 0 || satnum > 339999) {
+        throw Error("encodeAlpha5: catalog number " + std::to_string(satnum)
+                    + " cannot be written in 5 characters (0 to 339999)");
+    }
     char buf[8];
     if (satnum < 100000) {
-        std::snprintf(buf, sizeof(buf), "%05d", std::max(0, satnum) % 100000);
+        std::snprintf(buf, sizeof(buf), "%05d", satnum);
         return buf;
     }
-    int lead = satnum / 10000;
-    if (lead > 33) {
-        throw Error("encodeAlpha5: catalog number too large");
-    }
-    char c = static_cast<char>('A' + lead - 10);
+    const int lead = satnum / 10000;
+    char      c    = static_cast<char>('A' + lead - 10);
     if (c >= 'I') {
         ++c;
     }
@@ -195,28 +436,21 @@ Tle Tle::parse(std::string_view l1, std::string_view l2, std::string_view name, 
         throw Error("TLE: line 2 malformed");
     }
     if (verifyChecksum) {
-        if (a.size() >= 69 && std::isdigit(static_cast<unsigned char>(a[68])) && tleChecksum(a) != a[68] - '0') {
-            throw Error("TLE: line 1 checksum mismatch");
-        }
-        if (b.size() >= 69 && std::isdigit(static_cast<unsigned char>(b[68])) && tleChecksum(b) != b[68] - '0') {
-            throw Error("TLE: line 2 checksum mismatch");
-        }
+        requireChecksum(a, "line 1");
+        requireChecksum(b, "line 2");
     }
     Tle t;
     t.name = trim(name);
     if (!t.name.empty() && t.name[0] == '0' && t.name.size() > 1 && t.name[1] == ' ') {
         t.name = trim(t.name.substr(2));
     }
-    t.satnum = decodeAlpha5(cols(a, 3, 7));
-    if (decodeAlpha5(cols(b, 3, 7)) != t.satnum) {
+    t.satnum = parseCatalogNumber(cols(a, 3, 7));
+    if (parseCatalogNumber(cols(b, 3, 7)) != t.satnum) {
         throw Error("TLE: catalog numbers on lines 1 and 2 differ");
     }
-    t.classification  = a.size() >= 8 ? a[7] : 'U';
-    t.intlDesignator  = trim(cols(a, 10, 17));
-    const int    yy   = toInt(cols(a, 19, 20), "epoch year");
-    const double day  = toDouble(cols(a, 21, 32), "epoch day");
-    const int    year = yy < 57 ? 2000 + yy : 1900 + yy;
-    t.epoch = Time(JulianDate{static_cast<double>(julianDayNumber(year, 1, 1)) - 0.5, day - 1.0}, TimeScale::UTC);
+    t.classification   = a.size() >= 8 ? a[7] : 'U';
+    t.intlDesignator   = trim(cols(a, 10, 17));
+    t.epoch            = parseEpoch(cols(a, 19, 20), cols(a, 21, 32));
     t.meanMotionDot    = toDouble(cols(a, 34, 43), "n-dot");
     t.meanMotionDdot   = parseExpField(cols(a, 45, 52), "n-ddot");
     t.bstar            = parseExpField(cols(a, 54, 61), "B*");
@@ -224,7 +458,9 @@ Tle Tle::parse(std::string_view l1, std::string_view l2, std::string_view name, 
     t.elementSetNumber = toInt(cols(a, 65, 68), "element set number");
     t.inclination      = deg2rad(toDouble(cols(b, 9, 16), "inclination"));
     t.raan             = deg2rad(toDouble(cols(b, 18, 25), "RAAN"));
-    t.eccentricity     = toDouble("0." + trim(cols(b, 27, 33)), "eccentricity");
+    if (!toImpliedDecimal(cols(b, 27, 33), t.eccentricity)) {
+        badField("eccentricity", cols(b, 27, 33));
+    }
     t.argPerigee       = deg2rad(toDouble(cols(b, 35, 42), "argument of perigee"));
     t.meanAnomaly      = deg2rad(toDouble(cols(b, 44, 51), "mean anomaly"));
     t.meanMotion       = toDouble(cols(b, 53, 63), "mean motion");
@@ -233,75 +469,97 @@ Tle Tle::parse(std::string_view l1, std::string_view l2, std::string_view name, 
 }
 
 std::vector<Tle> Tle::parseMany(std::string_view text, bool verifyChecksum) {
-    std::vector<std::string> lines;
-    std::istringstream       in{std::string(text)};
-    std::string              line;
-    while (std::getline(in, line)) {
-        const std::string t = trim(line);
-        if (!t.empty() && t[0] != '#') {
-            lines.push_back(line);
+    // A data line starts with "1 " or "2 " and is at least as long as the shortest line parse() takes (64 and 63
+    // columns). Any other line that is not blank and not a '#' comment is a name. Names are at most 24 columns, so
+    // one that happens to start with "1 " is not taken for data.
+    const auto unpaired = [](std::size_t lineNumber, const char* what) {
+        throw Error("TLE: text line " + std::to_string(lineNumber) + ": " + what);
+    };
+    std::vector<Tle>   out;
+    std::istringstream in{std::string(text)};
+    std::string        raw, name, line1;
+    std::size_t        lineNumber = 0, line1Number = 0; // counted from 1; line1Number is 0 when no line 1 is waiting
+    while (std::getline(in, raw)) {
+        ++lineNumber;
+        const std::string t = trim(raw);
+        if (t.empty() || t[0] == '#') {
+            continue;
+        }
+        const bool isLine1 = t.size() >= 64 && t[0] == '1' && t[1] == ' ';
+        const bool isLine2 = t.size() >= 63 && t[0] == '2' && t[1] == ' ';
+        if (line1Number != 0) {
+            if (!isLine2) {
+                unpaired(line1Number, "line 1 of an element set is not followed by its line 2");
+            }
+            out.push_back(parse(line1, t, name, verifyChecksum));
+            name.clear();
+            line1Number = 0;
+        } else if (isLine1) {
+            line1       = t;
+            line1Number = lineNumber;
+        } else if (isLine2) {
+            unpaired(lineNumber, "line 2 of an element set without its line 1");
+        } else {
+            name = t;
         }
     }
-    std::vector<Tle> out;
-    std::string      pendingName;
-    for (std::size_t i = 0; i < lines.size(); ++i) {
-        const std::string t = trim(lines[i]);
-        if (t.size() >= 2 && t[0] == '1' && t[1] == ' ' && i + 1 < lines.size() && trim(lines[i + 1])[0] == '2') {
-            out.push_back(parse(lines[i], lines[i + 1], pendingName, verifyChecksum));
-            pendingName.clear();
-            ++i;
-        } else {
-            pendingName = t;
-        }
+    if (line1Number != 0) {
+        unpaired(line1Number, "line 1 of an element set is not followed by its line 2");
     }
     return out;
 }
 
 std::string Tle::line1() const {
-    // Epoch: year and fractional day of year.
-    const CalendarDate c = epoch.to(TimeScale::UTC).calendar(9);
-    const JulianDate   jan1{static_cast<double>(julianDayNumber(c.year, 1, 1)) - 0.5, 0.0};
-    const double       day = epoch.to(TimeScale::UTC).jd().daysSince(jan1) + 1.0;
-    char               nd[16];
-    std::snprintf(nd, sizeof(nd), "%.8f", meanMotionDot);
-    std::string ndot = nd;
-    // " .00002182" / "-.00002182" style.
-    if (ndot.rfind("-0.", 0) == 0) {
-        ndot = "-" + ndot.substr(2);
-    } else if (ndot.rfind("0.", 0) == 0) {
-        ndot = " " + ndot.substr(1);
+    if (!isPrintable(classification)) {
+        throw Error("Tle::line1: classification is not a printable character (code "
+                    + std::to_string(static_cast<int>(classification)) + ")");
+    }
+    if (intlDesignator.size() > 8 || !std::all_of(intlDesignator.begin(), intlDesignator.end(), isPrintable)) {
+        throw Error("Tle::line1: international designator '" + intlDesignator
+                    + "' does not fit its field (at most 8 printable characters)");
+    }
+    if (ephemerisType < 0 || ephemerisType > 9) {
+        throw Error("Tle::line1: ephemeris type " + std::to_string(ephemerisType) + " is not one digit");
+    }
+    if (elementSetNumber < 0) {
+        throw Error("Tle::line1: element set number " + std::to_string(elementSetNumber) + " is negative");
     }
     char buf[96];
     std::snprintf(buf,
                   sizeof(buf),
-                  "1 %s%c %-8s %02d%012.8f %10s %8s %8s %1d %4d",
+                  "1 %s%c %-8s %s %s %s %s %1d %4d",
                   encodeAlpha5(satnum).c_str(),
                   classification,
                   intlDesignator.c_str(),
-                  c.year % 100,
-                  day,
-                  ndot.c_str(),
-                  formatExpField(meanMotionDdot).c_str(),
-                  formatExpField(bstar).c_str(),
+                  epochField(epoch).c_str(),
+                  ndotField(meanMotionDot).c_str(),
+                  formatExpField(meanMotionDdot, "n-ddot").c_str(),
+                  formatExpField(bstar, "B*").c_str(),
                   ephemerisType,
                   elementSetNumber % 10000);
     return withChecksum(buf);
 }
 
 std::string Tle::line2() const {
-    char ecc[16];
-    std::snprintf(ecc, sizeof(ecc), "%07ld", std::lround(eccentricity * 1e7));
+    // Seven digits after an implied decimal point: 0 to 0.9999999.
+    const double eccentricityDigits = std::isfinite(eccentricity) ? std::round(eccentricity * 1e7) : -1.0;
+    if (!(eccentricityDigits >= 0.0 && eccentricityDigits <= 9999999.0)) {
+        cannotWrite("Tle::line2", "eccentricity", eccentricity, "does not fit its field (0 to 0.9999999)");
+    }
+    if (revolutionNumber < 0) {
+        throw Error("Tle::line2: revolution number " + std::to_string(revolutionNumber) + " is negative");
+    }
     char buf[96];
     std::snprintf(buf,
                   sizeof(buf),
-                  "2 %s %8.4f %8.4f %s %8.4f %8.4f %11.8f%5d",
+                  "2 %s %s %s %07ld %s %s %s%5d",
                   encodeAlpha5(satnum).c_str(),
-                  rad2deg(inclination),
-                  rad2deg(wrapTwoPi(raan)),
-                  ecc,
-                  rad2deg(wrapTwoPi(argPerigee)),
-                  rad2deg(wrapTwoPi(meanAnomaly)),
-                  meanMotion,
+                  fixedField(rad2deg(inclination), 8, 4, "Tle::line2", "inclination").c_str(),
+                  angleField(raan, "RAAN").c_str(),
+                  static_cast<long>(eccentricityDigits),
+                  angleField(argPerigee, "argument of perigee").c_str(),
+                  angleField(meanAnomaly, "mean anomaly").c_str(),
+                  fixedField(meanMotion, 11, 8, "Tle::line2", "mean motion").c_str(),
                   revolutionNumber % 100000);
     return withChecksum(buf);
 }

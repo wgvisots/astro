@@ -25,9 +25,11 @@
 #include "astro/orbit/sgp4.h"
 
 #include <cmath>
+#include <limits>
 #include <string>
 
 #include "../core/enum_io.h"
+#include "tle_detail.h"
 
 namespace astro {
 
@@ -56,7 +58,20 @@ const char* errorMessage(int code) {
     case 3:  return "SGP4: perturbed eccentricity out of range";
     case 4:  return "SGP4: semi-latus rectum less than zero";
     case 6:  return "SGP4: satellite has decayed";
+    case 7:  return "SGP4: the time is not finite";
     default: return "SGP4: propagation error";
+    }
+}
+
+/// Error code for a time that is not finite: not one of the reference code's (1-6).
+constexpr int kTimeNotFinite = 7;
+
+// Throws astro::Error naming the element if it is NaN or infinite. The range tests of the reference code
+// (e >= 1, n <= 0, ...) are all false for NaN, so a non-finite element would pass them and come out as a NaN state
+// with error code 0.
+void requireFinite(double value, const char* name) {
+    if (!std::isfinite(value)) {
+        throw Error(std::string("Sgp4: ") + name + " is not finite");
     }
 }
 
@@ -923,6 +938,20 @@ struct Sgp4::Impl {
 
 Sgp4::Sgp4(const Tle& tle, Sgp4Gravity gravity, Sgp4OpsMode mode)
     : impl_(std::make_unique<Impl>()) {
+    // Check what the theory uses (the two derivatives of the mean motion are carried but not used).
+    requireFinite(tle.epoch.jd().jd1 + tle.epoch.jd().jd2, "epoch");
+    requireFinite(tle.bstar, "B*");
+    requireFinite(tle.inclination, "inclination");
+    requireFinite(tle.raan, "right ascension of the ascending node");
+    requireFinite(tle.eccentricity, "eccentricity");
+    requireFinite(tle.argPerigee, "argument of perigee");
+    requireFinite(tle.meanAnomaly, "mean anomaly");
+    requireFinite(tle.meanMotion, "mean motion");
+    // The reference code tests for error 2 after the Kozai correction, which takes a fractional power of the mean
+    // motion: a negative one has turned into NaN by then and is not caught.
+    if (tle.meanMotion < 0.0) {
+        throw Sgp4Error(2, std::string(errorMessage(2)) + " (at epoch)");
+    }
     Impl& s     = *impl_;
     s.tle       = tle;
     s.epochTime = tle.epoch;
@@ -938,17 +967,28 @@ Sgp4::Sgp4(const Tle& tle, Sgp4Gravity gravity, Sgp4OpsMode mode)
     s.no_kozai          = tle.meanMotion / xpdotp;
     s.nodeo             = tle.raan;
     const JulianDate jd = tle.epoch.to(TimeScale::UTC).jd();
+    // The reference implementation counts the epoch in days of 86400 s, straight from the day fraction of the
+    // element set, so the fraction of a UTC day that ends with a leap second is put back on that footing (the
+    // factor is exactly 1 on any other day).
+    const double dayFraction = jd.jd2 / detail::tleDayPerUtcDay(jd.jd1);
     // Deliberately reproduce the reference implementation's arithmetic, which sums the two JD parts into one
     // double before subtracting (jdsatepoch + jdsatepochF - 2433281.5). The resulting ~1e-10 day rounding
     // reaches the lunar-solar terms, and matching it gives sub-millimeter agreement with Vallado's test output
     // even for extreme deep-space orbits.
-    s.epochDays = (jd.jd1 + jd.jd2) - 2433281.5;
+    s.epochDays = (jd.jd1 + dayFraction) - 2433281.5;
     s.init();
     // Check the epoch state as Vallado does (errors 1-4 at epoch are fatal).
     StateVector tmp;
     const int   code = s.sgp4(0.0, tmp);
     if (code != 0 && code != 6) {
         throw Sgp4Error(code, std::string(errorMessage(code)) + " (at epoch)");
+    }
+    // Finite elements can still overflow on the way (a drag term of 1e300, say). No range test catches that,
+    // because the tests are false for NaN, so look at the state itself.
+    for (const double component : {tmp.r.x, tmp.r.y, tmp.r.z, tmp.v.x, tmp.v.y, tmp.v.z}) {
+        if (!std::isfinite(component)) {
+            throw Error("Sgp4: the elements give a non-finite state at the epoch");
+        }
     }
 }
 
@@ -965,12 +1005,23 @@ Sgp4::Sgp4(Sgp4&&) noexcept            = default;
 Sgp4& Sgp4::operator=(Sgp4&&) noexcept = default;
 
 int Sgp4::propagate(double minutes, StateVector& out) const noexcept {
+    // The theory's own range tests are all false for a NaN, which would come out as a NaN state
+    // with code 0, and the deep-space resonance integration steps towards the requested time, so an
+    // infinite one would never be reached. Code 7 is this library's, not one of the reference code's.
+    if (!std::isfinite(minutes)) {
+        constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+        out                  = {
+            {nan, nan, nan},
+            {nan, nan, nan}
+        };
+        return kTimeNotFinite;
+    }
     return impl_->sgp4(minutes, out);
 }
 
 StateVector Sgp4::propagate(double minutes) const {
     StateVector out;
-    const int   code = impl_->sgp4(minutes, out);
+    const int   code = propagate(minutes, out);
     if (code != 0) {
         throw Sgp4Error(code, errorMessage(code));
     }

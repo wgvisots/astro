@@ -18,6 +18,10 @@
 
 #include "astro/time/time.h"
 
+#include <cmath>
+#include <limits>
+#include <string>
+
 #include "astro/core/error.h"
 #include "astro/frames/eop.h"
 #include "astro/time/leap_seconds.h"
@@ -32,6 +36,21 @@ namespace {
 double diffSec(const JulianDate& a, double b1, double b2) {
     return ((a.jd1 - b1) + (a.jd2 - b2)) * 86400.0;
 }
+
+// `call` must throw astro::Error, and the message must contain `what`.
+template <typename Call>
+void expectErrorSaying(Call&& call, const std::string& what, const char* label) {
+    try {
+        call();
+        ADD_FAILURE() << label << ": no error";
+    } catch (const Error& e) {
+        EXPECT_NE(std::string(e.what()).find(what), std::string::npos)
+            << label << ": expected \"" << what << "\" in the message, which was: " << e.what();
+    }
+}
+
+const double kNaN = std::numeric_limits<double>::quiet_NaN();
+const double kInf = std::numeric_limits<double>::infinity();
 } // namespace
 
 TEST(JulianDate, CalendarRoundTrip) {
@@ -84,7 +103,7 @@ TEST(LeapSeconds, ParseFileFormats) {
                                           "    41317.0    1  1 1972       10\n"
                                           "    41499.0    1  7 1972       11\n"
                                           "    57754.0    1  1 2017       37\n"
-                                          "    61000.0    1  1 2026       38\n";
+                                          "    61041.0    1  1 2026       38\n";
     const LeapSecondTable a             = LeapSecondTable::parse(leapSecondDat);
     EXPECT_DOUBLE_EQ(a.taiMinusUtc(2026, 1, 1), 38.0);
     EXPECT_DOUBLE_EQ(a.taiMinusUtc(2025, 12, 31), 37.0);
@@ -206,6 +225,49 @@ TEST(Time, LeapSecondHandling) {
     EXPECT_TRUE(a < b);
 }
 
+TEST(Time, LastMinuteOfAShortenedUtcDayIsShorter) {
+    // TAI-UTC stepped down by 0.05 s at 0h on 1961-08-01 and by 0.1 s on 1968-02-01 (USNO tai-utc.dat), so the UTC
+    // days before those dates were 86399.95 s and 86399.9 s long and their last minutes end at 23:59:59.95 and
+    // 23:59:59.9. A later reading of the clock did not exist, just as 23:59:60 does not exist on an ordinary day.
+    //
+    // The readings 0.01 s before those ends are 0.01 s before the next midnight. Tolerance 1e-8 s: a UTC second
+    // was up to 3e-8 longer than an SI second then (3e-10 s here), and the conversion, like ERFA's, treats the
+    // step and the rate separately, which leaves step * rate = 0.1 s * 3e-8 = 3e-9 s at such a midnight.
+    const Time aug1961 = Time::fromCalendar(TimeScale::UTC, 1961, 8, 1);
+    EXPECT_NEAR(aug1961 - Time::fromCalendar(TimeScale::UTC, 1961, 7, 31, 23, 59, 59.94), 0.01, 1e-8);
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 1961, 7, 31, 23, 59, 59.96), Error);
+    EXPECT_THROW((void)Time::fromIso8601("1961-07-31T23:59:59.999Z"), Error);
+    const Time feb1968 = Time::fromCalendar(TimeScale::UTC, 1968, 2, 1);
+    EXPECT_NEAR(feb1968 - Time::fromCalendar(TimeScale::UTC, 1968, 1, 31, 23, 59, 59.89), 0.01, 1e-8);
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 1968, 1, 31, 23, 59, 59.91), Error);
+    // Only the last minute of such a day is shorter, and the days either side are ordinary.
+    EXPECT_NO_THROW((void)Time::fromCalendar(TimeScale::UTC, 1961, 7, 31, 23, 58, 59.99));
+    EXPECT_NO_THROW((void)Time::fromCalendar(TimeScale::UTC, 1961, 7, 30, 23, 59, 59.99));
+    EXPECT_NO_THROW((void)Time::fromCalendar(TimeScale::UTC, 1961, 8, 1, 23, 59, 59.99));
+}
+
+TEST(Time, NegativeLeapSecondRemovesTheLastSecondOfTheDay) {
+    // None has happened yet. If TAI-UTC went from 37 s to 36 s at the start of 2030, the UTC day 2029-12-31 would
+    // be 86399 s long and end at 23:59:59 (Recommendation ITU-R TF.460-6): 23:59:58.5 is in its last second.
+    struct RestoreTable {
+        ~RestoreTable() { setLeapSecondTable(LeapSecondTable::builtin()); }
+    } restore;
+    std::vector<LeapSecondEntry> entries = LeapSecondTable::builtin().entries();
+    entries.push_back({2030, 1, 36.0});
+    setLeapSecondTable(LeapSecondTable(entries));
+
+    const Time last = Time::fromCalendar(TimeScale::UTC, 2029, 12, 31, 23, 59, 58.5);
+    // 23:59:58.5 UTC + 37 s is 00:00:35.5 TAI on 2030-01-01, half a second before 00:00:00 UTC (00:00:36 TAI).
+    EXPECT_NEAR(last.to(TimeScale::TAI).jd().secondsSince(JulianDate::fromCalendar(2030, 1, 1)), 35.5, 1e-9);
+    EXPECT_NEAR(Time::fromCalendar(TimeScale::UTC, 2030, 1, 1) - last, 0.5, 1e-9);
+    EXPECT_EQ(last.iso8601(1), "2029-12-31T23:59:58.5Z");
+    EXPECT_EQ((last + 0.5).iso8601(1), "2030-01-01T00:00:00.0Z");
+    // 23:59:59 is not a time on that day.
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 2029, 12, 31, 23, 59, 59.5), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2029-12-31T23:59:59Z"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2030-01-01T00:59:59+01:00"), Error);
+}
+
 TEST(Time, Unix) {
     EXPECT_EQ(Time::fromUnix(0.0).iso8601(3), "1970-01-01T00:00:00.000Z");
     const Time t = Time::fromUnix(1483228800.25); // 2017-01-01T00:00:00.25Z
@@ -247,6 +309,46 @@ TEST(Time, Gnss) {
     EXPECT_NEAR(Time::fromGpsSeconds(t.gpsSeconds()) - t, 0.0, 1e-9);
 }
 
+TEST(Time, GnssTimeOfWeekStaysBelowOneWeek) {
+    // Week 0 of each system starts at 0h on these Julian dates, in the system's own time scale: GPS 1980-01-06
+    // (IS-GPS-200), Galileo 1999-08-22, which is GPS week 1024 (Galileo OS SIS ICD), BeiDou 2006-01-01 (BeiDou ICD).
+    struct System {
+        GnssSystem system;
+        TimeScale  scale;
+        double     epochJd;
+    };
+    const System systems[] = {
+        {GnssSystem::GPS,     TimeScale::GPS, 2444244.5},
+        {GnssSystem::Galileo, TimeScale::GST, 2451412.5},
+        {GnssSystem::BeiDou,  TimeScale::BDT, 2453736.5}
+    };
+    // Fractions of a day: the last one is the largest below 1, a tenth of a nanosecond before midnight.
+    const double fractions[] = {0.0, 1.0e-17, 0.25, 0.75, std::nextafter(1.0, 0.0)};
+    for (const System& s : systems) {
+        for (const int week : {0, 1, 1023, 2000, 2399}) {
+            for (int day = 0; day < 7; ++day) {
+                for (const double fraction : fractions) {
+                    const Time        t = Time::fromJd(s.epochJd + 7.0 * week + day, fraction, s.scale);
+                    const GnssWeekTow g = t.gnssWeekTow(s.system);
+                    EXPECT_GE(g.tow, 0.0) << week << " " << day << " " << fraction;
+                    EXPECT_LT(g.tow, 604800.0) << week << " " << day << " " << fraction;
+                    // Week and time of week together are the seconds since the epoch, here in extended precision.
+                    // 1.2e-10 s is the spacing of doubles just below 604800: the time of week cannot be closer.
+                    const long double want = (7.0L * week + day + static_cast<long double>(fraction)) * 86400.0L;
+                    const long double got  = 604800.0L * g.week + static_cast<long double>(g.tow);
+                    EXPECT_NEAR(static_cast<double>(got - want), 0.0, 1.2e-10)
+                        << week << " " << day << " " << fraction << ": week " << g.week << ", tow " << g.tow;
+                }
+            }
+        }
+    }
+    // The last instant of GPS week 2000 that a Time can hold is week 2001, time of week 0, to the nearest double.
+    const GnssWeekTow last =
+        Time::fromJd(2444244.5 + 7.0 * 2000 + 6, std::nextafter(1.0, 0.0), TimeScale::GPS).gnssWeekTow(GnssSystem::GPS);
+    EXPECT_EQ(last.week, 2001);
+    EXPECT_EQ(last.tow, 0.0);
+}
+
 TEST(Time, Iso8601) {
     EXPECT_EQ(Time::fromIso8601("2024-03-01T12:34:56.789Z").iso8601(3), "2024-03-01T12:34:56.789Z");
     EXPECT_EQ(Time::fromIso8601("2024-03-01 12:34").iso8601(0), "2024-03-01T12:34:00Z");
@@ -262,6 +364,120 @@ TEST(Time, Iso8601) {
     EXPECT_THROW((void)Time::fromIso8601("2024-3-1"), Error);
     EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00 XYZ"), Error);
     EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00Zjunk"), Error);
+}
+
+TEST(Time, Iso8601OffsetIsCivilClockArithmetic) {
+    // A clock keeping "UTC+01:00" shows the same seconds as a UTC clock and is one hour ahead in its hours and
+    // minutes, also on a day with a leap second. The expected UTC calendar fields below are worked out by hand.
+    struct Case {
+        const char* text;
+        int         year, month, day, hour, minute;
+        double      second;
+    };
+    // clang-format off
+    const Case cases[] = {
+        // The leap-second day 2016-12-31 (it ends with 23:59:60) and the days either side of it.
+        {"2016-12-30T23:30:00+01:00",    2016, 12, 30, 22, 30,  0.0 },
+        {"2016-12-31T00:30:00+01:00",    2016, 12, 30, 23, 30,  0.0 }, // back into the day before
+        {"2016-12-30T23:30:00-01:00",    2016, 12, 31,  0, 30,  0.0 }, // forward into the leap-second day
+        {"2016-12-31T12:00:00+05:30",    2016, 12, 31,  6, 30,  0.0 }, // inside the leap-second day
+        {"2017-01-01T00:30:00+01:00",    2016, 12, 31, 23, 30,  0.0 }, // back across the leap second
+        {"2016-12-31T18:30:00-06:00",    2017,  1,  1,  0, 30,  0.0 }, // forward across the leap second
+        {"2017-01-01T00:59:59.25+01:00", 2016, 12, 31, 23, 59, 59.25}, // the second before the leap second
+        {"2017-01-01T00:59:60+01:00",    2016, 12, 31, 23, 59, 60.0 }, // the leap second itself
+        {"2016-12-31T18:59:60.5-05:00",  2016, 12, 31, 23, 59, 60.5 },
+        {"2017-01-01T05:29:60.75+05:30", 2016, 12, 31, 23, 59, 60.75}, // a zone with a half-hour offset
+        {"2017-01-01T01:00:00+01:00",    2017,  1,  1,  0,  0,  0.0 }, // the second after the leap second
+        {"2017-01-02T00:30:00+01:00",    2017,  1,  1, 23, 30,  0.0 },
+        {"2017-01-01T23:30:00-01:00",    2017,  1,  2,  0, 30,  0.0 },
+        // Month and year boundaries, with and without a leap day.
+        {"2024-03-01T00:30:00+01:00",    2024,  2, 29, 23, 30,  0.0 },
+        {"2024-02-29T23:30:00-01:00",    2024,  3,  1,  0, 30,  0.0 },
+        {"2023-03-01T00:30:00+01:00",    2023,  2, 28, 23, 30,  0.0 },
+        {"2024-01-01T00:30:00+14:00",    2023, 12, 31, 10, 30,  0.0 },
+        {"2023-12-31T23:30:00-12:00",    2024,  1,  1, 11, 30,  0.0 },
+        // The largest offsets.
+        {"2024-03-01T00:00:00+23:59",    2024,  2, 29,  0,  1,  0.0 },
+        {"2024-03-01T23:59:00-23:59",    2024,  3,  2, 23, 58,  0.0 },
+        // Other spellings: no colon, hours only, an ordinal date, a zero offset.
+        {"2024-03-01T12:00:00+0530",     2024,  3,  1,  6, 30,  0.0 },
+        {"2024-03-01T12:00:00+05",       2024,  3,  1,  7,  0,  0.0 },
+        {"2024-061T12:00:00-00:45",      2024,  3,  1, 12, 45,  0.0 },
+        {"2016-12-31T23:59:60.5+00:00",  2016, 12, 31, 23, 59, 60.5 },
+        // Before 1972 a UTC second was not an SI second; the clock arithmetic is the same.
+        {"1965-01-01T05:00:00+06:00",    1964, 12, 31, 23,  0,  0.0 },
+    };
+    // clang-format on
+    for (const Case& c : cases) {
+        const Time got  = Time::fromIso8601(c.text);
+        const Time want = Time::fromCalendar(TimeScale::UTC, c.year, c.month, c.day, c.hour, c.minute, c.second);
+        EXPECT_EQ(got.scale(), TimeScale::UTC) << c.text;
+        // The same calendar fields give the same two-part Julian date, bit for bit.
+        EXPECT_EQ(got.jd().jd1, want.jd().jd1) << c.text << " gave " << got.iso8601(6);
+        EXPECT_EQ(got.jd().jd2, want.jd().jd2) << c.text << " gave " << got.iso8601(6);
+    }
+
+    // One hour on the "+01:00" clock that contains the leap second lasts 3601 s. (1e-9 s: about a hundred times
+    // the resolution of a two-part Julian date.)
+    EXPECT_NEAR(Time::fromIso8601("2017-01-01T01:30:00+01:00") - Time::fromIso8601("2017-01-01T00:30:00+01:00"),
+                3601.0,
+                1e-9);
+    // TAI - UTC was 36 s until the end of that leap second, so it began at 00:00:36 TAI.
+    EXPECT_EQ(Time::fromIso8601("2017-01-01T00:59:60+01:00").to(TimeScale::TAI).iso8601(3),
+              "2017-01-01T00:00:36.000 TAI");
+}
+
+TEST(Time, Iso8601OffsetRejectsInvalidFields) {
+    // A leap second exists only at 23:59:60 UTC; with these offsets ":60" falls in another UTC minute.
+    EXPECT_THROW((void)Time::fromIso8601("2017-01-01T00:59:60+00:30"), Error); // 00:29:60 UTC
+    EXPECT_THROW((void)Time::fromIso8601("2016-12-31T23:59:60+01:00"), Error); // 22:59:60 UTC
+    // The local fields must be a real date and time of day, whatever the offset.
+    EXPECT_THROW((void)Time::fromIso8601("2024-02-30T12:00:00+01:00"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T24:00:00+01:00"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:60:00+01:00"), Error);
+    // Offset hours are 00-23 and offset minutes 00-59 (RFC 3339, section 5.6).
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00+99:99"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00+24:00"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00-24:00"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00+23:60"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:00+0560"), Error);
+}
+
+TEST(Time, Iso8601RejectsExponentInSeconds) {
+    // ISO-8601 seconds are digits with an optional decimal fraction: "05e1" is not 50 s.
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:05e1"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:05e0"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:05E1Z"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("2024-03-01T12:00:05.5e1 TT"), Error);
+    // A decimal fraction is still read in full.
+    EXPECT_EQ(Time::fromIso8601("2024-03-01T12:00:05.125Z").iso8601(3), "2024-03-01T12:00:05.125Z");
+    EXPECT_EQ(Time::fromIso8601("2024-03-01T12:00:05.125 TT").iso8601(3), "2024-03-01T12:00:05.125 TT");
+}
+
+TEST(Time, Iso8601TextCoversYears0000To9999) {
+    // Inside the four-digit years, what iso8601() writes is read back by fromIso8601() as the same instant.
+    for (int year : {0, 1, 999, 1000, 9999}) {
+        const Time t    = Time::fromCalendar(TimeScale::TT, year, 12, 31, 23, 59, 58.5);
+        const Time back = Time::fromIso8601(t.iso8601(1));
+        EXPECT_EQ(back.scale(), TimeScale::TT) << year;
+        EXPECT_EQ(back.jd().jd1, t.jd().jd1) << year;
+        EXPECT_EQ(back.jd().jd2, t.jd().jd2) << year;
+    }
+    EXPECT_EQ(Time::fromCalendar(TimeScale::TT, 0, 1, 1).iso8601(0), "0000-01-01T00:00:00 TT");
+    EXPECT_EQ(Time::fromCalendar(TimeScale::TT, 9999, 12, 31, 23, 59, 59.0).iso8601(0), "9999-12-31T23:59:59 TT");
+
+    // Outside them there is no four-digit year to write, and both directions refuse.
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::TT, -5, 1, 1).iso8601(), Error);
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::TT, 12000, 1, 1).iso8601(), Error);
+    EXPECT_THROW((void)Time::fromCalendar(TimeScale::TT, 9999, 12, 31, 23, 59, 59.9996).iso8601(3), Error); // rounds up
+    EXPECT_THROW((void)Time::fromIso8601("-005-01-01T00:00:00 TT"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("-0005-01-01T00:00:00 TT"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("12000-01-01T00:00:00 TT"), Error);
+    EXPECT_THROW((void)Time::fromIso8601("9999-12-31T23:30:00-01:00"), Error); // 00:30 UTC in the year 10000
+
+    // Only the text is limited: the calendar fields of such a time are still available.
+    EXPECT_EQ(Time::fromCalendar(TimeScale::TT, 12000, 1, 1).calendar().year, 12000);
+    EXPECT_EQ(Time::fromCalendar(TimeScale::TT, -5, 1, 1).calendar().year, -5);
 }
 
 TEST(Time, Ut1RequiresEop) {
@@ -280,4 +496,67 @@ TEST(Time, GlobalLeapSecondTableOverride) {
     EXPECT_NEAR(t.to(TimeScale::TAI).jd().secondsSince(JulianDate::fromCalendar(2030, 1, 1)), 37.5, 1e-9);
     setLeapSecondTable(LeapSecondTable::builtin());
     EXPECT_THROW((void)Time::fromCalendar(TimeScale::UTC, 2029, 12, 31, 23, 59, 60.5), Error);
+}
+
+TEST(Time, NonFiniteSecondsThrowAndSaySo) {
+    // A NaN or an infinity is refused where it comes in, with a message that names it: it must never reach a
+    // conversion to an integer (undefined behaviour) or surface later as an unrelated error.
+    for (const TimeScale scale : {TimeScale::UTC, TimeScale::TT}) {
+        for (const double bad : {kNaN, kInf, -kInf}) {
+            expectErrorSaying([&] { (void)Time::fromCalendar(scale, 2024, 1, 1, 0, 0, bad); },
+                              "not finite",
+                              "fromCalendar");
+            expectErrorSaying([&] { (void)Time::fromCalendar(scale, CalendarDate{2024, 1, 1, 0, 0, bad}); },
+                              "not finite",
+                              "fromCalendar(CalendarDate)");
+        }
+    }
+    for (const double bad : {kNaN, kInf, -kInf}) {
+        expectErrorSaying([&] { (void)Time::fromUnix(bad); }, "not finite", "fromUnix(double)");
+        expectErrorSaying([&] { (void)Time::fromUnix(1700000000LL, bad); }, "not finite", "fromUnix(whole, fraction)");
+    }
+    // Finite, but too large to be turned into whole seconds and days.
+    for (const double big : {1.0e30, -1.0e30}) {
+        expectErrorSaying([&] { (void)Time::fromUnix(big); }, "out of range", "fromUnix(double)");
+        expectErrorSaying([&] { (void)Time::fromUnix(0LL, big); }, "out of range", "fromUnix(whole, fraction)");
+    }
+    expectErrorSaying([] { (void)Time::fromUnix(std::numeric_limits<long long>::max(), 0.5); },
+                      "out of range",
+                      "fromUnix(whole, fraction)");
+    expectErrorSaying([] { (void)Time::fromUnix(std::numeric_limits<long long>::min(), 0.5); },
+                      "out of range",
+                      "fromUnix(whole, fraction)");
+    // A fraction outside [0, 1) is still carried into the whole seconds: 1483228799 + 1.25 s.
+    EXPECT_EQ(Time::fromUnix(1483228799LL, 1.25).iso8601(2), "2017-01-01T00:00:00.25Z");
+}
+
+TEST(Time, CalendarOfANonFiniteTimeThrows) {
+    // A Time made from a NaN Julian date cannot be written as a date in any scale.
+    for (const TimeScale scale : {TimeScale::UTC, TimeScale::TT, TimeScale::GPS}) {
+        for (const double bad : {kNaN, kInf, -kInf}) {
+            const Time t = Time::fromJd(bad, 0.0, scale);
+            expectErrorSaying([&] { (void)t.calendar(); }, "not finite", "calendar");
+            expectErrorSaying([&] { (void)t.iso8601(); }, "not finite", "iso8601");
+        }
+    }
+}
+
+TEST(JulianDate, ToCalendarRejectsNonFiniteAndHugeDates) {
+    for (const double bad : {kNaN, kInf, -kInf}) {
+        expectErrorSaying([&] { (void)JulianDate{bad, 0.0}.toCalendar(); }, "not finite", "jd1");
+        expectErrorSaying([&] { (void)JulianDate{2451545.0, bad}.toCalendar(); }, "not finite", "jd2");
+    }
+    // Finite, but beyond the years an int can hold.
+    expectErrorSaying([] { (void)JulianDate{1.0e30, 0.0}.toCalendar(); }, "out of range", "1e30");
+    expectErrorSaying([] { (void)JulianDate{-1.0e30, 0.0}.toCalendar(); }, "out of range", "-1e30");
+    // Far dates inside the range are unaffected.
+    const CalendarDate far = JulianDate::fromCalendar(99999, 12, 31, 12).toCalendar(3);
+    EXPECT_EQ(far.year, 99999);
+    EXPECT_EQ(far.month, 12);
+    EXPECT_EQ(far.day, 31);
+    EXPECT_EQ(far.hour, 12);
+    const CalendarDate old = JulianDate::fromCalendar(-99999, 1, 1).toCalendar(3);
+    EXPECT_EQ(old.year, -99999);
+    EXPECT_EQ(old.month, 1);
+    EXPECT_EQ(old.day, 1);
 }

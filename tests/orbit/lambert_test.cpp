@@ -261,6 +261,27 @@ TEST(Lambert, VeryLongFlights) {
     }
 }
 
+TEST(Lambert, PlaneThroughTheZAxisTakesTheShorterWay) {
+    // In a plane that contains the z axis "prograde" has no meaning: r1 x r2 has no z component. In
+    // floating point that component is zero or a rounding error of either sign, and its sign used to
+    // pick the long or the short way at random. Now both settings give the shorter way.
+    int noisy = 0;
+    for (int k = 0; k < 400; ++k) {
+        const double phi = 0.1 + 0.0157 * k; // the plane's azimuth
+        const double a = 0.2, b = 1.9;       // angles from the equator, within the plane
+        const Vec3   r1{std::cos(phi) * std::cos(a), std::sin(phi) * std::cos(a), std::sin(a)};
+        const Vec3   r2{1.3 * std::cos(phi) * std::cos(b), 1.3 * std::sin(phi) * std::cos(b), 1.3 * std::sin(b)};
+        noisy += cross(r1 / norm(r1), r2 / norm(r2)).z != 0.0 ? 1 : 0;
+        for (bool prograde : {true, false}) {
+            const LambertSolution s = lambert(r1, r2, 2.0, 1.0, prograde);
+            // The shorter way: the orbit turns from r1 towards r2, so its normal is along r1 x r2.
+            EXPECT_GT(dot(cross(r1, s.v1), cross(r1, r2)), 0.0) << "phi " << phi << " prograde " << prograde;
+            EXPECT_LT(norm(propagateKepler({r1, s.v1}, 2.0, 1.0).r - r2), 1e-12) << phi;
+        }
+    }
+    EXPECT_GT(noisy, 0) << "no case here has a rounding error in the z component: the test shows nothing";
+}
+
 TEST(Lambert, Errors) {
     const Vec3   r1{7000 * km, 0, 0}, r2{0, 9000 * km, 0};
     const double nan = std::numeric_limits<double>::quiet_NaN(), inf = std::numeric_limits<double>::infinity();

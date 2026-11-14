@@ -22,6 +22,7 @@
 #include <array>
 #include <cmath>
 #include <initializer_list>
+#include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -34,18 +35,48 @@ namespace astro {
 
 using constants::pi;
 
+namespace {
+
+constexpr double reciprocalFactorial(int n) noexcept {
+    double f = 1.0;
+    for (int i = 2; i <= n; ++i) {
+        f *= i;
+    }
+    return 1.0 / f;
+}
+
+} // namespace
+
 void stumpff(double psi, double& c2, double& c3) noexcept {
-    if (psi > 1e-6) {
+    if (std::abs(psi) < 1.0) {
+        // The series c2 = sum (-psi)^k / (2k+2)!, c3 = sum (-psi)^k / (2k+3)!, to 1/20! and 1/21!. The
+        // closed forms below subtract nearly equal numbers here: 1 - cos(sqrt(psi)) is good to one
+        // rounding error of 1, a relative error of 2e-16 / psi in c2 (and 6e-16 / psi in c3).
+        // clang-format off
+        constexpr double a[10] = {reciprocalFactorial(2),  reciprocalFactorial(4),  reciprocalFactorial(6),
+                                  reciprocalFactorial(8),  reciprocalFactorial(10), reciprocalFactorial(12),
+                                  reciprocalFactorial(14), reciprocalFactorial(16), reciprocalFactorial(18),
+                                  reciprocalFactorial(20)};
+        constexpr double b[10] = {reciprocalFactorial(3),  reciprocalFactorial(5),  reciprocalFactorial(7),
+                                  reciprocalFactorial(9),  reciprocalFactorial(11), reciprocalFactorial(13),
+                                  reciprocalFactorial(15), reciprocalFactorial(17), reciprocalFactorial(19),
+                                  reciprocalFactorial(21)};
+        // clang-format on
+        double s2 = a[9], s3 = b[9];
+        for (int k = 8; k >= 0; --k) {
+            s2 = a[k] - psi * s2;
+            s3 = b[k] - psi * s3;
+        }
+        c2 = s2;
+        c3 = s3;
+    } else if (psi > 0.0) {
         const double sp = std::sqrt(psi);
         c2              = (1.0 - std::cos(sp)) / psi;
         c3              = (sp - std::sin(sp)) / (sp * psi);
-    } else if (psi < -1e-6) {
+    } else {
         const double sp = std::sqrt(-psi);
         c2              = (1.0 - std::cosh(sp)) / psi;
         c3              = (std::sinh(sp) - sp) / (sp * -psi);
-    } else {
-        c2 = 0.5 - psi / 24.0 + psi * psi / 720.0;
-        c3 = 1.0 / 6.0 - psi / 120.0 + psi * psi / 5040.0;
     }
 }
 
@@ -59,7 +90,11 @@ struct UniversalSolution {
 };
 
 UniversalSolution solveUniversal(const Vec3& r0, const Vec3& v0, double dt, double mu) {
-    const double r0m   = norm(r0);
+    const double r0m = norm(r0);
+    if (!(mu > 0.0) || !std::isfinite(mu) || !std::isfinite(dt) || !(r0m > 0.0) || !std::isfinite(r0m)
+        || !std::isfinite(norm2(v0))) {
+        throw Error("propagateKepler: the state and dt must be finite, the position non-zero and mu positive");
+    }
     const double smu   = std::sqrt(mu);
     const double rdotv = dot(r0, v0);
     const double alpha = -norm2(v0) / mu + 2.0 / r0m; // 1/a
@@ -87,30 +122,83 @@ UniversalSolution solveUniversal(const Vec3& r0, const Vec3& v0, double dt, doub
         chi            = std::sqrt(p) * 2.0 / std::tan(2.0 * w);
     }
 
-    if (!std::isfinite(chi)) {
-        chi = smu * dt / r0m; // safe small-time starter
+    // The hyperbolic starter is meant for long times: for short ones its logarithm is negative, or not
+    // a number. Then start from zero, the known end of the bracket below.
+    if (!std::isfinite(chi) || std::signbit(chi) != std::signbit(dt)) {
+        chi = 0.0;
     }
 
     // Laguerre-Conway iteration on the universal Kepler equation (robust for all conic types):
     //   F(chi) = (r0.v0/sqrt(mu)) chi^2 c2 + (1 - alpha r0) chi^3 c3 + r0 chi - sqrt(mu) dt
-    const double     sig0 = rdotv / smu;
-    double           c2 = 0.0, c3 = 0.0, psi = 0.0;
-    bool             converged = false;
+    //
+    // F increases with chi (its derivative is the radius) and F(0) = -sqrt(mu) dt, so the root lies
+    // between 0 and any chi where F has the sign of dt. The iterates keep such a bracket [lo, hi], and
+    // a step that would leave it is replaced by a point inside: the iteration cannot fail to end.
+    //
+    // It ends when the step is below rounding, or when F itself is. The second matters near a close
+    // periapsis, where the terms of F cancel: their rounding error divided by the small radius is then
+    // a larger part of chi than any fixed step tolerance, and no iterate can do better.
+    constexpr double kStepTol  = 1e-13;
+    constexpr double kNoise    = 4.0 * std::numeric_limits<double>::epsilon();
+    constexpr double kInfinity = std::numeric_limits<double>::infinity();
     constexpr double nL        = 5.0;
-    for (int it = 0; it < 200; ++it) {
-        psi = chi * chi * alpha;
+    const bool       forward   = dt > 0.0;
+    const double     sig0      = rdotv / smu;
+    const double     k3        = 1.0 - alpha * r0m;
+    const double     t0        = smu * dt;
+    double           lo        = forward ? 0.0 : -kInfinity;
+    double           hi        = forward ? kInfinity : 0.0;
+    bool             converged = false;
+    for (int it = 0; it < 200 && !converged; ++it) {
+        const double psi = chi * chi * alpha;
+        double       c2 = 0.0, c3 = 0.0;
         stumpff(psi, c2, c3);
-        const double F      = sig0 * chi * chi * c2 + (1.0 - alpha * r0m) * chi * chi * chi * c3 + r0m * chi - smu * dt;
-        const double dF     = sig0 * chi * (1.0 - psi * c3) + (1.0 - alpha * r0m) * chi * chi * c2 + r0m; // = r
-        const double ddF    = sig0 * (1.0 - psi * c2) + (1.0 - alpha * r0m) * chi * (1.0 - psi * c3);
-        const double disc   = std::sqrt(std::abs((nL - 1.0) * (nL - 1.0) * dF * dF - nL * (nL - 1.0) * F * ddF));
-        const double denom  = dF + (dF >= 0.0 ? disc : -disc);
-        const double dchi   = denom != 0.0 ? -nL * F / denom : -F / dF;
-        chi                += dchi;
-        if (std::abs(dchi) < 1e-13 * (1.0 + std::abs(chi))) {
+        const double t2 = sig0 * chi * chi * c2, t3 = k3 * chi * chi * chi * c3, t1 = r0m * chi;
+        const double F = t2 + t3 + t1 - t0;
+        if (F == 0.0) { // also the whole number of periods: dt reduced to 0, chi = 0
             converged = true;
             break;
         }
+        // Past the root if F is positive, or if it has overflowed (then chi is far beyond the root).
+        const bool farSide = std::isfinite(F) ? F > 0.0 : forward;
+        if (farSide) {
+            hi = std::min(hi, chi);
+        } else {
+            lo = std::max(lo, chi);
+        }
+
+        double next = std::numeric_limits<double>::quiet_NaN();
+        if (std::isfinite(F)) {
+            // Rounding error of F: a few units in the last place of each term, and of c2 and c3
+            // where they pass through zero (psi > 1, where they are below 2 / psi and 1 / psi).
+            const double floorC = std::abs(psi) > 1.0 ? 1.0 / std::abs(psi) : 1.0;
+            const double noise  = kNoise
+                               * (std::abs(t2) + std::abs(t3) + std::abs(t1) + std::abs(t0)
+                                  + floorC * (std::abs(sig0) + std::abs(k3 * chi)) * chi * chi);
+            if (std::abs(F) <= noise) {
+                converged = true;
+                break;
+            }
+            const double dF   = sig0 * chi * (1.0 - psi * c3) + k3 * chi * chi * c2 + r0m; // = r
+            const double ddF  = sig0 * (1.0 - psi * c2) + k3 * chi * (1.0 - psi * c3);
+            const double disc = std::sqrt(std::abs((nL - 1.0) * (nL - 1.0) * dF * dF - nL * (nL - 1.0) * F * ddF));
+            // Laguerre's step; Newton's if the discriminant has overflowed or the denominator is zero.
+            const double denom = dF + (dF >= 0.0 ? disc : -disc);
+            const double step  = std::isfinite(disc) && denom != 0.0 ? -nL * F / denom : -F / dF;
+            if (std::abs(step) <= kStepTol * std::abs(chi)) {
+                chi       += step;
+                converged  = true;
+                break;
+            }
+            next = chi + step;
+        }
+        if (!(next > lo && next < hi)) {
+            // Only rounding or overflow brings the step here. With both ends known take the middle;
+            // otherwise the root is still further out than chi.
+            next      = std::isfinite(lo) && std::isfinite(hi) ? 0.5 * (lo + hi) : 2.0 * chi;
+            converged = next == lo || next == hi; // the bracket has closed to neighbouring numbers
+        }
+        chi = next;
     }
     if (!converged) {
         throw Error("propagateKepler: universal-variable iteration did not converge");

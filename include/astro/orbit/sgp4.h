@@ -58,7 +58,8 @@ std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value);
 
 /// SGP4 error codes (Vallado): 1 mean eccentricity out of range, 2 mean motion
 /// negative, 3 perturbed eccentricity out of range, 4 semi-latus rectum negative,
-/// 6 satellite has decayed.
+/// 6 satellite has decayed. One more is this library's own: 7, the time asked for
+/// is not finite.
 class Sgp4Error : public Error {
 public:
     /// `code` is the SGP4 error code, `what` the message.
@@ -76,7 +77,16 @@ private:
 class Sgp4 {
 public:
     /// Initialize from `tle`. Throws Sgp4Error (an astro::Error) if the elements fail at the epoch (codes 1-4; a
-    /// decayed state, code 6, is accepted).
+    /// decayed state, code 6, is accepted). A negative mean motion is code 2.
+    ///
+    /// Throws astro::Error if the epoch or an element the theory uses is not finite (B*, the inclination, the
+    /// right ascension of the node, the eccentricity, the argument of perigee, the mean anomaly, the mean motion),
+    /// or if finite elements give a non-finite state at the epoch. So a propagator that was built never starts
+    /// from NaN.
+    ///
+    /// The theory counts the epoch in days of 86400 s, as the element set gives it. On a day that ends with a
+    /// leap second the count is taken from the time of day of `tle.epoch` over 86400 s, as the reference code
+    /// takes it from the epoch field.
     explicit Sgp4(const Tle& tle, Sgp4Gravity gravity = Sgp4Gravity::WGS72, Sgp4OpsMode mode = Sgp4OpsMode::Improved);
     ~Sgp4();
     /// Deep copy.
@@ -94,7 +104,8 @@ public:
     /// TEME state at a time (any scale).
     [[nodiscard]] StateVector propagate(const Time& t) const;
     /// Non-throwing variant: returns the SGP4 error code (0 on success). For
-    /// code 6 (decayed) the state is still filled in, as in Vallado's code.
+    /// code 6 (decayed) the state is still filled in, as in Vallado's code. For
+    /// code 7 (the time is NaN or infinite) every component of the state is NaN.
     [[nodiscard]] int propagate(double minutesSinceEpoch, StateVector& out) const noexcept;
 
     /// The element set this propagator was built from.

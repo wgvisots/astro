@@ -97,16 +97,22 @@ public:
     /// From a Modified Julian Date (JD - 2400000.5) in `scale`.
     [[nodiscard]] static Time fromMjd(double mjd, TimeScale scale);
     /// From calendar fields in the given scale. For UTC, second may be in
-    /// [60, 61) on a day that ends in a leap second. Throws astro::Error for an
-    /// invalid date or time of day.
+    /// [60, 61) on a day that ends in a leap second; on a day that ends early
+    /// (a negative leap second, or the shortened days 1961-07-31 and 1968-01-31)
+    /// the last minute is that much shorter. Throws astro::Error for an invalid
+    /// date or time of day, which includes a second that is not finite (NaN or
+    /// infinity) and a second at or after the end of the UTC day.
     /// @{
     [[nodiscard]] static Time
     fromCalendar(TimeScale scale, int year, int month, int day, int hour = 0, int minute = 0, double second = 0.0);
     [[nodiscard]] static Time fromCalendar(TimeScale scale, const CalendarDate& cal);
     /// @}
     /// From POSIX/Unix time (seconds since 1970-01-01T00:00:00 UTC, leap seconds not counted). Result is UTC.
+    /// Throws astro::Error if `unixSeconds` is not finite (NaN or infinity) or is more than 1e9 days from 1970.
     [[nodiscard]] static Time fromUnix(double unixSeconds);
-    /// From whole + fractional Unix seconds (full precision). Result is UTC.
+    /// From whole + fractional Unix seconds (full precision). Result is UTC. `fraction` need not be in
+    /// [0, 1): its whole part is carried into the seconds. Throws astro::Error if `fraction` is not finite,
+    /// or if either argument is more than 1e9 days from 1970.
     [[nodiscard]] static Time fromUnix(long long wholeSeconds, double fraction);
     /// From a std::chrono::system_clock time point, read as Unix time
     /// (nanosecond resolution). Result is UTC.
@@ -123,6 +129,16 @@ public:
     ///   with optional "Z" (UTC) or "+hh:mm"/"-hh:mm" (UTC offset), or a trailing
     ///   scale name such as " TT" or " TAI". Space is accepted in place of 'T'.
     ///   Without a zone/scale the `defaultScale` is used.
+    ///
+    /// A UTC offset (hours 00-23, minutes 00-59) is taken off the calendar fields,
+    /// as on a civil clock, and not as elapsed seconds: "2017-01-01T00:30:00+01:00"
+    /// is 2016-12-31T23:30:00 UTC although a leap second lies in between, and
+    /// "2017-01-01T00:59:60+01:00" is the leap second 2016-12-31T23:59:60 UTC.
+    /// Seconds are digits with an optional decimal fraction; an exponent ("05e1")
+    /// is not accepted. The year has four digits, 0000 to 9999 (also after an
+    /// offset has been taken off), the same range iso8601() writes.
+    /// Throws astro::Error for malformed text, for an invalid date, time of day
+    /// or offset, and for an unknown scale name.
     [[nodiscard]] static Time fromIso8601(std::string_view text, TimeScale defaultScale = TimeScale::UTC);
 
     /// Normalized two-part Julian Date in this time's own scale.
@@ -142,9 +158,14 @@ public:
     /// @}
 
     /// Calendar date in this scale (UTC: leap-second aware, second may be 60.x).
+    /// Throws astro::Error if this time is not finite (it was made from a NaN or
+    /// an infinity).
     [[nodiscard]] CalendarDate calendar(int decimals = 9) const;
     /// ISO-8601 text. UTC ends with 'Z'; other scales get a " TT"-style suffix
-    /// unless `withScale` is false.
+    /// unless `withScale` is false. fromIso8601() reads the text back.
+    /// Throws astro::Error if the year (after rounding the seconds to `decimals`
+    /// places) is outside 0000 to 9999: ISO-8601 text has a four-digit year.
+    /// calendar() has no such limit.
     [[nodiscard]] std::string iso8601(int decimals = 3, bool withScale = true) const;
 
     /// Unix seconds (converts to UTC). During a leap second, returns the value
@@ -155,7 +176,10 @@ public:
     [[nodiscard]] std::chrono::system_clock::time_point toSysTime() const;
     /// Seconds since the GPS epoch (converts to GPS time).
     [[nodiscard]] double gpsSeconds() const;
-    /// Week number and time of week in the given GNSS system's scale.
+    /// Week number and time of week in the given GNSS system's scale. The time
+    /// of week is always in [0, 604800): an instant so close to the end of a
+    /// week that its time of week rounds to 604800 s is returned as time of
+    /// week 0 of the next week.
     [[nodiscard]] GnssWeekTow gnssWeekTow(GnssSystem system) const;
 
     /// Add / subtract SI seconds. UTC is advanced through TAI so leap seconds

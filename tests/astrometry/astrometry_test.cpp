@@ -16,11 +16,20 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <algorithm>
+#include <cmath>
+#include <functional>
+#include <limits>
+#include <string>
+#include <vector>
+
 #include "astro/astrometry/apparent.h"
 #include "astro/astrometry/refraction.h"
 #include "astro/astrometry/rise_set.h"
 #include "astro/astrometry/spherical.h"
 #include "astro/core/angle.h"
+#include "astro/core/error.h"
+#include "astro/core/rootfind.h"
 #include "astro/ephemeris/low_precision.h"
 #include "astro/ephemeris/spk.h"
 #include "test_util.h"
@@ -85,6 +94,81 @@ TEST(Refraction, ModelsAgree) {
     }
     // ~34 arcmin at the horizon (Bennett).
     EXPECT_NEAR(rad2arcsec(refractionBennett(0.0)) / 60.0, 34.5, 0.6);
+}
+
+TEST(Refraction, BennettAndSaemundssonMatchMeeus) {
+    // Meeus (1998), Astronomical Algorithms, 2nd ed., ch. 16, with the altitude h in degrees and the
+    // refraction R in arcminutes, at 1010 hPa and 10 C:
+    //     R = cot(h + 7.31 / (h + 4.4)) + 0.0013515          h apparent   (16.3, Bennett)
+    //     R = 1.02 cot(h + 10.3 / (h + 5.11)) + 0.0019279    h true       (16.4, Saemundsson)
+    // The last term of each is the one Meeus gives to make R zero at the zenith. He prints it to
+    // 1e-7 arcmin, hence the tolerance.
+    const auto arcmin = [](double rad) { return rad2arcsec(rad) / 60.0; };
+    for (double h = 0.0; h <= 90.0; h += 2.5) {
+        const double bennett     = 1.0 / std::tan(deg2rad(h + 7.31 / (h + 4.4))) + 0.0013515;
+        const double saemundsson = 1.02 / std::tan(deg2rad(h + 10.3 / (h + 5.11))) + 0.0019279;
+        EXPECT_NEAR(arcmin(refractionBennett(deg2rad(h))), bennett, 1e-7) << h;
+        EXPECT_NEAR(arcmin(refractionSaemundsson(deg2rad(h))), saemundsson, 1e-7) << h;
+    }
+    // Meeus, example 16.a: the Sun's lower limb at an apparent altitude of 30 arcmin has R = 28.754
+    // arcmin; its upper limb, at a true altitude of 33.246 arcmin, has R = 24.618 arcmin. (Both are
+    // printed without the zenith terms, which add 0.0014 and 0.0019 arcmin.)
+    EXPECT_NEAR(arcmin(refractionBennett(deg2rad(30.0 / 60.0))), 28.754, 0.002);
+    EXPECT_NEAR(arcmin(refractionSaemundsson(deg2rad(33.246 / 60.0))), 24.618, 0.0025);
+    // Proportional to pressure, and to 283 / (273 + T).
+    EXPECT_DOUBLE_EQ(refractionBennett(0.2, 505.0, 10.0), 0.5 * refractionBennett(0.2));
+    EXPECT_DOUBLE_EQ(refractionSaemundsson(0.2, 1010.0, 293.0), 0.5 * refractionSaemundsson(0.2));
+}
+
+TEST(Refraction, BennettAndSaemundssonAreDefinedFromNadirToZenith) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    // Smallest cotangent argument of each formula, h + p / (h + q) at h = sqrt(p) - q: there the
+    // refraction is largest, and below it the formulas turn back and then run away.
+    struct Formula {
+        const char* name;
+        double (*refraction)(double, double, double) noexcept;
+        double largestArcmin;
+    };
+    const Formula formulas[] = {
+        {"Bennett",     refractionBennett,     1.0 / std::tan(deg2rad(2.0 * std::sqrt(7.31) - 4.4)) + 0.0013515  },
+        {"Saemundsson", refractionSaemundsson, 1.02 / std::tan(deg2rad(2.0 * std::sqrt(10.3) - 5.11)) + 0.0019279},
+    };
+    for (const Formula& f : formulas) {
+        SCOPED_TRACE(f.name);
+        const auto refraction = [&](double elevationDeg) { return f.refraction(deg2rad(elevationDeg), 1010.0, 10.0); };
+        // Every millidegree from -90 to +90 deg: finite, never negative, never rising with elevation,
+        // and with no jump. The steepest slope of either formula is 0.27 rad per rad (Bennett, near
+        // -0.9 deg), so no step may exceed 0.3 of the spacing.
+        constexpr double stepDeg  = 0.001;
+        double           previous = refraction(-90.0), lowest = previous, largestRise = 0.0, largestDrop = 0.0;
+        double           riseAt = -90.0, dropAt = -90.0;
+        bool             finite = std::isfinite(previous);
+        for (int i = -90000 + 1; i <= 90000; ++i) {
+            const double r = refraction(i * stepDeg);
+            finite         = finite && std::isfinite(r);
+            lowest         = std::min(lowest, r);
+            if (r - previous > largestRise) {
+                largestRise = r - previous;
+                riseAt      = i * stepDeg;
+            }
+            if (previous - r > largestDrop) {
+                largestDrop = previous - r;
+                dropAt      = i * stepDeg;
+            }
+            previous = r;
+        }
+        EXPECT_TRUE(finite);
+        EXPECT_GE(lowest, 0.0);
+        EXPECT_EQ(largestRise, 0.0) << "rises at " << riseAt << " deg";
+        EXPECT_LE(largestDrop, 0.3 * deg2rad(stepDeg)) << "jumps at " << dropAt << " deg";
+        // Exactly zero at the zenith; the largest value everywhere below the turning point.
+        EXPECT_EQ(f.refraction(constants::halfPi, 1010.0, 10.0), 0.0);
+        EXPECT_NEAR(rad2arcsec(refraction(-90.0)) / 60.0, f.largestArcmin, 1e-7);
+        EXPECT_EQ(refraction(-4.4), refraction(-90.0));
+        EXPECT_EQ(refraction(-5.11), refraction(-90.0));
+        // NaN in, NaN out.
+        EXPECT_TRUE(std::isnan(f.refraction(nan, 1010.0, 10.0)));
+    }
 }
 
 TEST(Apparent, ObservedPlaceMatchesErfaAtco13) {
@@ -185,6 +269,179 @@ TEST(RiseSet, MoonRiseSetAndPhase) {
     EXPECT_NEAR(wrapPi(nm.age), 0.0, deg2rad(0.5));
     const MoonPhase wax = moonPhase(Time::fromIso8601("2024-02-14T00:00:00Z"), eph);
     EXPECT_TRUE(wax.waxing);
+}
+
+namespace {
+
+/// A day-long cosine "elevation" of 1 rad amplitude, greatest at `peak` and once every `period`
+/// seconds from it.
+std::function<double(const Time&)> cosineElevation(const Time& peak, double period) {
+    return [=](const Time& t) { return std::cos(constants::twoPi * (t - peak) / period); };
+}
+
+/// The transits among `events`.
+std::vector<SkyEvent> transitsOf(const std::vector<SkyEvent>& events) {
+    std::vector<SkyEvent> transits;
+    for (const SkyEvent& e : events) {
+        if (e.type == SkyEventType::Transit) {
+            transits.push_back(e);
+        }
+    }
+    return transits;
+}
+
+// A cosine of period one day is exactly 1 in double precision within 0.15 ms of its peak, so no
+// search can place the peak better than that; twice that is allowed.
+constexpr double kTransitTolerance = 3e-4;
+
+} // namespace
+
+TEST(RiseSet, TransitInTheFirstOrLastSampleIntervalIsFound) {
+    const Time   peak = Time::fromIso8601("2024-03-01T00:00:00Z");
+    const auto   el   = cosineElevation(peak, 86400.0);
+    const double step = 600.0, span = 36000.0; // 60 sample intervals
+    // The peak 0.01 s to 599 s after the start of the window, and as far before its end. Up to half
+    // a step from the edge, the edge sample is higher than the one next to it.
+    for (double offset : {0.01, 1.0, 100.0, 299.0, 301.0, 450.0, 599.0}) {
+        SCOPED_TRACE(offset);
+        const auto atStart = transitsOf(findElevationEvents(el, peak - offset, peak - offset + span, 2.0, step));
+        ASSERT_EQ(atStart.size(), 1u);
+        EXPECT_NEAR(atStart[0].time - peak, 0.0, kTransitTolerance);
+        EXPECT_NEAR(atStart[0].elevation, 1.0, 3e-16); // 0.3 ms from the peak the cosine is 1 - 2.4e-16
+        const auto atEnd = transitsOf(findElevationEvents(el, peak + offset - span, peak + offset, 2.0, step));
+        ASSERT_EQ(atEnd.size(), 1u);
+        EXPECT_NEAR(atEnd[0].time - peak, 0.0, kTransitTolerance);
+        EXPECT_NEAR(atEnd[0].elevation, 1.0, 3e-16);
+    }
+}
+
+TEST(RiseSet, WindowEdgeIsNotATransit) {
+    const Time   peak = Time::fromIso8601("2024-03-01T00:00:00Z");
+    const auto   el   = cosineElevation(peak, 86400.0);
+    const double step = 600.0;
+    // Falling all through the window, and rising all through it: the highest point of the window is
+    // its edge, which is not a maximum of the elevation.
+    EXPECT_TRUE(transitsOf(findElevationEvents(el, peak + 1000.0, peak + 31000.0, 2.0, step)).empty());
+    EXPECT_TRUE(transitsOf(findElevationEvents(el, peak - 31000.0, peak - 1000.0, 2.0, step)).empty());
+    // The maximum exactly at the start, or exactly at the end, of the window is not reported either:
+    // from inside the window it looks the same.
+    EXPECT_TRUE(transitsOf(findElevationEvents(el, peak, peak + 30000.0, 2.0, step)).empty());
+    EXPECT_TRUE(transitsOf(findElevationEvents(el, peak - 30000.0, peak, 2.0, step)).empty());
+}
+
+TEST(RiseSet, EveryTransitIsFoundOnceByWindowsLaidEndToEnd) {
+    // Day-long windows, with a peak that comes 37 s later each day: it starts 500 s before the first
+    // window, crosses a window boundary on the way, and is within half a step of one for 16 days.
+    const Time            t0  = Time::fromIso8601("2024-03-01T00:00:00Z");
+    const double          day = 86400.0, period = day + 37.0;
+    const auto            el   = cosineElevation(t0 - 500.0, period);
+    const int             days = 40;
+    std::vector<SkyEvent> found;
+    for (int d = 0; d < days; ++d) {
+        const auto transits = transitsOf(findElevationEvents(el, t0 + d * day, t0 + (d + 1) * day, 2.0, 600.0));
+        found.insert(found.end(), transits.begin(), transits.end());
+    }
+    // Peak k is at t0 - 500 + k * period; those of k = 1 .. 39 are inside the 40 days. Peak 14 is 18 s
+    // after a boundary, peak 13 is 19 s before one.
+    std::vector<double> expected;
+    for (int k = 0; k <= days; ++k) {
+        const double s = -500.0 + k * period;
+        if (s > 0.0 && s < days * day) {
+            expected.push_back(s);
+        }
+    }
+    ASSERT_EQ(expected.size(), 39u);
+    ASSERT_EQ(found.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_NEAR(found[i].time - t0, expected[i], kTransitTolerance) << i;
+    }
+}
+
+TEST(RiseSet, SolarTransitNextToMidnightUtcIsFoundInDailyWindows) {
+    // At 17 S 179 E the Sun transits within 20 minutes of 00:00 UTC all year, so day-long windows
+    // from 00:00 UTC have the transit next to an edge.
+    const LowPrecisionEphemeris eph;
+    const ConstantEop           eop;
+    const Geodetic              site{deg2rad(-17.0), deg2rad(179.0), 0.0};
+    const Time                  t0   = Time::fromIso8601("2024-01-01T00:00:00Z");
+    const double                day  = 86400.0;
+    const int                   days = 366;
+    std::vector<double>         found; // seconds after t0
+    for (int d = 0; d < days; ++d) {
+        for (const SkyEvent& e : transitsOf(sunRiseSet(site, t0 + d * day, t0 + (d + 1) * day, eop, eph))) {
+            found.push_back(e.time - t0);
+        }
+    }
+    // Truth, without the search under test: near each midnight the elevation has its maximum where the
+    // elevations 30 s before and 30 s after are equal (exact for a parabola, which the top of the
+    // Sun's path is over a minute).
+    std::vector<double> expected;
+    for (int d = 0; d <= days; ++d) {
+        const auto slope = [&](double s) {
+            return bodyElevation(Body::Sun, t0 + (s + 30.0), site, eop, eph)
+                 - bodyElevation(Body::Sun, t0 + (s - 30.0), site, eop, eph);
+        };
+        const double s = brentRoot(slope, d * day - 1800.0, d * day + 1800.0, 1e-6);
+        if (s > 0.0 && s < days * day) {
+            expected.push_back(s);
+        }
+    }
+    ASSERT_EQ(expected.size(), 366u);
+    // Each expected transit is found, and nothing else is. The two times agree to 1.4 ms at worst
+    // over the year; 10 ms is allowed.
+    std::size_t lost = 0;
+    for (double s : expected) {
+        lost += std::none_of(found.begin(), found.end(), [&](double f) { return std::abs(f - s) < 0.01; });
+    }
+    EXPECT_EQ(lost, 0u) << "of " << expected.size() << " transits";
+    EXPECT_EQ(found.size(), expected.size());
+}
+
+TEST(RiseSet, BadWindowOrStepThrows) {
+    const Time t0   = Time::fromIso8601("2024-03-01T00:00:00Z");
+    const auto el   = cosineElevation(t0 + 43200.0, 86400.0);
+    const auto find = [&](const Time& start, const Time& end, double threshold, double step) {
+        return findElevationEvents(el, start, end, threshold, step);
+    };
+    // The message of the astro::Error thrown, or "no error".
+    const auto message = [&](const Time& start, const Time& end, double threshold, double step) -> std::string {
+        try {
+            (void)find(start, end, threshold, step);
+        } catch (const Error& e) {
+            return e.what();
+        }
+        return "no error";
+    };
+    const auto mentions = [](const std::string& text, const char* word) {
+        return text.find(word) != std::string::npos;
+    };
+    const double nan = std::numeric_limits<double>::quiet_NaN(), inf = std::numeric_limits<double>::infinity();
+    // The window as given is searched normally: two crossings of 0.5 and the transit between them.
+    EXPECT_EQ(find(t0, t0 + 86400.0, 0.5, 600.0).size(), 3u);
+    // End before start.
+    EXPECT_TRUE(mentions(message(t0 + 86400.0, t0, 0.5, 600.0), "end")) << message(t0 + 86400.0, t0, 0.5, 600.0);
+    // A step that is zero, negative, NaN or infinite.
+    for (double step : {0.0, -1.0, nan, inf}) {
+        EXPECT_TRUE(mentions(message(t0, t0 + 86400.0, 0.5, step), "step")) << step;
+    }
+    // More steps than can be counted (1e12).
+    EXPECT_TRUE(mentions(message(t0, t0 + 1e9, 0.5, 1e-3), "step")) << message(t0, t0 + 1e9, 0.5, 1e-3);
+    // A threshold that is NaN.
+    EXPECT_TRUE(mentions(message(t0, t0 + 86400.0, nan, 600.0), "threshold"));
+    // An empty window holds no event.
+    EXPECT_TRUE(find(t0, t0, 0.5, 600.0).empty());
+    // A step longer than the window is not an error: the window is still sampled at its ends and its
+    // middle. Here the middle is the peak.
+    const auto coarse = find(t0, t0 + 86400.0, 0.5, 1e9);
+    ASSERT_EQ(coarse.size(), 3u);
+    EXPECT_EQ(coarse[1].type, SkyEventType::Transit);
+    // The wrappers pass the window on.
+    const LowPrecisionEphemeris eph;
+    const ConstantEop           eop;
+    const Geodetic              site{deg2rad(51.4769), deg2rad(-0.0005), 0.0};
+    EXPECT_THROW((void)sunRiseSet(site, t0 + 86400.0, t0, eop, eph), Error);
+    EXPECT_THROW((void)twilight(Twilight::Civil, site, t0 + 86400.0, t0, eop, eph), Error);
+    EXPECT_THROW((void)moonRiseSet(site, t0 + 86400.0, t0, eop, eph), Error);
 }
 
 TEST(Sidereal, LocalSiderealTimeAndHourAngle) {

@@ -44,7 +44,9 @@ namespace astro {
 /// Passive rotation about coordinate axis `axis` (1, 2 or 3).
 [[nodiscard]] Mat3 rotationAboutAxis(int axis, double theta);
 
-/// Passive rotation by `theta` about an arbitrary (not necessarily unit) axis.
+/// Passive rotation by `theta` about an arbitrary axis. Only the direction of `axis` is used: it may
+/// have any length except zero. A zero axis defines no rotation and gives the identity matrix.
+/// Not-a-number (NaN) or infinity in `axis` or `theta` gives a matrix of NaN.
 [[nodiscard]] Mat3 axisAngleToMatrix(const Vec3& axis, double theta) noexcept;
 
 /// Unit quaternion, scalar first: q = w + x i + y j + z k (Hamilton algebra).
@@ -69,7 +71,9 @@ struct Quat {
         , y(y_)
         , z(z_) {}
 
-    /// Frame rotation by `theta` (rad) about `axis` (normalized internally; need not be unit).
+    /// Frame rotation by `theta` (rad) about `axis`. Only the direction of `axis` is used (it is
+    /// normalized internally): it may have any length except zero. A zero axis defines no rotation
+    /// and gives the identity quaternion. Not-a-number (NaN) or infinity in `axis` or `theta` gives NaN.
     [[nodiscard]] static Quat fromAxisAngle(const Vec3& axis, double theta) noexcept;
     /// Quaternion from a passive rotation (direction cosine) matrix. Uses Shepperd's
     /// method; the result has w >= 0.
@@ -84,7 +88,8 @@ struct Quat {
     [[nodiscard]] constexpr Quat conjugate() const noexcept { return {w, -x, -y, -z}; }
     /// Euclidean norm sqrt(w^2 + x^2 + y^2 + z^2).
     [[nodiscard]] double norm() const noexcept;
-    /// Unit quaternion along this one; the identity if the norm is zero.
+    /// Unit quaternion along this one; the identity if the norm is zero. A not-a-number (NaN)
+    /// component makes every component of the result NaN.
     [[nodiscard]] Quat normalized() const noexcept;
 
     /// Coordinates of a fixed vector in the rotated frame: toMatrix() * v.
@@ -103,7 +108,9 @@ struct Quat {
             a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w};
 }
 
-/// Spherical linear interpolation between unit quaternions (shortest path), t in [0, 1].
+/// Spherical linear interpolation between unit quaternions (shortest path), t in [0, 1]: the rotation
+/// that turns from a to b at a constant rate, a fraction t of the way along. Accurate to rounding
+/// however small or large the angle between a and b.
 [[nodiscard]] Quat slerp(const Quat& a, const Quat& b, double t) noexcept;
 
 /// Euler angle sequence: the axes (1=x, 2=y, 3=z) of the three successive
@@ -144,8 +151,15 @@ struct EulerAngles {
 [[nodiscard]] Mat3 eulerToMatrix(EulerSequence seq, const EulerAngles& angles) noexcept;
 
 /// Inverse of eulerToMatrix. Middle angle is in [-pi/2, pi/2] for Tait-Bryan
-/// sequences and in [0, pi] for proper Euler sequences. At gimbal lock the third
-/// angle is set to zero.
+/// sequences and in [0, pi] for proper Euler sequences. The angles returned give `dcm` back through
+/// eulerToMatrix to rounding (about 1e-15) wherever the middle angle is.
+///
+/// At gimbal lock only the sum or the difference of the first and third angles is defined: the third
+/// angle is set to zero and the first carries both. Gimbal lock is a middle angle within rounding
+/// (2e-16 rad) of +-pi/2 for a Tait-Bryan sequence, or of 0 or pi for a proper Euler sequence. Just
+/// outside it the first and third angles are returned separately, but they are only as well
+/// determined as the matrix allows: an error of 1e-16 in `dcm` moves them by 1e-16 divided by the
+/// distance from lock.
 [[nodiscard]] EulerAngles matrixToEuler(EulerSequence seq, const Mat3& dcm) noexcept;
 
 /// Re-orthonormalize a nearly-orthogonal rotation matrix (via quaternion).

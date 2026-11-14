@@ -75,16 +75,20 @@ public:
     /// @param eop  Earth orientation data (e.g. EopTable, or ConstantEop{} for none)
     FrameTransformer(const Time& t, const EopProvider& eop, const FrameOptions& options = {});
 
-    /// Rotation from GCRS to frame f: r_f = gcrsTo(f) * r_gcrs.
+    /// Rotation from GCRS to frame f: r_f = gcrsTo(f) * r_gcrs. If f is not an enumerator of Frame
+    /// (a bad cast, an uninitialised value), every element of the result is NaN.
     [[nodiscard]] const Mat3& gcrsTo(Frame f) const noexcept;
-    /// Rotation between two frames: r_to = matrix(from, to) * r_from.
+    /// Rotation between two frames: r_to = matrix(from, to) * r_from. Every element is NaN if
+    /// `from` or `to` is not an enumerator of Frame.
     [[nodiscard]] Mat3 matrix(Frame from, Frame to) const noexcept;
     /// Earth's angular velocity vector expressed in frame f (zero for non-rotating frames).
     [[nodiscard]] Vec3 angularVelocity(Frame f) const noexcept;
 
-    /// Rotate a vector (any units): matrix(from, to) * r. No Earth-rotation term.
+    /// Rotate a vector (any units): matrix(from, to) * r. No Earth-rotation term. NaN if `from` or
+    /// `to` is not an enumerator of Frame.
     [[nodiscard]] Vec3 transform(const Vec3& r, Frame from, Frame to) const noexcept;
     /// Position and velocity, including the Earth-rotation (omega x r) term for Earth-fixed frames.
+    /// NaN if `from` or `to` is not an enumerator of Frame.
     [[nodiscard]] StateVector transform(const StateVector& s, Frame from, Frame to) const noexcept;
 
     /// The epoch in TT.
@@ -123,14 +127,25 @@ private:
 
 /// Rotation from GCRS to the celestial (non-rotating) frame f at t: r_f = M r_gcrs. Identity for
 /// GCRS. Uses IAU 2006/2000B precession-nutation (about 1 mas) and no Earth-orientation data, which
-/// suits conversions applied in both directions with the same model. Throws astro::Error for the
-/// Earth-fixed frames (TIRS, PEF, ITRS).
+/// suits conversions applied in both directions with the same model.
+///
+/// GCRS and J2000 are fixed: t is not used. MOD, TOD and CIRS depend on TT alone, so t may be any
+/// epoch that converts to TT. That includes epochs before 1960 given in TT, TAI, TDB or GPS time; an
+/// epoch given in UTC or UT1 cannot be before 1960, where UTC is not defined. TEME depends on UT1 as
+/// well (through GMST 1982; UT1 is taken as UTC here), so for TEME t must convert to UTC: 1960 or
+/// later, in any scale.
+///
+/// Throws astro::Error for the Earth-fixed frames (TIRS, PEF, ITRS), for a value that is not an
+/// enumerator of Frame, and if t cannot be converted as the frame requires.
 [[nodiscard]] Mat3 gcrsToCelestialMatrix(Frame f, const Time& t);
 
 /// Rotation from the celestial frame `from` to a frame whose z axis is the Celestial Intermediate
 /// Pole (Earth's true spin axis) at t, for aligning a zonal gravity field (GravityField's
 /// toBodyFrame). Exactly the identity when the z axis of `from` already is the true pole (TOD, TEME,
-/// CIRS). Same model and restrictions as gcrsToCelestialMatrix.
+/// CIRS); t is not used then. Otherwise (GCRS, J2000, MOD) it depends on TT alone and t may be any
+/// epoch that converts to TT, as for gcrsToCelestialMatrix. Same model as gcrsToCelestialMatrix.
+/// Throws astro::Error for the Earth-fixed frames, for a value that is not an enumerator of Frame,
+/// and if t cannot be converted to TT.
 [[nodiscard]] Mat3 poleOfDateMatrix(Frame from, const Time& t);
 
 /// GCRS -> ITRS rotation matrix ("ECI to ECEF").

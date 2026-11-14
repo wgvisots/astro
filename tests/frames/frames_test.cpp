@@ -16,7 +16,11 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <cmath>
 #include <cstdio>
+#include <limits>
+#include <string>
+#include <vector>
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
@@ -279,4 +283,115 @@ TEST(EopTable, C04Formats) {
     EXPECT_NEAR(rad2arcsec(b.at(58850.0).yp), 0.282597, 1e-12);
     EXPECT_NEAR(b.at(58850.0).lod, 0.0002929, 1e-15);
     EXPECT_NEAR(rad2arcsec(b.at(58850.0).dX), 0.000099, 1e-12);
+}
+
+TEST(EopTable, EpochThatIsNotFiniteIsRejected) {
+    // Such a record used to reach std::sort, whose comparison must be a strict order (it is not for
+    // NaN: undefined behaviour), and was refused only later, with a message about leap seconds.
+    for (double bad : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+        EopRecord a, b, c;
+        a.mjd = 59000.0;
+        b.mjd = bad;
+        c.mjd = 59002.0;
+        try {
+            const EopTable table({a, b, c});
+            FAIL() << "accepted an epoch of " << bad;
+        } catch (const Error& e) {
+            EXPECT_NE(std::string(e.what()).find("not finite"), std::string::npos) << e.what();
+        }
+    }
+}
+
+TEST(EopTable, DuplicateEpochIsRejected) {
+    // Two records at one epoch put a zero in the denominators of the interpolation weights: the table
+    // used to be accepted and at() then returned infinity or NaN. Real IERS files have one row per
+    // day, so a repeated epoch is an error in the input and is refused when the table is built.
+    const auto rec = [](double mjd, double xpArcsec) {
+        EopRecord r;
+        r.mjd       = mjd;
+        r.values.xp = arcsec2rad(xpArcsec);
+        return r;
+    };
+    const auto message = [](const std::vector<EopRecord>& records, EopInterpolation interp) -> std::string {
+        try {
+            const EopTable table(records, interp);
+            return "accepted; xp(59000.5) = " + std::to_string(table.at(59000.5).xp);
+        } catch (const Error& e) {
+            return e.what();
+        }
+    };
+    // Records may come in any order, so the two at MJD 59001 need not be next to each other.
+    const std::vector<EopRecord> repeated{rec(59001.0, 2.0),
+                                          rec(59003.0, 4.0),
+                                          rec(59000.0, 1.0),
+                                          rec(59001.0, 2.0),
+                                          rec(59002.0, 3.0)};
+    for (auto interp : {EopInterpolation::Linear, EopInterpolation::Lagrange4}) {
+        const std::string what = message(repeated, interp);
+        EXPECT_NE(what.find("duplicate epoch"), std::string::npos) << what;
+        EXPECT_NE(what.find("59001"), std::string::npos) << what; // names the epoch
+    }
+    // The same through the file readers.
+    std::string finals;
+    finals += finalsLine(2020, 5, 31, 59000.0, 0.10, 0.40, -0.2400000, 0.5, 0.10, -0.10) + "\n";
+    finals += finalsLine(2020, 6, 1, 59001.0, 0.11, 0.41, -0.2405000, 0.5, 0.11, -0.11) + "\n";
+    finals += finalsLine(2020, 6, 1, 59001.0, 0.11, 0.41, -0.2405000, 0.5, 0.11, -0.11) + "\n";
+    finals += finalsLine(2020, 6, 2, 59002.0, 0.12, 0.42, -0.2410000, 0.5, 0.12, -0.12) + "\n";
+    EXPECT_THROW((void)EopTable::parseFinals2000A(finals), Error);
+    const char* c04 = "2020   5  31  59000   0.100000   0.400000  -0.2400000   0.0005000   0.000100  -0.000100\n"
+                      "2020   6   1  59001   0.110000   0.410000  -0.2405000   0.0005000   0.000110  -0.000110\n"
+                      "2020   6   1  59001   0.110000   0.410000  -0.2405000   0.0005000   0.000110  -0.000110\n"
+                      "2020   6   2  59002   0.120000   0.420000  -0.2410000   0.0005000   0.000120  -0.000120\n";
+    EXPECT_THROW((void)EopTable::parseC04(c04), Error);
+
+    // Without the repeat, the same records in the same (unsorted) order are accepted and sorted. The
+    // values lie on a straight line (xp = MJD - 58999 arcsec), which both interpolations reproduce.
+    std::vector<EopRecord> distinct = repeated;
+    distinct.erase(distinct.begin());
+    for (auto interp : {EopInterpolation::Linear, EopInterpolation::Lagrange4}) {
+        const EopTable table(distinct, interp);
+        ASSERT_EQ(table.records().size(), 4u);
+        EXPECT_EQ(table.firstMjd(), 59000.0);
+        EXPECT_EQ(table.lastMjd(), 59003.0);
+        for (double mjd : {59000.0, 59000.5, 59001.0, 59001.75, 59002.25, 59003.0}) {
+            EXPECT_NEAR(rad2arcsec(table.at(mjd).xp), mjd - 58999.0, 1e-12) << mjd; // rounding only
+        }
+    }
+}
+
+TEST(FrameTransformer, InvalidFrameValueGivesNaN) {
+    // A Frame that is not one of the enumerators (a bad cast, an uninitialised value) used to index
+    // past the end of the transformer's table of matrices. gcrsTo() and matrix() are noexcept, so they
+    // answer with NaN, which cannot be taken for a rotation; the functions that may throw, throw.
+    const Time             t = Time::fromIso8601("2021-07-04T12:34:56Z");
+    const FrameTransformer ft(t, ConstantEop{});
+    const auto             allNaN = [](const Mat3& m) {
+        for (std::size_t i = 0; i < 3; ++i) {
+            for (std::size_t j = 0; j < 3; ++j) {
+                if (!std::isnan(m(i, j))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+    const auto        allNaNVec = [](const Vec3& v) { return std::isnan(v.x) && std::isnan(v.y) && std::isnan(v.z); };
+    const StateVector s{
+        {7000e3, -1200e3, 300e3},
+        {1.0e3,  7.2e3,   0.5e3}
+    };
+    for (int raw : {9, 99, -1}) { // 9 is one past the last enumerator (ITRS = 8)
+        const Frame bad = static_cast<Frame>(raw);
+        EXPECT_TRUE(allNaN(ft.gcrsTo(bad))) << raw;
+        EXPECT_TRUE(allNaN(ft.matrix(bad, Frame::GCRS))) << raw;
+        EXPECT_TRUE(allNaN(ft.matrix(Frame::ITRS, bad))) << raw;
+        EXPECT_TRUE(allNaNVec(ft.transform(s.r, bad, Frame::ITRS))) << raw;
+        EXPECT_TRUE(allNaNVec(ft.transform(s.r, Frame::GCRS, bad))) << raw;
+        for (const StateVector& out : {ft.transform(s, bad, Frame::ITRS), ft.transform(s, Frame::GCRS, bad)}) {
+            EXPECT_TRUE(allNaNVec(out.r)) << raw;
+            EXPECT_TRUE(allNaNVec(out.v)) << raw;
+        }
+        EXPECT_THROW((void)gcrsToCelestialMatrix(bad, t), Error) << raw;
+        EXPECT_THROW((void)poleOfDateMatrix(bad, t), Error) << raw;
+    }
 }

@@ -162,9 +162,9 @@ for (const double speed : {4000.0, 4500.0, 5000.0}) {
 
 | Shot | Flight | Per call | Shared rotations | Shared, with covariance |
 |---|---|---|---|---|
-| 3 km/s, 35 deg | 413 s | 32 us | 12 us | 18 us |
-| 5 km/s, 35 deg | 936 s | 31 us | 15 us | 29 us |
-| 7 km/s, 35 deg | 2353 s | 41 us | 24 us | 50 us |
+| 3 km/s, 35 deg | 413 s | 25 us | 9 us | 14 us |
+| 5 km/s, 35 deg | 936 s | 29 us | 14 us | 26 us |
+| 7 km/s, 35 deg | 2353 s | 38 us | 21 us | 50 us |
 
 From `bench/impact_bench.cpp` ([Performance](../performance.md)). A series and the propagators are
 immutable, so threads can share them.

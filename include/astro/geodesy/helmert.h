@@ -69,7 +69,10 @@ struct HelmertTimeDependent {
 [[nodiscard]] Vec3 helmertTransform(const Vec3& x, const HelmertParams& p) noexcept;
 /// First-order inverse transformation (all parameters negated).
 [[nodiscard]] HelmertParams inverse(const HelmertParams& p) noexcept;
-/// Transform position and velocity with a time-dependent Helmert at the given epoch.
+/// Transform position (m) and velocity (m/s) with a time-dependent Helmert at the given epoch
+/// (decimal years). The velocity returned is the time derivative of the transformed position, in
+/// m/s like the one given: the rates of `h`, which are per year, are converted with the Julian year
+/// of 365.25 days of 86400 s.
 [[nodiscard]] StateVector
 helmertTransform(const StateVector& x, const HelmertTimeDependent& h, double decimalYear) noexcept;
 

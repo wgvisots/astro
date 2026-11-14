@@ -68,8 +68,9 @@ SecularRates secularRates(double a, double e, double i, const ZonalParameters& z
 
 KeplerianElements
 propagateSecular(const KeplerianElements& mean, double dt, const ZonalParameters& zp, SecularOrder order) {
-    if (mean.e >= 1.0) {
-        throw Error("propagateSecular: requires an elliptic orbit");
+    // The same domain as SecularPropagator (a < 0 with e < 1 used to give NaN here).
+    if (!(mean.e >= 0.0 && mean.e < 1.0) || !(mean.a > 0.0)) {
+        throw Error("propagateSecular: requires an elliptic orbit (a > 0, 0 <= e < 1)");
     }
     const SecularRates r   = secularRates(mean.a, mean.e, mean.i, zp, order);
     KeplerianElements  out = mean;
@@ -401,7 +402,8 @@ namespace {
 
 // Relative step of the state transition matrix's differences, |r0| and |v0| times this. The
 // fourth-order stencil makes the truncation error ~(n dt * step)^4: 1e-5 keeps it below ~1e-5 over
-// a week, and above the ~1e-8 rad noise of the element conversion near e = 0 and i = 0.
+// a week, and the rounding error of the differences (machine epsilon / step) near 1e-11. A step of
+// 1e-6 gives 2e-10 everywhere in the study instead, and 1.6e-9 for e = 0.74 over a week.
 constexpr double kStmStep = 1e-5;
 
 // Offsets of the stencil, in steps, and their weights times 12 (f' = sum w f(x + o h) / (12 h)).
@@ -448,8 +450,10 @@ void SecularPropagator::stmGrid(double start, double step, std::span<StateVector
     for (std::size_t j = 0; j < 6; ++j) {
         const double h = kStmStep * (j < 3 ? norm(epoch.r) : norm(epoch.v));
         for (std::size_t p = 0; p < 4; ++p) {
-            StateVector s0                      = epoch;
-            (j < 3 ? &s0.r.x : &s0.v.x)[j % 3] += kStencilOffset[p] * h;
+            StateVector s0 = epoch;
+            // Component j of the state. (Not by indexing from the address of r.x: that reaches
+            // outside the object pointed to, and an optimizer may then drop the write.)
+            (j < 3 ? s0.r : s0.v)[j % 3] += kStencilOffset[p] * h;
             rebuilt(s0).trajectoryGrid(start, step, buf);
             const double w = kStencilWeight[p] / (12.0 * h);
             for (std::size_t k = 0; k < buf.size(); ++k) {
@@ -493,12 +497,16 @@ SecularPropagator::propagateGridWithCovariance(double start, double step, std::s
 }
 
 double sunSynchronousInclination(double a, double e, const ZonalParameters& zp) {
+    // a = 0 used to give pi/2 (the formula below then divides by infinity), and e > 1 an angle.
+    if (!(e >= 0.0 && e < 1.0) || !(a > 0.0)) {
+        throw Error("sunSynchronousInclination: requires an elliptic orbit (a > 0, 0 <= e < 1)");
+    }
     constexpr double tropicalYear = 365.242190 * 86400.0;
     const double     target       = constants::twoPi / tropicalYear;
     const double     n            = std::sqrt(zp.mu / (a * a * a));
     const double     p            = a * (1.0 - e * e);
     const double     c            = -target / (1.5 * n * zp.J2 * (zp.re / p) * (zp.re / p));
-    if (std::abs(c) > 1.0) {
+    if (!(std::abs(c) <= 1.0)) {
         throw Error("sunSynchronousInclination: no sun-synchronous solution for this orbit");
     }
     return std::acos(c);
@@ -508,6 +516,9 @@ double repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, co
     if (revs <= 0 || days <= 0) {
         throw Error("repeatGroundTrackSemiMajorAxis: revs and days must be positive");
     }
+    if (!(e >= 0.0 && e < 1.0)) {
+        throw Error("repeatGroundTrackSemiMajorAxis: requires an elliptic orbit (0 <= e < 1)");
+    }
     // Nodal period condition: revs * (2 pi) / (Mdot + argpDot) = days * 2 pi / (omegaE - raanDot)
     const double we = constants::earthRotationRate;
     double       a  = std::cbrt(zp.mu / std::pow(we * revs / days, 2.0));
@@ -515,13 +526,19 @@ double repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, co
         const SecularRates r         = secularRates(a, e, i, zp, SecularOrder::J2);
         const double       nodalRate = (we - r.raanDot) * revs / days; // required (Mdot + argpDot)
         const double       nNeeded   = nodalRate - (r.meanAnomalyDot - std::sqrt(zp.mu / (a * a * a))) - r.argpDot;
-        const double       aNew      = std::cbrt(zp.mu / (nNeeded * nNeeded));
-        if (std::abs(aNew - a) < 1e-6) {
+        if (!(nNeeded > 0.0)) {
+            break; // a mean motion that is zero, negative or NaN: the iteration has left its domain
+        }
+        const double aNew = std::cbrt(zp.mu / (nNeeded * nNeeded));
+        // Relative to a (1e-6 m at 10 000 km). An absolute tolerance is also met when the iteration
+        // diverges towards a = 0, which it does when there is no solution: 2 revolutions a day at
+        // e = 0.99 "converged" to 0.000 km.
+        if (std::abs(aNew - a) < 1e-13 * aNew) {
             return aNew;
         }
         a = aNew;
     }
-    return a;
+    throw Error("repeatGroundTrackSemiMajorAxis: did not converge (no such orbit in the J2 model)");
 }
 
 std::ostream& operator<<(std::ostream& os, SecularOrder value) {

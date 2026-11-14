@@ -29,11 +29,20 @@
 /// Two-body (Keplerian) propagation and Lambert's problem.
 namespace astro {
 
-/// Stumpff functions c2(psi), c3(psi).
+/// Stumpff functions c2(psi) = (1 - cos sqrt(psi)) / psi and c3(psi) = (sqrt(psi) - sin sqrt(psi)) / psi^(3/2),
+/// continued to psi <= 0 (hyperbolic functions). Accurate to a few rounding errors for every psi: by
+/// their power series for |psi| < 1, where the closed forms cancel.
 void stumpff(double psi, double& c2, double& c3) noexcept;
 
 /// Propagate a two-body state by dt seconds using universal variables
-/// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits.
+/// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits, any dt of
+/// either sign, and any step size down to rounding.
+///
+/// The universal Kepler equation is solved by the Laguerre-Conway iteration inside a bracket, so it
+/// always ends; the result is within a few rounding errors of the equation's own conditioning
+/// (1e-13 of the state for steps up to a few revolutions; see docs/accuracy.md).
+///
+/// Throws astro::Error if the state or dt is not finite, the position is zero, or mu is not positive.
 [[nodiscard]] StateVector propagateKepler(const StateVector& s0, double dt, double mu = constants::gmEarth);
 
 /// propagateKepler with the state transition matrix Phi(dt) = d(state at dt) / d(s0), in closed
@@ -86,7 +95,8 @@ struct LambertSolution {
 ///
 /// `prograde` selects the direction of motion: counter-clockwise seen from +z (the orbit's angular
 /// momentum has a positive z component) or, if false, clockwise. If the plane of r1 and r2 contains
-/// the z axis the two directions cannot be told apart that way and the shorter way round is taken.
+/// the z axis (the z component of r1 x r2 is zero to within its rounding error) the two directions
+/// cannot be told apart that way, and the shorter way round is taken.
 ///
 /// Sensitive cases, by the nature of the problem: r1 and r2 within ~1e-6 rad of opposite (the orbit
 /// plane is fixed only to rounding / sin(angle)); flights so long that the orbit's period is not

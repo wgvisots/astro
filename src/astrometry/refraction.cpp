@@ -81,15 +81,40 @@ double refractObservedToTrue(double observedElevation, const RefractionConstants
     return observedElevation - dref;
 }
 
+namespace {
+
+// Refraction in arcminutes, at 1010 hPa and 10 C, from a formula of the form
+//     R = c cot(h + p / (h + q)),   h = elevation in degrees:
+// Bennett's (c = 1, p = 7.31, q = 4.4; h observed) and Saemundsson's (c = 1.02, p = 10.3, q = 5.11;
+// h true). As printed, the formula is not usable over the whole sky, so two things are done here:
+//  - At the zenith it is slightly negative (-0.08 and -0.12 arcsec). Meeus (1998), Astronomical
+//    Algorithms, 2nd ed., ch. 16, adds 0.0013515 and 0.0019279 arcmin so that R is zero at h = 90
+//    deg: those are minus the formula's value at 90 deg, which is what is subtracted here.
+//  - The cotangent's argument is smallest, and the refraction largest, at h = sqrt(p) - q (-1.70 and
+//    -1.90 deg). Below that the formula turns back down, and at h = -q it divides by zero. The
+//    elevation is held at the turning point, so the largest value is returned for everything below.
+// The result is finite, continuous, never negative and never rising with elevation; NaN gives NaN.
+double cotangentFormulaArcmin(double elevation, double c, double p, double q) noexcept {
+    if (elevation >= constants::halfPi) {
+        return 0.0; // the zenith, and anything past it
+    }
+    const auto   formula      = [&](double h) { return c / std::tan((h + p / (h + q)) * constants::degToRad); };
+    const double turningPoint = std::sqrt(p) - q;
+    const double degrees      = elevation * constants::radToDeg;
+    const double held         = degrees < turningPoint ? turningPoint : degrees; // NaN passes through
+    const double r            = formula(held) - formula(90.0);
+    return r < 0.0 ? 0.0 : r; // negative only by rounding, next to the zenith
+}
+
+} // namespace
+
 double refractionBennett(double observedElevation, double pressureHpa, double temperatureC) noexcept {
-    const double h       = observedElevation * constants::radToDeg;
-    const double rArcmin = 1.0 / std::tan((h + 7.31 / (h + 4.4)) * constants::degToRad);
+    const double rArcmin = cotangentFormulaArcmin(observedElevation, 1.0, 7.31, 4.4);
     return rArcmin / 60.0 * constants::degToRad * (pressureHpa / 1010.0) * (283.0 / (273.0 + temperatureC));
 }
 
 double refractionSaemundsson(double trueElevation, double pressureHpa, double temperatureC) noexcept {
-    const double h       = trueElevation * constants::radToDeg;
-    const double rArcmin = 1.02 / std::tan((h + 10.3 / (h + 5.11)) * constants::degToRad);
+    const double rArcmin = cotangentFormulaArcmin(trueElevation, 1.02, 10.3, 5.11);
     return rArcmin / 60.0 * constants::degToRad * (pressureHpa / 1010.0) * (283.0 / (273.0 + temperatureC));
 }
 

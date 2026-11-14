@@ -87,6 +87,9 @@ struct EclipseInterval {
 /// Find eclipse intervals in [start, end] given geocentric satellite and Sun
 /// position functions (same frame). Sampled every `step` s and refined with Brent.
 /// Eclipses already in progress at `start` or `end` are clipped to the window.
+/// An empty window (end == start) returns no eclipse. Throws astro::Error if `end`
+/// is before `start`, if either time is NaN, if `step` is not positive and finite,
+/// or if the window holds more than 2e9 steps.
 [[nodiscard]] std::vector<EclipseInterval> findEclipses(const std::function<Vec3(const Time&)>& satPosition,
                                                         const std::function<Vec3(const Time&)>& sunPosition,
                                                         const Time&                             start,

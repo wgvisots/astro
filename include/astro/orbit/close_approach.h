@@ -83,7 +83,8 @@ public:
                const KeplerianElements& elements,
                TrajectoryModel          model = TrajectoryModel::TwoBody,
                const ZonalParameters&   zp    = {});
-    /// Propagate equinoctial elements from `epoch` (converted with equinoctialToKeplerian).
+    /// Propagate equinoctial elements from `epoch` (converted with equinoctialToKeplerian, which
+    /// throws astro::Error unless they describe an ellipse).
     Trajectory(const Time&                epoch,
                const EquinoctialElements& elements,
                TrajectoryModel            model = TrajectoryModel::TwoBody,

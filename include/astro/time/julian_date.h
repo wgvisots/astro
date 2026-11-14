@@ -94,7 +94,9 @@ struct JulianDate {
     /// @}
 
     /// Calendar date assuming 86400-second days. Seconds are rounded to
-    /// `decimals` places with carries into minutes/hours/days.
+    /// `decimals` places with carries into minutes/hours/days. Throws
+    /// astro::Error if the date is not finite (NaN or infinity), or if either
+    /// part is larger than 1e11 days in size.
     [[nodiscard]] CalendarDate toCalendar(int decimals = 9) const;
 
     friend constexpr std::partial_ordering operator<=>(const JulianDate& a, const JulianDate& b) noexcept {

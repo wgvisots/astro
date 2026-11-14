@@ -42,14 +42,28 @@ struct SpkSegmentInfo {
 /// Reader for JPL/NAIF SPK (.bsp) ephemeris files, e.g. DE440/DE441.
 ///
 /// Supports Chebyshev segment types 2 (position) and 3 (position + velocity),
-/// either byte order. Bodies are chained through their centers, so e.g. the
-/// Moon relative to the Earth is resolved via the Earth-Moon barycenter. When
-/// several segments cover an epoch, the one latest in the file wins (NAIF rule).
-/// Records are read on demand; the file stays open. Thread-safe.
+/// either byte order, in the J2000 reference frame (NAIF frame id 1; in the JPL
+/// planetary kernels its axes are those of the ICRF). Bodies are chained through
+/// their centers, so e.g. the Moon relative to the Earth is resolved via the
+/// Earth-Moon barycenter. When several segments cover an epoch, the one latest in
+/// the file wins (NAIF rule). Records are read on demand; the file stays open.
+/// Thread-safe.
+///
+/// A kernel may also hold segments of other types or in other frames. They are
+/// listed by segments() and do no harm until one is needed for a state: state()
+/// and stateById() then throw astro::Error. A segment in another frame is never
+/// returned as if it were in the ICRF.
+///
+/// A body is resolved from its own segments only: nothing stands in for a body
+/// the kernel lacks. DE430 and DE440 have the Mars system barycenter
+/// (Body::MarsBarycenter, NAIF id 4) but not Mars (Body::Mars, id 499), so
+/// Body::Mars throws with those kernels, and the message names the barycenter.
 class SpkEphemeris final : public Ephemeris {
 public:
     /// Open the kernel at `path` and read its segment summaries. Throws astro::Error if the file
-    /// cannot be opened or read, is not a DAF/SPK file in IEEE format, or has no segments.
+    /// cannot be opened or read, is not a DAF/SPK file in IEEE format, or has no segments. The file
+    /// may begin with the id word "DAF/SPK " or with the "NAIF/DAF" of older kernels (de405.bsp, for
+    /// one); for those, which do not name their byte order, it is found from the file record.
     explicit SpkEphemeris(const std::string& path);
     ~SpkEphemeris() override;
     /// Move; the moved-from object may only be destroyed or assigned to.
@@ -57,8 +71,12 @@ public:
     /// Move; the moved-from object may only be destroyed or assigned to.
     SpkEphemeris& operator=(SpkEphemeris&&) noexcept;
 
+    /// As stateById(), with the NAIF ids of `target` and `center` and the ephemeris time of `t`.
     [[nodiscard]] StateVector state(Body target, Body center, const Time& t) const override;
-    /// State by NAIF id at an ephemeris time (TDB seconds past J2000); meters, m/s.
+    /// State by NAIF id at an ephemeris time (TDB seconds past J2000); meters, m/s, ICRF axes.
+    /// Throws astro::Error if a body on the way from `target` to `center` is not in the kernel or
+    /// has no segment covering `et`, or if that segment is of an unsupported type or not in the
+    /// J2000 frame.
     [[nodiscard]] StateVector stateById(int target, int center, double et) const;
 
     /// Summaries of all segments, in file order.

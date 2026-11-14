@@ -39,6 +39,9 @@ namespace {
 
 constexpr double kJdBdtEpoch        = 2453736.5; // 2006-01-01 00:00:00 BDT
 constexpr int    kGalileoWeekOffset = 1024;      // GST week 0 == GPS week 1024
+constexpr double kSecondsPerWeek    = 604800.0;  // a GNSS week, 7 days of 86400 s
+constexpr int    kMinutesPerDay     = 1440;      // of the civil clock
+constexpr int    kMaxIsoYear        = 9999;      // ISO-8601 text has a four-digit year, 0000 to 9999
 
 // --------------------------------------------------------------- UTC helpers
 //
@@ -192,6 +195,22 @@ TimeScale gnssScale(GnssSystem system) {
     return TimeScale::GPS;
 }
 
+// --------------------------------------------------------------- Unix time
+
+// Unix times are accepted up to 1e9 days either side of 1970 (2.7 million years), the span the leap-second
+// table accepts as a Modified Julian Date. Within it the seconds and days are exact integers; a larger value,
+// a NaN or an infinity cannot be converted to an integer at all (undefined behaviour).
+constexpr double kMaxUnixSeconds = 1.0e9 * secondsPerDay;
+
+void requireUnixSeconds(double seconds, const char* what) {
+    if (!std::isfinite(seconds)) {
+        throw Error(std::string("Time::fromUnix: ") + what + " is not finite");
+    }
+    if (std::abs(seconds) > kMaxUnixSeconds) {
+        throw Error(std::string("Time::fromUnix: ") + what + " is out of range (more than 1e9 days from 1970)");
+    }
+}
+
 // --------------------------------------------------------------- ISO-8601 parsing
 
 struct Cursor {
@@ -277,6 +296,9 @@ Time Time::fromCalendar(TimeScale scale, int year, int month, int day, int hour,
     if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
         throw Error("Time::fromCalendar: invalid date");
     }
+    if (!std::isfinite(second)) { // a NaN passes every range check below
+        throw Error("Time::fromCalendar: second is not finite");
+    }
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0.0) {
         throw Error("Time::fromCalendar: invalid time of day");
     }
@@ -288,8 +310,12 @@ Time Time::fromCalendar(TimeScale scale, int year, int month, int day, int hour,
         }
         return Time(JulianDate{jd1, sod / secondsPerDay}, scale);
     }
+    // The last minute of a UTC day is as long as the step at the end of the day makes it: 61 s before a leap
+    // second, 59 s before a negative one, and 59.95 s and 59.9 s on the two shortened days before 1972
+    // (1961-07-31, 1968-01-31). This is the limit of ERFA's eraDtf2d. On other days dleap is zero, or
+    // rounding noise (2e-15 s) too small to move the limit from exactly 60.
     const double dleap    = utcDay(jd1).dleap;
-    const double secLimit = (hour == 23 && minute == 59) ? 60.0 + std::max(dleap, 0.0) : 60.0;
+    const double secLimit = (hour == 23 && minute == 59) ? 60.0 + dleap : 60.0;
     if (second >= secLimit) {
         throw Error("Time::fromCalendar: seconds out of range for this UTC day");
     }
@@ -301,6 +327,8 @@ Time Time::fromCalendar(TimeScale scale, const CalendarDate& c) {
 }
 
 Time Time::fromUnix(long long wholeSeconds, double fraction) {
+    requireUnixSeconds(static_cast<double>(wholeSeconds), "the whole-second count");
+    requireUnixSeconds(fraction, "the fraction");
     const double fWhole  = std::floor(fraction);
     wholeSeconds        += static_cast<long long>(fWhole);
     fraction            -= fWhole;
@@ -316,6 +344,7 @@ Time Time::fromUnix(long long wholeSeconds, double fraction) {
 }
 
 Time Time::fromUnix(double unixSeconds) {
+    requireUnixSeconds(unixSeconds, "the Unix time");
     const double whole = std::floor(unixSeconds);
     return fromUnix(static_cast<long long>(whole), unixSeconds - whole);
 }
@@ -353,8 +382,8 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
     while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
         text.remove_suffix(1);
     }
-    Cursor    c{text};
-    const int year = c.integer(4);
+    Cursor c{text};
+    int    year = c.integer(4);
     c.expect('-');
     int month = 1, day = 1;
     if (c.digitsAhead() == 3) {
@@ -379,7 +408,8 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
             if (c.digitsAhead() < 2) {
                 c.fail();
             }
-            auto [ptr, ec] = std::from_chars(b, e, second);
+            // Fixed notation only: ISO-8601 seconds have no exponent ("05e1" is not 50 s).
+            auto [ptr, ec] = std::from_chars(b, e, second, std::chars_format::fixed);
             if (ec != std::errc{}) {
                 c.fail();
             }
@@ -387,7 +417,7 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
         }
     }
     TimeScale scale         = defaultScale;
-    double    offsetSeconds = 0.0;
+    int       offsetMinutes = 0; // local civil time minus UTC
     while (c.peek() == ' ') {
         ++c.p;
     }
@@ -406,7 +436,11 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
             if (!c.done()) {
                 om = c.integer(2);
             }
-            offsetSeconds = (z == '-' ? -1.0 : 1.0) * (oh * 3600.0 + om * 60.0);
+            // Offset hours are 00-23 and offset minutes 00-59 (RFC 3339, section 5.6).
+            if (oh > 23 || om > 59) {
+                throw Error("Time::fromIso8601: UTC offset out of range in '" + std::string(text) + "'");
+            }
+            offsetMinutes = (z == '-' ? -1 : 1) * (oh * 60 + om);
             scale         = TimeScale::UTC;
         } else {
             scale = timeScaleFromString(text.substr(c.p));
@@ -416,8 +450,33 @@ Time Time::fromIso8601(std::string_view text, TimeScale defaultScale) {
     if (!c.done()) {
         c.fail();
     }
-    Time t = fromCalendar(scale, year, month, day, hour, minute, second);
-    return offsetSeconds != 0.0 ? t + (-offsetSeconds) : t;
+    if (offsetMinutes != 0) {
+        // A UTC offset is civil-clock arithmetic: the local clock shows the same seconds as a UTC clock and
+        // differs only in its hours and minutes. So move the calendar fields, not the instant: taking the
+        // offset off as elapsed seconds is 1 s out across a leap second, and would not recognise a leap
+        // second written with an offset ("00:59:60+01:00" is 23:59:60 UTC).
+        if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59) {
+            throw Error("Time::fromIso8601: invalid date or time of day in '" + std::string(text) + "'");
+        }
+        // Minutes after 0h UTC on the local date. The offset is less than a day, so this is at most one
+        // day early or late.
+        int minuteOfDay = hour * 60 + minute - offsetMinutes;
+        int dayShift    = 0;
+        if (minuteOfDay < 0) {
+            dayShift     = -1;
+            minuteOfDay += kMinutesPerDay;
+        } else if (minuteOfDay >= kMinutesPerDay) {
+            dayShift     = 1;
+            minuteOfDay -= kMinutesPerDay;
+        }
+        dateFromJulianDayNumber(julianDayNumber(year, month, day) + dayShift, year, month, day);
+        hour   = minuteOfDay / 60;
+        minute = minuteOfDay % 60;
+        if (year < 0 || year > kMaxIsoYear) {
+            throw Error("Time::fromIso8601: the UTC year is outside 0000-9999 in '" + std::string(text) + "'");
+        }
+    }
+    return fromCalendar(scale, year, month, day, hour, minute, second);
 }
 
 Time Time::to(TimeScale target, const EopProvider* eop) const {
@@ -428,6 +487,10 @@ Time Time::to(TimeScale target, const EopProvider* eop) const {
 }
 
 CalendarDate Time::calendar(int decimals) const {
+    // Refused here, before the day number is turned into an integer (undefined for a NaN or an infinity).
+    if (!std::isfinite(jd_.jd1) || !std::isfinite(jd_.jd2)) {
+        throw Error("Time::calendar: the time is not finite");
+    }
     if (scale_ != TimeScale::UTC) {
         return jd_.toCalendar(decimals);
     }
@@ -452,7 +515,13 @@ CalendarDate Time::calendar(int decimals) const {
 
 std::string Time::iso8601(int decimals, bool withScale) const {
     const CalendarDate c = calendar(decimals);
-    char               sec[32];
+    // ISO-8601 text has a four-digit year. Any other year would be written in a form that fromIso8601 cannot
+    // read back ("-005", "12000"), so it is refused here instead.
+    if (c.year < 0 || c.year > kMaxIsoYear) {
+        throw Error("Time::iso8601: year " + std::to_string(c.year)
+                    + " cannot be written as ISO-8601 text (years 0000 to 9999 only)");
+    }
+    char sec[32];
     if (decimals > 0) {
         std::snprintf(sec, sizeof(sec), "%0*.*f", decimals + 3, decimals, c.second);
     } else {
@@ -500,6 +569,12 @@ GnssWeekTow Time::gnssWeekTow(GnssSystem system) const {
     GnssWeekTow  out;
     out.week = static_cast<int>(week);
     out.tow  = (days - 7.0 * week) * secondsPerDay + t.jd_.jd2 * secondsPerDay;
+    // Within about 1e-10 s of the end of the week the sum rounds up to exactly one week. The time of week is
+    // defined on [0, 604800), so that instant is the start of the next week.
+    if (out.tow >= kSecondsPerWeek) {
+        out.tow  -= kSecondsPerWeek;
+        out.week += 1;
+    }
     if (system == GnssSystem::Galileo) {
         out.week -= kGalileoWeekOffset;
     }

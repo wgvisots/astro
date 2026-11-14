@@ -68,7 +68,8 @@ struct SecularRates {
                                         SecularOrder           order = SecularOrder::J2SquaredJ4) noexcept;
 
 /// Propagate mean elements by dt seconds with the secular rates (a, e, i constant).
-/// The true anomaly is advanced through the mean anomaly.
+/// The true anomaly is advanced through the mean anomaly. Throws astro::Error unless the orbit is
+/// elliptic (a > 0, 0 <= e < 1), as SecularPropagator does.
 [[nodiscard]] KeplerianElements propagateSecular(const KeplerianElements& mean,
                                                  double                   dt,
                                                  const ZonalParameters&   zp    = {},
@@ -286,11 +287,14 @@ public:
 };
 
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;
-/// nodal rate 360 deg per tropical year). Throws astro::Error if no solution exists.
+/// nodal rate 360 deg per tropical year). Throws astro::Error unless the orbit is elliptic
+/// (a > 0, 0 <= e < 1), or if no solution exists.
 [[nodiscard]] double sunSynchronousInclination(double a, double e = 0.0, const ZonalParameters& zp = {});
 
 /// Mean semi-major axis of a repeat-ground-track orbit that completes `revs`
-/// revolutions in `days` nodal days, for given e and i (J2, iterative).
+/// revolutions in `days` nodal days, for given e and i (J2, iterative). Throws astro::Error if
+/// revs or days is not positive, unless 0 <= e < 1, and if the iteration does not converge (to
+/// 1e-13 of a): there is then no such orbit in the J2 model, e.g. 2 revolutions a day at e = 0.99.
 [[nodiscard]] double
 repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, const ZonalParameters& zp = {});
 

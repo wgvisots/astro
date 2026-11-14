@@ -59,12 +59,19 @@ public:
 
     /// The built-in table (same as the default constructor).
     [[nodiscard]] static LeapSecondTable builtin();
-    /// Load from a file; the format is detected from its content. Entries before
-    /// 1972 (absent from Leap_Second.dat and leap-seconds.list) are taken from
-    /// the built-in table.
+    /// Load from a file. The format is recognised from the first data line, not
+    /// from the comments. Every entry in the file is used; the history before
+    /// the file's first entry (Leap_Second.dat and leap-seconds.list start in
+    /// 1972, tai-utc.dat in 1961) is taken from the built-in table.
+    ///
+    /// Throws astro::Error if the file cannot be opened, if it is in none of the
+    /// three formats or has no entries, and if a data line is malformed: fields
+    /// missing, not numbers or followed by other text, a date that is not the
+    /// first of a month, or a date that disagrees with the (M)JD on the same
+    /// line. The message gives the line number and the line. A malformed line
+    /// is never skipped, because TAI-UTC would then be wrong without notice.
     [[nodiscard]] static LeapSecondTable load(const std::string& path);
-    /// As load(), from file contents already in memory. Throws astro::Error if
-    /// no entries are found (and, for tai-utc.dat, on a malformed line).
+    /// As load(), from file contents already in memory.
     [[nodiscard]] static LeapSecondTable parse(std::string_view content);
 
     /// TAI-UTC in seconds for the UTC calendar date and fraction of day.

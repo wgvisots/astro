@@ -87,7 +87,9 @@ std::ostream& operator<<(std::ostream& os, EopInterpolation value);
 class EopTable final : public EopProvider {
 public:
     /// From records in any order (sorted here). Throws astro::Error if there
-    /// are fewer than two records.
+    /// are fewer than two records, if an epoch is not finite, or if two records
+    /// have the same epoch (the message names it): the interpolation needs
+    /// distinct epochs.
     explicit EopTable(std::vector<EopRecord> records, EopInterpolation interp = EopInterpolation::Lagrange4);
 
     /// IERS Rapid Service `finals2000A.all` / `finals2000A.data` / `finals2000A.daily`
@@ -96,7 +98,8 @@ public:
     [[nodiscard]] static EopTable loadFinals2000A(const std::string& path,
                                                   EopInterpolation   interp = EopInterpolation::Lagrange4);
     /// As loadFinals2000A(), from file contents already in memory. Throws
-    /// astro::Error if no usable rows are found.
+    /// astro::Error if no usable rows are found, or as the constructor does
+    /// (fewer than two rows, a repeated epoch).
     [[nodiscard]] static EopTable parseFinals2000A(std::string_view content,
                                                    EopInterpolation interp = EopInterpolation::Lagrange4);
     /// IERS EOP C04 series, either the classic "14" format
@@ -105,7 +108,8 @@ public:
     [[nodiscard]] static EopTable loadC04(const std::string& path,
                                           EopInterpolation   interp = EopInterpolation::Lagrange4);
     /// As loadC04(), from file contents already in memory. Throws astro::Error
-    /// if no usable rows are found.
+    /// if no usable rows are found, or as the constructor does (fewer than two
+    /// rows, a repeated epoch).
     [[nodiscard]] static EopTable parseC04(std::string_view content,
                                            EopInterpolation interp = EopInterpolation::Lagrange4);
 

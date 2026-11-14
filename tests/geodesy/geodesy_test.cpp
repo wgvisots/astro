@@ -16,6 +16,9 @@
  *         limitations under the License.
  **********************************************************************/
 
+#include <cmath>
+#include <limits>
+#include <numbers>
 #include <random>
 
 #include "astro/core/angle.h"
@@ -85,6 +88,98 @@ TEST(Geodetic, InsideEvoluteFallback) {
         const Geodetic g = ecefToGeodetic(p);
         expectVecNear(geodeticToEcef(g), p, 1e-6, "evolute");
     }
+}
+
+namespace {
+
+/// Geodetic colatitude (pi/2 - latitude) and height of a point of a meridian plane.
+struct MeridianReference {
+    long double colatitude; ///< rad
+    long double height;     ///< m
+};
+
+/// Reference for ecefToGeodetic() at the point (rho, z), rho >= 0 and z >= 0, of a meridian plane:
+/// extended precision, and a different route from the library's. With g the parametric (reduced)
+/// colatitude, the distance from (rho, z) to the point (a sin g, b cos g) of the ellipse is stationary
+/// where
+///     a rho cos g - b z sin g - (a^2 - b^2) sin g cos g = 0.
+/// Measuring g from the pole makes the pole exactly g = 0, so a root 1e-18 rad from it is found as
+/// surely as any other. Every root in the quadrant is bracketed on a fine scan and refined by
+/// bisection; the pole is one more when rho = 0, and the equator when z = 0. The nearest of these
+/// points is the answer, and tan(colatitude) = (b / a) tan g.
+MeridianReference meridianReference(long double rho, long double z, const Ellipsoid& ell) {
+    const long double a      = ell.a;
+    const long double b      = a * (1.0L - static_cast<long double>(ell.f));
+    const long double halfPi = std::numbers::pi_v<long double> / 2.0L;
+    const auto        slope  = [&](long double g) {
+        return a * rho * std::cos(g) - b * z * std::sin(g) - (a * a - b * b) * std::sin(g) * std::cos(g);
+    };
+    const auto distance2 = [&](long double g) {
+        const long double dRho = rho - a * std::sin(g), dZ = z - b * std::cos(g);
+        return dRho * dRho + dZ * dZ;
+    };
+    long double best = 0.0L, bestDistance2 = std::numeric_limits<long double>::infinity();
+    const auto  consider = [&](long double g) {
+        if (distance2(g) < bestDistance2) {
+            bestDistance2 = distance2(g);
+            best          = g;
+        }
+    };
+    if (rho == 0.0L) {
+        consider(0.0L);
+    }
+    if (z == 0.0L) {
+        consider(halfPi);
+    }
+    constexpr int n = 4096;
+    for (int i = 0; i < n; ++i) {
+        long double lo = halfPi * i / n, hi = halfPi * (i + 1) / n;
+        if ((slope(lo) > 0.0L) == (slope(hi) > 0.0L)) {
+            continue;
+        }
+        for (int it = 0; it < 100; ++it) {
+            const long double mid                                 = 0.5L * (lo + hi);
+            ((slope(mid) > 0.0L) == (slope(lo) > 0.0L) ? lo : hi) = mid;
+        }
+        consider(0.5L * (lo + hi));
+    }
+    const bool inside = (rho / a) * (rho / a) + (z / b) * (z / b) < 1.0L;
+    return {std::atan2(b * std::sin(best), a * std::cos(best)), (inside ? -1.0L : 1.0L) * std::sqrt(bestDistance2)};
+}
+
+} // namespace
+
+TEST(Geodetic, OnAndNextToThePolarAxisMatchesExtendedPrecision) {
+    // Distances from the polar axis from zero up to a metre, at heights inside the evolute (it reaches
+    // 42.84 km along the axis for WGS84), just outside it, and at the surface. Next to the axis the
+    // nearest point of the ellipsoid is next to the pole: the latitude must approach +-90 deg, and the
+    // height |z| - b, continuously as the distance goes to zero.
+    const Ellipsoid   ell    = Ellipsoid::wgs84();
+    const long double halfPi = std::numbers::pi_v<long double> / 2.0L;
+    const double      lon    = 2.0;
+    for (double z : {0.0, 1.0, 1000.0, 20000.0, 42000.0, 42800.0, 42900.0, 1.0e5, 6.4e6}) {
+        for (double rho : {0.0, 1e-300, 1e-13, 1e-12, 3e-12, 1e-11, 1e-9, 1e-3, 1.0}) {
+            const MeridianReference ref = meridianReference(rho, z, ell);
+            for (double sign : {1.0, -1.0}) {
+                const Geodetic g = ecefToGeodetic({rho * std::cos(lon), rho * std::sin(lon), sign * z}, ell);
+                SCOPED_TRACE(testing::Message() << "rho = " << rho << " m, z = " << sign * z << " m");
+                // 1e-15 rad: a few units in the last place of pi/2 (2.2e-16).
+                const long double latError = std::abs(static_cast<long double>(g.lat)) - (halfPi - ref.colatitude);
+                EXPECT_NEAR(static_cast<double>(latError), 0.0, 1e-15);
+                if (z > 0.0) {
+                    EXPECT_EQ(std::signbit(g.lat), sign < 0.0);
+                }
+                // 1e-8 m: the library's own bound for the height (rounding of terms of size a).
+                EXPECT_NEAR(static_cast<double>(static_cast<long double>(g.h) - ref.height), 0.0, 1e-8);
+                // The longitude is that of the point, however close to the axis; on the axis it is 0.
+                EXPECT_NEAR(g.lon, rho > 0.0 ? lon : 0.0, 1e-15);
+            }
+        }
+    }
+    // The reviewer's point: 1e-13 m from the axis, 1 km north of the center.
+    const Geodetic g = ecefToGeodetic({1e-13, 0.0, 1000.0}, ell);
+    EXPECT_NEAR(g.lat, constants::halfPi, 1e-15);
+    EXPECT_NEAR(g.h, 1000.0 - ell.b(), 1e-8);
 }
 
 TEST(Geodetic, Latitudes) {
@@ -196,5 +291,71 @@ TEST(Helmert, TransformAndInverse) {
     },
         h,
         2020.0);
-    EXPECT_NEAR(sv.v.x, 0.011 + 1e-9 * 0.01, 1e-12);
+    // A velocity of 0.01 m/s gains the translation rate, 0.001 m per Julian year, and the scale term.
+    EXPECT_NEAR(sv.v.x, 0.01 + 0.001 / (365.25 * 86400.0) + 1e-9 * 0.01, 1e-16);
+}
+
+TEST(Helmert, VelocityIsTheTimeDerivativeOfThePositionInMetresPerSecond) {
+    // A station moving at centimetres per year, and a 14-parameter transformation with every parameter
+    // and every rate non-zero. Positions are in m, velocities in m/s, rates per Julian year.
+    constexpr double           secondsPerYear = 365.25 * 86400.0;
+    const HelmertTimeDependent h{
+        {{0.1, -0.2, 0.3}, {mas2rad(1.0), mas2rad(-2.0), mas2rad(3.0)}, 5e-9        },
+        {0.01,             -0.02,                                       0.03        },
+        {mas2rad(0.1),     mas2rad(-0.2),                               mas2rad(0.3)},
+        1e-10,
+        2010.0
+    };
+    const StateVector x{
+        {4.0e6, 3.0e6, 3.5e6},
+        Vec3{0.02,  -0.01, 0.015}
+        / secondsPerYear
+    };
+    const double year = 2020.0;
+    // Truth, written out from the definition X2 = X1 + T + s X1 + r x X1 (position-vector convention):
+    // the transformed position `t` seconds after `year`, with the station moving and the parameters
+    // changing at their rates.
+    const auto position = [&](double t) {
+        const double years = (year - h.epoch) + t / secondsPerYear;
+        const Vec3   x1    = x.r + x.v * t;
+        const Vec3   T     = h.p.t + h.tRate * years;
+        const Vec3   r     = h.p.r + h.rRate * years;
+        const double s     = h.p.s + h.sRate * years;
+        return x1 + T + s * x1 + cross(r, x1);
+    };
+    const StateVector y = helmertTransform(x, h, year);
+    expectVecNear(y.r, position(0.0), 5e-9, "position"); // a few units in the last place of 4e6 m
+    // The position is a quadratic in t, so the central difference over +-1 year is its derivative
+    // exactly, but for rounding: positions of 5e6 m carry 1e-9 m, which over 6.3e7 s is 2e-17 m/s.
+    // The velocity itself is 7e-10 m/s, and the smallest rate term (the scale rate) 1e-11 m/s.
+    const Vec3 velocity = (position(secondsPerYear) - position(-secondsPerYear)) / (2.0 * secondsPerYear);
+    expectVecNear(y.v, velocity, 1e-16, "velocity");
+
+    // The coordinate-frame convention with the opposite rotation signs is the same transformation.
+    HelmertTimeDependent cf = h;
+    cf.p.convention         = HelmertConvention::CoordinateFrame;
+    cf.p.r                  = -h.p.r;
+    cf.rRate                = -h.rRate;
+    EXPECT_EQ(helmertTransform(x, cf, year).r, y.r);
+    EXPECT_EQ(helmertTransform(x, cf, year).v, y.v);
+
+    // Without rates the position is the 7-parameter result. EPSG Guidance Note 7-2, position vector
+    // transformation, WGS 72 to WGS 84: tZ = 4.5 m, rZ = 0.554 arcsec, dS = 0.219 ppm. The result is
+    // published to 1 cm.
+    const HelmertTimeDependent wgs72{
+        {{0.0, 0.0, 4.5}, {0.0, 0.0, arcsec2rad(0.554)}, 0.219e-6},
+        {},
+        {},
+        0.0,
+        1984.0
+    };
+    const StateVector w = helmertTransform(
+        StateVector{
+            {3657660.66, 255768.55, 5201382.11},
+            {}
+    },
+        wgs72,
+        2000.0);
+    expectVecNear(w.r, {3657660.78, 255778.43, 5201387.75}, 0.01, "EPSG");
+    EXPECT_EQ(w.v, Vec3{});
 }

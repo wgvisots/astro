@@ -34,6 +34,7 @@ namespace {
 
 constexpr std::size_t kRecordBytes = 1024;
 constexpr std::size_t kMaxChain    = 32; // longest center chain followed (real kernels need 2-3 hops)
+constexpr int         kFrameJ2000  = 1;  // NAIF frame id "J2000": the ICRF axes in the JPL planetary kernels
 
 template <class T>
 T swapBytes(T v) {
@@ -121,22 +122,32 @@ struct SpkEphemeris::Impl {
         }
         unsigned char rec[kRecordBytes];
         readBytes(0, rec, kRecordBytes);
-        if (std::memcmp(rec, "DAF/SPK ", 8) != 0) {
+        // The id word is "DAF/SPK ", or "NAIF/DAF" in kernels written by early SPICE Toolkits (the
+        // de405.bsp that NAIF distributes is one).
+        const bool older = std::memcmp(rec, "NAIF/DAF", 8) == 0;
+        if (!older && std::memcmp(rec, "DAF/SPK ", 8) != 0) {
             throw Error("SPK: not a DAF/SPK file: " + path);
         }
+        std::int32_t nd, ni, fward;
+        std::memcpy(&nd, rec + 8, 4);
+        std::memcpy(&ni, rec + 12, 4);
+        std::memcpy(&fward, rec + 76, 4);
+        const bool        hostBig = std::endian::native == std::endian::big;
         const std::string fmt(reinterpret_cast<const char*>(rec) + 88, 8);
         if (fmt == "BIG-IEEE") {
             big = true;
         } else if (fmt == "LTL-IEEE") {
             big = false;
+        } else if (older) {
+            // Those kernels were also written before the file record had a binary-format word (their
+            // bytes 88-95 are zero). An SPK file has ND = 2 and NI = 6, which read as such in one byte
+            // order only, so that is the order of the file; jplephem finds it the same way. If
+            // neither order fits, the ND/NI check below rejects the file.
+            big = (nd == 2 && ni == 6) == hostBig;
         } else {
             throw Error("SPK: unsupported binary format '" + fmt + "'");
         }
-        swap = big != (std::endian::native == std::endian::big);
-        std::int32_t nd, ni, fward;
-        std::memcpy(&nd, rec + 8, 4);
-        std::memcpy(&ni, rec + 12, 4);
-        std::memcpy(&fward, rec + 76, 4);
+        swap  = big != hostBig;
         nd    = fix(nd);
         ni    = fix(ni);
         fward = fix(fward);
@@ -212,10 +223,38 @@ struct SpkEphemeris::Impl {
                 if (it->info.type != 2 && it->info.type != 3) {
                     throw Error("SPK: unsupported segment type " + std::to_string(it->info.type));
                 }
+                // States are returned as ICRF axes, which is right for a segment in frame 1 only. One in
+                // another frame would need a rotation this reader does not have: refuse it rather than
+                // return its numbers as if they were frame 1.
+                if (it->info.frame != kFrameJ2000) {
+                    throw Error("SPK: segment '" + it->info.name + "' (body " + std::to_string(target)
+                                + " relative to body " + std::to_string(it->info.center) + ") of " + path
+                                + " is in reference frame " + std::to_string(it->info.frame)
+                                + "; only frame 1 (J2000 / ICRF) is supported");
+                }
                 return *it;
             }
         }
-        throw Error("SPK: no segment for body " + std::to_string(target) + " at ET " + std::to_string(et));
+        // Nothing covers `et`: either the epoch is outside the body's coverage, or the kernel does not
+        // have the body at all.
+        const auto has = [&](int body) {
+            return std::any_of(segs.begin(), segs.end(), [&](const Segment& s) { return s.info.target == body; });
+        };
+        if (has(target)) {
+            throw Error("SPK: no segment for body " + std::to_string(target) + " at ET " + std::to_string(et));
+        }
+        std::string what = "SPK: no segment for body " + std::to_string(target) + " in " + path;
+        // A planet (NAIF id n99) and the barycenter of its system (id n) are different bodies, and a
+        // kernel may have only the barycenter: DE430 and DE440 have 4 but not 499 (Mars). One is never
+        // returned for the other, so say that the barycenter is there to be asked for.
+        const int barycenter = target / 100;
+        if (target % 100 == 99 && barycenter >= 1 && barycenter <= 9 && has(barycenter)) {
+            what += "; the kernel has the barycenter of that planet's system, body " + std::to_string(barycenter)
+                  + " (Body::" + std::string(toString(static_cast<Body>(barycenter)))
+                  + "), which is a different point: ask for it by name, or load a kernel that has body "
+                  + std::to_string(target);
+        }
+        throw Error(what);
     }
 
     // Segment state (km, km/s) of seg.target relative to seg.center.

@@ -122,10 +122,14 @@ struct Vec3 {
 [[nodiscard]] inline double norm(const Vec3& a) noexcept {
     return std::sqrt(dot(a, a));
 }
-/// Unit vector along a. Returns the zero vector if a is zero.
+/// Unit vector along a. Returns the zero vector if a is zero. A not-a-number (NaN) component makes
+/// every component of the result NaN. Like norm(), this squares the components, so it is meant for
+/// lengths between about 1e-154 and 1e154: beyond that the sum of squares underflows or overflows and
+/// the result is the zero vector or is not of unit length.
 [[nodiscard]] inline Vec3 normalized(const Vec3& a) noexcept {
     const double n = norm(a);
-    return n > 0.0 ? a / n : Vec3{};
+    // Test for zero, not for n > 0: a NaN length fails every comparison and must not be taken for zero.
+    return n == 0.0 ? Vec3{} : a / n;
 }
 /// Angle between two vectors in [0, pi] (numerically robust atan2 form).
 [[nodiscard]] inline double angleBetween(const Vec3& a, const Vec3& b) noexcept {

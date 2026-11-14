@@ -68,6 +68,16 @@ using ItrsStateFunction = std::function<StateVector(const Time&)>;
 /// Find passes above `minElevation` in [start, end]. The elevation is sampled every
 /// `step` seconds (passes shorter than ~step can be missed) and events are refined
 /// with Brent's method.
+///
+/// A pass in progress at `start` or at `end` is cut to the window: its `aos` is
+/// `start` (startsBeforeWindow) or its `los` is `end` (endsAfterWindow), and `tca`
+/// and `maxElevation` are the time and the value of the highest elevation within
+/// the window. That is the cut edge itself when the pass is already descending at
+/// `start`, or still rising at `end`.
+///
+/// An empty window (end == start) returns no pass. Throws astro::Error if `end` is
+/// before `start`, if either time or `minElevation` is NaN, if `step` is not
+/// positive and finite, or if the window holds more than 2e9 steps.
 [[nodiscard]] std::vector<Pass> findPasses(const ItrsStateFunction& sat,
                                            const Geodetic&          site,
                                            const Time&              start,

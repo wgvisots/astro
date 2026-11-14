@@ -42,7 +42,13 @@ double chiSquareSurvival3(double x) noexcept {
     if (!(x > 0.0)) {
         return 1.0;
     }
-    return std::erfc(std::sqrt(0.5 * x)) + std::sqrt(2.0 * x / constants::pi) * std::exp(-0.5 * x);
+    // Once exp(-x/2) underflows (x > 1490) the tail is below the smallest double. Returning 0 there
+    // also keeps a huge or infinite x from giving infinity * 0 = NaN.
+    const double e = std::exp(-0.5 * x);
+    if (e == 0.0) {
+        return 0.0;
+    }
+    return std::erfc(std::sqrt(0.5 * x)) + std::sqrt(2.0 * x / constants::pi) * e;
 }
 
 double chiSquareSurvival6(double x) noexcept {
@@ -53,7 +59,11 @@ double chiSquareSurvival6(double x) noexcept {
         return 1.0;
     }
     const double h = 0.5 * x;
-    return std::exp(-h) * (1.0 + h + 0.5 * h * h);
+    const double e = std::exp(-h);
+    if (e == 0.0) { // as in chiSquareSurvival3: the polynomial overflows from x = 2.7e154
+        return 0.0;
+    }
+    return e * (1.0 + h + 0.5 * h * h);
 }
 
 NumericalPropagator makePropagator(const StateEstimate& e, const TrackerOptions& options) {
@@ -83,6 +93,13 @@ std::optional<double> elementsDistance(const StateCovariance& pred, StateVector 
     if (wn.z < -0.5) {
         // After the mirroring the prediction has i <= 90 deg; a new state with i > 120 deg is beyond
         // any plausible covariance (and near the element singularity): infinitely far.
+        c.semiMajorAxisResidual = 0.0;
+        c.semiMajorAxisSigma    = 0.0;
+        return std::numeric_limits<double>::infinity();
+    }
+    // A new state on an open orbit (v^2 r >= 2 mu) is, like a reversed one, beyond any plausible
+    // covariance of an elliptic prediction: infinitely far.
+    if (!(norm2(next.v) * norm(next.r) < 2.0 * mu)) {
         c.semiMajorAxisResidual = 0.0;
         c.semiMajorAxisSigma    = 0.0;
         return std::numeric_limits<double>::infinity();
@@ -119,8 +136,16 @@ ConsistencyCheck compare(const StateCovariance& pred, const StateEstimate& next,
     const std::array<double, 6> d{dr.x, dr.y, dr.z, dv.x, dv.y, dv.z};
     const auto                  d6 = mahalanobis2(d, pred.covariance, 6);
     const auto                  d3 = mahalanobis2(d, pred.covariance, 3);
-    const auto                  de = elementsDistance(pred, next.state, opt.mu, c);
-    c.valid                        = d6.has_value() && d3.has_value() && de.has_value();
+    // Equinoctial elements exist for ellipses only (v^2 r < 2 mu). For a prediction on an open orbit
+    // the elements statistic is reported as not-a-number: the other two are still good, and with
+    // the elements test selected the delivery then counts as not consistent (NaN fails the
+    // comparison below), which neither throws nor stops a tracker taking later deliveries.
+    const bool elliptic = norm2(pred.state.v) * norm(pred.state.r) < 2.0 * opt.mu;
+    if (!elliptic) {
+        c.semiMajorAxisResidual = c.semiMajorAxisSigma = std::nan("");
+    }
+    const auto de = elliptic ? elementsDistance(pred, next.state, opt.mu, c) : std::optional<double>(std::nan(""));
+    c.valid       = d6.has_value() && d3.has_value() && de.has_value();
     if (c.valid) {
         c.mahalanobis2         = *d6;
         c.positionMahalanobis2 = *d3;
