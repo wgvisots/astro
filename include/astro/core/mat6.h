@@ -23,7 +23,9 @@
 #include <cstddef>
 #include <optional>
 #include <ostream>
+#include <string>
 
+#include "astro/core/error.h"
 #include "astro/core/vec.h"
 
 /// \file
@@ -208,10 +210,11 @@ inline std::ostream& operator<<(std::ostream& os, const Mat6& a) {
 /// nullopt if S is not positive definite or the distance is not finite (d holds NaN or inf).
 /// Only the lower triangle of S is read. A matrix that is positive definite but within rounding
 /// of singular (a correlation of 1 - 1e-15, say) can be reported as not positive definite.
+/// Throws astro::Error if `n` is not 1 to 6.
 [[nodiscard]] inline std::optional<double>
-mahalanobis2(const std::array<double, 6>& d, const Mat6& S, std::size_t n = 6) noexcept {
+mahalanobis2(const std::array<double, 6>& d, const Mat6& S, std::size_t n = 6) {
     if (n == 0 || n > 6) {
-        return std::nullopt;
+        throw Error("mahalanobis2: n must be 1 to 6 (got " + std::to_string(n) + ")");
     }
     double scale[6];
     for (std::size_t i = 0; i < n; ++i) {

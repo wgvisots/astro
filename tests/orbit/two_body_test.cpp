@@ -139,15 +139,30 @@ StateVector conicState(double rp, double e, double nu, double node, double inc, 
 
 } // namespace
 
+TEST(Stumpff, ReturnsBothFunctions) {
+    // c2 and c3 come back as one struct, the members named as the functions.
+    const Stumpff zero = stumpff(0.0);
+    EXPECT_DOUBLE_EQ(zero.c2, 0.5);
+    EXPECT_DOUBLE_EQ(zero.c3, 1.0 / 6.0);
+    const Stumpff ellipse = stumpff(4.0); // sqrt(psi) = 2
+    EXPECT_DOUBLE_EQ(ellipse.c2, (1.0 - std::cos(2.0)) / 4.0);
+    EXPECT_DOUBLE_EQ(ellipse.c3, (2.0 - std::sin(2.0)) / 8.0);
+    const Stumpff hyperbola = stumpff(-4.0);
+    EXPECT_DOUBLE_EQ(hyperbola.c2, (std::cosh(2.0) - 1.0) / 4.0);
+    EXPECT_DOUBLE_EQ(hyperbola.c3, (std::sinh(2.0) - 2.0) / 8.0);
+    const Stumpff none{};
+    EXPECT_EQ(none.c2, 0.0);
+    EXPECT_EQ(none.c3, 0.0);
+}
+
 TEST(Stumpff, MatchesExtendedPrecision) {
     // c2 and c3 over elliptic (psi > 0) and hyperbolic (psi < 0) arguments, from 1e-12 to 400. Allowed:
     // a few rounding errors of the value, or of 1 / psi where the closed forms subtract (psi > 1; c2
     // and c3 pass through zero at psi = (2 pi k)^2).
     for (double sign : {1.0, -1.0}) {
         for (int k = -120; k <= 26; ++k) {
-            const double psi = sign * std::pow(10.0, 0.1 * k);
-            double       c2 = 0.0, c3 = 0.0;
-            stumpff(psi, c2, c3);
+            const double psi    = sign * std::pow(10.0, 0.1 * k);
+            const auto [c2, c3] = stumpff(psi);
             Real r0 = 0, r1 = 0, r2 = 0, r3 = 0;
             stumpffL(psi, r0, r1, r2, r3);
             const double floorC = std::abs(psi) > 1.0 ? 1.0 / std::abs(psi) : 0.0;

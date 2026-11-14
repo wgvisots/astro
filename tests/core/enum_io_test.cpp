@@ -89,6 +89,7 @@ TEST(EnumIo, WritesQualifiedEnumerator) {
     EXPECT_EQ(str(Sgp4Gravity::WGS84), "Sgp4Gravity::WGS84");
     EXPECT_EQ(str(Sgp4OpsMode::Improved), "Sgp4OpsMode::Improved");
     EXPECT_EQ(str(Sgp4OpsMode::Afspc), "Sgp4OpsMode::Afspc");
+    EXPECT_EQ(str(Sgp4Status::Decayed), "Sgp4Status::Decayed");
     EXPECT_EQ(str(HigherOrderMode::ModelOnly), "HigherOrderMode::ModelOnly");
     EXPECT_EQ(str(HigherOrderMode::UnmodeledForce), "HigherOrderMode::UnmodeledForce");
     EXPECT_EQ(str(ConsistencyTest::Position), "ConsistencyTest::Position");
@@ -112,6 +113,7 @@ TEST(EnumIo, WritesInvalidValue) {
     EXPECT_EQ(str(invalid<SecularOrder>(2)), "SecularOrder::INVALID_VALUE");
     EXPECT_EQ(str(invalid<Sgp4Gravity>(3)), "Sgp4Gravity::INVALID_VALUE");
     EXPECT_EQ(str(invalid<Sgp4OpsMode>(2)), "Sgp4OpsMode::INVALID_VALUE");
+    EXPECT_EQ(str(invalid<Sgp4Status>(5)), "Sgp4Status::INVALID_VALUE"); // gap in the reference codes
     EXPECT_EQ(str(invalid<HigherOrderMode>(2)), "HigherOrderMode::INVALID_VALUE");
     EXPECT_EQ(str(invalid<ConsistencyTest>(3)), "ConsistencyTest::INVALID_VALUE");
 }
@@ -126,7 +128,10 @@ TEST(EnumIo, ToStringStillUnqualified) {
     EXPECT_EQ(toString(TimeScale::TAI), "TAI");
     EXPECT_EQ(toString(Frame::CIRS), "CIRS");
     EXPECT_EQ(toString(Body::Earth), "Earth");
-    EXPECT_EQ(toString(invalid<TimeScale>(42)), "?");
+    // An invalid value gives the word operator<< writes after "Enum::".
+    EXPECT_EQ(toString(invalid<TimeScale>(42)), "INVALID_VALUE");
+    EXPECT_EQ(toString(invalid<Frame>(-1)), "INVALID_VALUE");
+    EXPECT_EQ(toString(invalid<Body>(11)), "INVALID_VALUE");
 }
 
 namespace {
@@ -159,6 +164,7 @@ TEST(EnumIo, AgreesWithBoostDescribe) {
     checkAgainstDescribe<SecularOrder>("SecularOrder", 2);
     checkAgainstDescribe<Sgp4Gravity>("Sgp4Gravity", 3);
     checkAgainstDescribe<Sgp4OpsMode>("Sgp4OpsMode", 2);
+    checkAgainstDescribe<Sgp4Status>("Sgp4Status", 7);
     checkAgainstDescribe<HigherOrderMode>("HigherOrderMode", 2);
     checkAgainstDescribe<ConsistencyTest>("ConsistencyTest", 3);
 }

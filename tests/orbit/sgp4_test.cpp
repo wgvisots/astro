@@ -129,13 +129,13 @@ TEST(Sgp4, VerificationAgainstVallado) {
     // negative ("check error code 4" in SGP4-VER.TLE); 6, the satellite has decayed (28872 "lost in
     // 50 minutes", 29141 "lost in under 420 min"). 33334, which fails at the epoch with code 3, is
     // handled below.
-    const std::map<int, int> earlyStopCodes{
-        {22312, 1},
-        {28350, 1},
-        {28872, 6},
-        {29141, 6},
-        {33333, 4},
-        {20413, 6},
+    const std::map<int, Sgp4Status> earlyStopCodes{
+        {22312, Sgp4Status::MeanEccentricityOutOfRange},
+        {28350, Sgp4Status::MeanEccentricityOutOfRange},
+        {28872, Sgp4Status::Decayed                   },
+        {29141, Sgp4Status::Decayed                   },
+        {33333, Sgp4Status::NegativeSemiLatusRectum   },
+        {20413, Sgp4Status::Decayed                   },
     };
     int    earlyStops = 0;
     int    compared   = 0;
@@ -153,15 +153,14 @@ TEST(Sgp4, VerificationAgainstVallado) {
                 Sgp4 bad{tle};
                 ADD_FAILURE() << tle.satnum << " should fail at epoch";
             } catch (const Sgp4Error& e) {
-                EXPECT_EQ(e.code(), 3);
+                EXPECT_EQ(e.code(), Sgp4Status::PerturbedEccentricityOutOfRange);
             }
             continue;
         }
         const Sgp4 sgp4(tle);
         for (const VerRow& row : rows) {
-            StateVector s;
-            const int   code = sgp4.propagateMinutes(row.t, s);
-            EXPECT_EQ(code, 0) << tle.satnum << " t=" << row.t;
+            const auto [s, code] = sgp4.tryPropagateMinutes(row.t);
+            EXPECT_EQ(code, Sgp4Status::Ok) << tle.satnum << " t=" << row.t;
             const double dr = norm(s.r / 1000.0 - row.r);
             const double dv = norm(s.v / 1000.0 - row.v);
             maxPosErr       = std::max(maxPosErr, dr);
@@ -173,11 +172,10 @@ TEST(Sgp4, VerificationAgainstVallado) {
         // If the reference stops early, the next step must fail with the reference's error code.
         const double last = rows.back().t;
         if (c.step != 0.0 && last + 1e-6 < c.stop && rows.size() > 1) {
-            const double next = std::min(last + c.step, c.stop);
-            StateVector  s;
+            const double next         = std::min(last + c.step, c.stop);
             const auto   expectedCode = earlyStopCodes.find(tle.satnum);
             ASSERT_NE(expectedCode, earlyStopCodes.end()) << tle.satnum << " stops early in the reference";
-            EXPECT_EQ(sgp4.propagateMinutes(next, s), expectedCode->second) << tle.satnum << " at t=" << next;
+            EXPECT_EQ(sgp4.tryPropagateMinutes(next).status, expectedCode->second) << tle.satnum << " at t=" << next;
             ++earlyStops;
         }
     }
@@ -206,12 +204,13 @@ TEST(Sgp4, TimeInterfaceAndDeepSpaceFlag) {
     const StateVector m = s.propagateMinutes(90.0);
     test::expectVecNear(a.r, m.r, 0.0);
     test::expectVecNear(a.v, m.v, 0.0);
-    StateVector seconds, minutes;
-    EXPECT_EQ(s.propagate(90.0 * 60.0, seconds), 0);
-    EXPECT_EQ(s.propagateMinutes(90.0, minutes), 0);
-    test::expectVecNear(seconds.r, a.r, 0.0);
-    test::expectVecNear(minutes.r, a.r, 0.0);
-    test::expectVecNear(minutes.v, a.v, 0.0);
+    const Sgp4Result seconds = s.tryPropagate(90.0 * 60.0);
+    const Sgp4Result minutes = s.tryPropagateMinutes(90.0);
+    EXPECT_EQ(seconds.status, Sgp4Status::Ok);
+    EXPECT_EQ(minutes.status, Sgp4Status::Ok);
+    test::expectVecNear(seconds.state.r, a.r, 0.0);
+    test::expectVecNear(minutes.state.r, a.r, 0.0);
+    test::expectVecNear(minutes.state.v, a.v, 0.0);
 }
 
 TEST(Sgp4, TimeThatIsNotFiniteIsAnError) {
@@ -230,36 +229,92 @@ TEST(Sgp4, TimeThatIsNotFiniteIsAnError) {
     for (const Tle& tle : {iss, molniya}) {
         const Sgp4 sgp4(tle);
         for (double time : {nan, inf, -inf}) {
-            StateVector s{
-                {1.0, 2.0, 3.0},
-                {4.0, 5.0, 6.0}
-            };
-            EXPECT_EQ(sgp4.propagate(time, s), 7) << time;
+            const auto [s, status] = sgp4.tryPropagate(time);
+            EXPECT_EQ(status, Sgp4Status::TimeNotFinite) << time;
             EXPECT_TRUE(std::isnan(s.r.x) && std::isnan(s.r.z) && std::isnan(s.v.y)) << time;
-            StateVector m{
-                {1.0, 2.0, 3.0},
-                {4.0, 5.0, 6.0}
-            };
-            EXPECT_EQ(sgp4.propagateMinutes(time, m), 7) << time;
+            const auto [m, statusMinutes] = sgp4.tryPropagateMinutes(time);
+            EXPECT_EQ(statusMinutes, Sgp4Status::TimeNotFinite) << time;
             EXPECT_TRUE(std::isnan(m.r.x) && std::isnan(m.r.z) && std::isnan(m.v.y)) << time;
             try {
                 (void)sgp4.propagate(time);
                 ADD_FAILURE() << "no exception for " << time;
             } catch (const Sgp4Error& e) {
-                EXPECT_EQ(e.code(), 7) << time;
+                EXPECT_EQ(e.code(), Sgp4Status::TimeNotFinite) << time;
             }
             try {
                 (void)sgp4.propagateMinutes(time);
                 ADD_FAILURE() << "no exception for " << time << " min";
             } catch (const Sgp4Error& e) {
-                EXPECT_EQ(e.code(), 7) << time;
+                EXPECT_EQ(e.code(), Sgp4Status::TimeNotFinite) << time;
             }
         }
         // An ordinary time still works after those.
-        StateVector s;
-        EXPECT_EQ(sgp4.propagate(600.0, s), 0);
-        EXPECT_TRUE(std::isfinite(norm(s.r)));
+        const Sgp4Result ordinary = sgp4.tryPropagate(600.0);
+        EXPECT_EQ(ordinary.status, Sgp4Status::Ok);
+        EXPECT_TRUE(std::isfinite(norm(ordinary.state.r)));
     }
+}
+
+TEST(Sgp4, TryPropagateGivesEveryStatusAndPropagateThrowsIt) {
+    // Element sets of the verification set (SGP4-VER.TLE) that fail part way, stepped as the reference code steps
+    // them: the first status other than Ok must be the reference code's error. tryPropagate gives it with the
+    // state, and propagate throws Sgp4Error whose code() is the same status.
+    struct Case {
+        const char* line1;
+        const char* line2;
+        double      start, step; // minutes
+        Sgp4Status  expected;
+    };
+    for (const Case& c : {
+             Case{"1 22312U 93002D   06094.46235912  .99999999  81888-5  49949-3 0  3953",
+                  "2 22312  62.1486  77.4698 0308723 267.9229  88.7392 15.95744531 98783", 54.2028672,
+                  20.0, Sgp4Status::MeanEccentricityOutOfRange},
+             Case{"1 28872U 05037B   05333.02012661  .25992681  00000-0  24476-3 0  1534",
+                  "2 28872  96.4736 157.9986 0303955 244.0492 110.6523 16.46015938 10708", 0.0,
+                  5.0,  Sgp4Status::Decayed                   },
+             Case{"1 33333U 05037B   05333.02012661  .25992681  00000-0  24476-3 0  1534",
+                  "2 33333  96.4736 157.9986 9950000 244.0492 110.6523  4.00004038 10708", 0.0,
+                  5.0,  Sgp4Status::NegativeSemiLatusRectum   },
+    }) {
+        const Sgp4 sgp4(Tle::parse(c.line1, c.line2, "", false));
+        double     t = c.start;
+        Sgp4Result result;
+        for (int k = 0; k < 1000; ++k, t += c.step) {
+            result = sgp4.tryPropagateMinutes(t);
+            if (result.status != Sgp4Status::Ok) {
+                break;
+            }
+        }
+        EXPECT_EQ(result.status, c.expected) << c.line1;
+        EXPECT_EQ(sgp4.tryPropagate(60.0 * t).status, c.expected) << c.line1;
+        if (c.expected == Sgp4Status::Decayed) {
+            // As in Vallado's code, a decayed satellite still has its state filled in.
+            EXPECT_TRUE(std::isfinite(norm(result.state.r)) && std::isfinite(norm(result.state.v)));
+            EXPECT_LT(norm(result.state.r), 6378135.0);
+        }
+        try {
+            (void)sgp4.propagateMinutes(t);
+            ADD_FAILURE() << "no exception for " << c.line1;
+        } catch (const Sgp4Error& e) {
+            EXPECT_EQ(e.code(), c.expected) << c.line1;
+            EXPECT_EQ(std::string(e.what()).rfind("Sgp4::propagateMinutes: ", 0), 0u) << e.what();
+        }
+        try {
+            (void)sgp4.propagate(60.0 * t);
+            ADD_FAILURE() << "no exception for " << c.line1;
+        } catch (const Sgp4Error& e) {
+            EXPECT_EQ(e.code(), c.expected) << c.line1;
+            EXPECT_EQ(std::string(e.what()).rfind("Sgp4::propagate: ", 0), 0u) << e.what();
+        }
+    }
+    // The underlying values are the reference code's error numbers.
+    EXPECT_EQ(static_cast<int>(Sgp4Status::Ok), 0);
+    EXPECT_EQ(static_cast<int>(Sgp4Status::MeanEccentricityOutOfRange), 1);
+    EXPECT_EQ(static_cast<int>(Sgp4Status::NegativeMeanMotion), 2);
+    EXPECT_EQ(static_cast<int>(Sgp4Status::PerturbedEccentricityOutOfRange), 3);
+    EXPECT_EQ(static_cast<int>(Sgp4Status::NegativeSemiLatusRectum), 4);
+    EXPECT_EQ(static_cast<int>(Sgp4Status::Decayed), 6);
+    EXPECT_EQ(static_cast<int>(Sgp4Status::TimeNotFinite), 7);
 }
 
 TEST(Sgp4, RejectsNonFiniteElements) {
@@ -288,9 +343,8 @@ TEST(Sgp4, RejectsNonFiniteElements) {
             try {
                 const Sgp4 sgp4{tle};
                 // What used to happen: the propagator was built and gave NaN with code 0.
-                StateVector state;
-                const int   code = sgp4.propagate(600.0, state);
-                ADD_FAILURE() << e.name << " = " << bad << " was accepted; propagate gave code " << code
+                const auto [state, status] = sgp4.tryPropagate(600.0);
+                ADD_FAILURE() << e.name << " = " << bad << " was accepted; tryPropagate gave " << status
                               << " and r.x = " << state.r.x;
             } catch (const Error& error) {
                 EXPECT_NE(std::string(error.what()).find(e.name), std::string::npos)
@@ -316,7 +370,7 @@ TEST(Sgp4, RejectsFiniteElementsThatGiveNoState) {
         const Sgp4 sgp4{tle};
         ADD_FAILURE() << "a mean motion of -2 rev/day was accepted";
     } catch (const Sgp4Error& e) {
-        EXPECT_EQ(e.code(), 2);
+        EXPECT_EQ(e.code(), Sgp4Status::NegativeMeanMotion);
     }
     // A drag term so large that the drag coefficients overflow: there is no error code for that, and no state
     // either.

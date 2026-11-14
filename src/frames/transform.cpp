@@ -55,7 +55,7 @@ constexpr Mat3 kNotAFrame{kNaN, kNaN, kNaN, kNaN, kNaN, kNaN, kNaN, kNaN, kNaN};
 } // namespace
 
 std::string_view toString(Frame f) noexcept {
-    return detail::enumName(f, "?");
+    return detail::enumName(f, "INVALID_VALUE");
 }
 
 bool isEarthFixed(Frame f) noexcept {
@@ -148,12 +148,14 @@ FrameTransformer fastCelestialTransformer(const Time& t) {
     return FrameTransformer(t, ConstantEop{}, options);
 }
 
-void requireCelestial(Frame f) {
+// Throws astro::Error, naming `function`, unless `f` is a celestial (not Earth-fixed) Frame.
+void requireCelestial(Frame f, const char* function) {
     if (!isFrame(f)) {
-        throw Error("invalid Frame value " + std::to_string(static_cast<int>(f)));
+        throw Error(std::string(function) + ": invalid Frame value (got " + std::to_string(static_cast<int>(f)) + ")");
     }
     if (isEarthFixed(f)) {
-        throw Error("celestial frame required (got an Earth-fixed frame)");
+        throw Error(std::string(function)
+                    + ": celestial frame required (got the Earth-fixed Frame::" + std::string(toString(f)) + ")");
     }
 }
 
@@ -162,7 +164,7 @@ void requireCelestial(Frame f) {
 /// with t of eq. 5.2), so, unlike a FrameTransformer, this needs neither UT1 nor UTC and serves epochs
 /// before 1960, where UTC does not exist. Each matrix is the one a FrameTransformer builds for
 /// kFastModel without pole offsets.
-Mat3 precessionNutationFrame(Frame f, const Time& t) {
+Mat3 precessionNutationFrame(Frame f, const Time& t, const char* function) {
     // As in FrameTransformer with no Earth-orientation data, a UT1 epoch is read as UTC.
     const auto ttCenturies = [&] { return t.to(TimeScale::TT, ConstantEop{}).centuriesSinceJ2000(); };
     switch (f) {
@@ -175,28 +177,30 @@ Mat3 precessionNutationFrame(Frame f, const Time& t) {
         const CipXY  xy = cipXY(T, kFastModel);
         return celestialToIntermediateMatrix(xy, cioLocatorS06(T, xy));
     }
-    default: throw Error("no precession-nutation matrix for frame " + std::string(toString(f)));
+    default:
+        throw Error(std::string(function) + ": no precession-nutation matrix for Frame::" + std::string(toString(f)));
     }
 }
 
 } // namespace
 
 Mat3 gcrsToCelestialMatrix(Frame f, const Time& t) {
-    requireCelestial(f);
+    requireCelestial(f, "gcrsToCelestialMatrix");
     if (f == Frame::TEME) {
         // The equinox of TEME is placed with GMST 1982, a function of UT1, so this one frame needs
         // the Earth-rotation side as well (UT1 taken as UTC, there being no Earth-orientation data).
         return fastCelestialTransformer(t).gcrsTo(f);
     }
-    return precessionNutationFrame(f, t);
+    return precessionNutationFrame(f, t, "gcrsToCelestialMatrix");
 }
 
 Mat3 poleOfDateMatrix(Frame from, const Time& t) {
-    requireCelestial(from);
+    requireCelestial(from, "poleOfDateMatrix");
     if (from == Frame::TOD || from == Frame::TEME || from == Frame::CIRS) {
         return Mat3::identity(); // z is already the true pole of date
     }
-    return precessionNutationFrame(Frame::CIRS, t) * precessionNutationFrame(from, t).transpose();
+    return precessionNutationFrame(Frame::CIRS, t, "poleOfDateMatrix")
+         * precessionNutationFrame(from, t, "poleOfDateMatrix").transpose();
 }
 
 Mat3 gcrsToItrsMatrix(const Time& t, const EopProvider& eop, const FrameOptions& options) {

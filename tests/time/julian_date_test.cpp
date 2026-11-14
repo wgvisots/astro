@@ -75,11 +75,11 @@ TEST(JulianDayNumber, PublishedDates) {
     // clang-format on
     for (const Case& c : cases) {
         EXPECT_EQ(julianDayNumber(c.year, c.month, c.day), c.jdn) << c.year << "-" << c.month << "-" << c.day;
-        int y = 0, m = 0, d = 0;
-        julianDayNumberToDate(c.jdn, y, m, d);
-        EXPECT_EQ(y, c.year) << c.jdn;
-        EXPECT_EQ(m, c.month) << c.jdn;
-        EXPECT_EQ(d, c.day) << c.jdn;
+        const YearMonthDay date = julianDayNumberToDate(c.jdn);
+        EXPECT_EQ(date.year, c.year) << c.jdn;
+        EXPECT_EQ(date.month, c.month) << c.jdn;
+        EXPECT_EQ(date.day, c.day) << c.jdn;
+        EXPECT_EQ(date, (YearMonthDay{c.year, c.month, c.day})) << c.jdn;
     }
 }
 
@@ -90,8 +90,7 @@ TEST(JulianDayNumber, EveryDayFromJdZeroToTheYear2200) {
     int       year = -4713, month = 11, day = 24;
     long long wrong = 0;
     for (long long jdn = 0; year < 2200; ++jdn) {
-        int y = 0, m = 0, d = 0;
-        julianDayNumberToDate(jdn, y, m, d);
+        const auto [y, m, d] = julianDayNumberToDate(jdn);
         if (julianDayNumber(year, month, day) != jdn || y != year || m != month || d != day) {
             if (++wrong <= 5) {
                 ADD_FAILURE() << "JDN " << jdn << " should be " << year << "-" << month << "-" << day << "; got "
@@ -125,6 +124,16 @@ TEST(Calendar, DaysInMonth) {
     }
 }
 
+TEST(JulianDayNumber, DateComesBackAsYearMonthDay) {
+    // J2000.0 is noon on 2000-01-01, Julian Day Number 2451545, which is also YearMonthDay's default date.
+    EXPECT_EQ(julianDayNumberToDate(2451545), YearMonthDay{});
+    EXPECT_EQ(julianDayNumberToDate(2451545), (YearMonthDay{2000, 1, 1}));
+    EXPECT_NE(julianDayNumberToDate(2451546), (YearMonthDay{2000, 1, 1}));
+    EXPECT_EQ(dayOfYearToDate(2023, 365), (YearMonthDay{2023, 12, 31}));
+    EXPECT_EQ(dayOfYearToDate(2024, 366), (YearMonthDay{2024, 12, 31}));
+    EXPECT_EQ(dayOfYearToDate(2024, 1), julianDayNumberToDate(julianDayNumber(2024, 1, 1)));
+}
+
 // Day of year both ways, for every day of a common and a leap year, against a count kept by hand.
 TEST(Calendar, DayOfYearBothWays) {
     for (int year : {2023, 2024, 1900, 2000}) {
@@ -133,17 +142,16 @@ TEST(Calendar, DayOfYearBothWays) {
             for (int day = 1; day <= gregorianMonthLength(year, month); ++day) {
                 ++doy;
                 EXPECT_EQ(dayOfYear(year, month, day), doy) << year << "-" << month << "-" << day;
-                int m = 0, d = 0;
-                dayOfYearToMonthDay(year, doy, m, d);
-                EXPECT_EQ(m, month) << year << " day " << doy;
-                EXPECT_EQ(d, day) << year << " day " << doy;
+                const YearMonthDay date = dayOfYearToDate(year, doy);
+                EXPECT_EQ(date.year, year) << year << " day " << doy;
+                EXPECT_EQ(date.month, month) << year << " day " << doy;
+                EXPECT_EQ(date.day, day) << year << " day " << doy;
             }
         }
         // julian_date.h: throws for a day of year outside 1-365 (1-366 in a leap year).
         const int last = gregorianLeap(year) ? 366 : 365;
         for (int bad : {0, -1, last + 1}) {
-            int m = 0, d = 0;
-            expectErrorSaying([&] { dayOfYearToMonthDay(year, bad, m, d); },
+            expectErrorSaying([&] { (void)dayOfYearToDate(year, bad); },
                               "day of year",
                               std::to_string(year) + " day " + std::to_string(bad));
         }

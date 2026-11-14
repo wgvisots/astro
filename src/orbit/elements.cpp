@@ -20,7 +20,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
+#include <cstdio>
+#include <string>
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
@@ -126,12 +127,14 @@ KeplerianElements elementsFromMeanAnomaly(double a, double e, double i, double r
     return {a, e, i, raan, argp, meanToTrueAnomaly(M, e)};
 }
 
-EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el) noexcept {
+EquinoctialElements keplerianToEquinoctial(const KeplerianElements& el) {
     // The set is defined for ellipses (Broucke & Cefola 1972): the mean longitude is an angle only
     // when the mean anomaly is one. A hyperbolic mean anomaly is unbounded and must not be wrapped.
     if (!(el.a > 0.0) || !(el.e < 1.0)) {
-        const double nan = std::numeric_limits<double>::quiet_NaN();
-        return {nan, nan, nan, nan, nan, nan};
+        char got[64];
+        std::snprintf(got, sizeof(got), "a = %.9g m, e = %.9g", el.a, el.e);
+        throw Error("keplerianToEquinoctial: requires an elliptic orbit, a > 0 and e < 1 (got " + std::string(got)
+                    + ")");
     }
     const double lonPeri = el.raan + el.argp;
     const double t       = std::tan(0.5 * el.i);

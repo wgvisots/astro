@@ -56,21 +56,50 @@ BOOST_DESCRIBE_ENUM(Sgp4OpsMode, Improved, Afspc)
 /// Writes "Sgp4OpsMode::<enumerator>", or "Sgp4OpsMode::INVALID_VALUE" for any other value.
 std::ostream& operator<<(std::ostream& os, Sgp4OpsMode value);
 
-/// SGP4 error codes (Vallado): 1 mean eccentricity out of range, 2 mean motion
-/// negative, 3 perturbed eccentricity out of range, 4 semi-latus rectum negative,
-/// 6 satellite has decayed. One more is this library's own: 7, the time asked for
-/// is not finite.
+/// Outcome of one SGP4 propagation. The underlying values are the error codes of the reference code
+/// (Vallado's sgp4, 1 to 6, with no 5), so `static_cast<int>(status)` compares with its output. One more
+/// is this library's own: 7, TimeNotFinite.
+enum class Sgp4Status {
+    Ok                              = 0, ///< success
+    MeanEccentricityOutOfRange      = 1, ///< mean eccentricity e >= 1 or e < -0.001
+    NegativeMeanMotion              = 2, ///< mean motion less than zero
+    PerturbedEccentricityOutOfRange = 3, ///< perturbed eccentricity outside [0, 1]
+    NegativeSemiLatusRectum         = 4, ///< semi-latus rectum less than zero
+    Decayed                         = 6, ///< the satellite has decayed (radius below one Earth radius)
+    TimeNotFinite                   = 7, ///< the time asked for is NaN or infinite (not a reference code)
+};
+
+BOOST_DESCRIBE_ENUM(Sgp4Status,
+                    Ok,
+                    MeanEccentricityOutOfRange,
+                    NegativeMeanMotion,
+                    PerturbedEccentricityOutOfRange,
+                    NegativeSemiLatusRectum,
+                    Decayed,
+                    TimeNotFinite)
+
+/// Writes "Sgp4Status::<enumerator>", or "Sgp4Status::INVALID_VALUE" for any other value.
+std::ostream& operator<<(std::ostream& os, Sgp4Status value);
+
+/// Thrown by Sgp4 when the theory fails: an astro::Error that also carries the Sgp4Status, so that a
+/// caller can tell a decayed satellite from bad elements.
 class Sgp4Error : public Error {
 public:
-    /// `code` is the SGP4 error code, `what` the message.
-    Sgp4Error(int code, const std::string& what)
+    /// `code` is the status that failed (never Sgp4Status::Ok), `what` the message.
+    Sgp4Error(Sgp4Status code, const std::string& what)
         : Error(what)
         , code_(code) {}
-    /// The SGP4 error code (see the class description).
-    [[nodiscard]] int code() const noexcept { return code_; }
+    /// The status that failed.
+    [[nodiscard]] Sgp4Status code() const noexcept { return code_; }
 
 private:
-    int code_;
+    Sgp4Status code_;
+};
+
+/// The result of Sgp4::tryPropagate and Sgp4::tryPropagateMinutes: the state and how it was obtained.
+struct Sgp4Result {
+    StateVector state;                  ///< TEME position (m) and velocity (m/s); see `status` for its meaning
+    Sgp4Status  status{Sgp4Status::Ok}; ///< Ok, or why the state is not a valid one
 };
 
 /// SGP4/SDP4 propagator for one TLE. The deep-space (SDP4) branch is selected automatically.
@@ -81,8 +110,9 @@ private:
 /// verification output.
 class Sgp4 {
 public:
-    /// Initialize from `tle`. Throws Sgp4Error (an astro::Error) if the elements fail at the epoch (codes 1-4; a
-    /// decayed state, code 6, is accepted). A negative mean motion is code 2.
+    /// Initialize from `tle`. Throws Sgp4Error (an astro::Error) if the elements fail at the epoch (statuses
+    /// 1-4 of Sgp4Status; a decayed state, Sgp4Status::Decayed, is accepted). A negative mean motion is
+    /// Sgp4Status::NegativeMeanMotion.
     ///
     /// Throws astro::Error if the epoch or an element the theory uses is not finite (B*, the inclination, the
     /// right ascension of the node, the eccentricity, the argument of perigee, the mean anomaly, the mean motion),
@@ -104,8 +134,8 @@ public:
     Sgp4& operator=(Sgp4&&) noexcept;
 
     /// TEME position (m) and velocity (m/s) `dt` seconds after the TLE epoch: propagateMinutes(dt / 60).
-    /// Throws Sgp4Error on propagation failure: for any code of the class description, 6 (decayed)
-    /// and 7 (`dt` is not finite) included.
+    /// Throws Sgp4Error on propagation failure: for any status but Sgp4Status::Ok, Decayed and
+    /// TimeNotFinite (`dt` is not finite) included.
     [[nodiscard]] StateVector propagate(double dt) const;
     /// TEME state at a time (any scale). The seconds since the epoch are the elapsed time, leap
     /// seconds included; software that subtracts Julian dates instead differs by one second (7.7 km
@@ -113,16 +143,17 @@ public:
     /// astro::Error if t cannot be subtracted from the epoch (a UT1 time, or a UTC time before 1960;
     /// see Time).
     [[nodiscard]] StateVector propagate(const Time& t) const;
-    /// Non-throwing variant of propagate(dt), `dt` in seconds since the TLE epoch: returns the SGP4
-    /// error code (0 on success). For code 6 (decayed) the state is still filled in, as in Vallado's
-    /// code. For code 7 (the time is NaN or infinite) every component of the state is NaN.
-    [[nodiscard]] int propagate(double dt, StateVector& out) const noexcept;
+    /// Non-throwing variant of propagate(dt), for a loop that must handle a failure at every sample:
+    /// the state `dt` seconds after the TLE epoch and its status. For Sgp4Status::Decayed the state is
+    /// still filled in, as in Vallado's code. For Sgp4Status::TimeNotFinite (`dt` is NaN or infinite)
+    /// every component of the state is NaN.
+    [[nodiscard]] Sgp4Result tryPropagate(double dt) const noexcept;
     /// TEME position (m) and velocity (m/s) `minutes` after the TLE epoch, the time argument of the
     /// reference code. Throws Sgp4Error as propagate(dt) does.
     [[nodiscard]] StateVector propagateMinutes(double minutes) const;
-    /// Non-throwing variant of propagateMinutes, `minutes` after the TLE epoch: returns the SGP4 error
-    /// code (0 on success) and fills in `out` as propagate(dt, out) does.
-    [[nodiscard]] int propagateMinutes(double minutes, StateVector& out) const noexcept;
+    /// Non-throwing variant of propagateMinutes: the state `minutes` after the TLE epoch and its status,
+    /// as tryPropagate(dt) gives them.
+    [[nodiscard]] Sgp4Result tryPropagateMinutes(double minutes) const noexcept;
 
     /// The element set this propagator was built from.
     [[nodiscard]] const Tle& tle() const noexcept;
