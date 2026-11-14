@@ -88,6 +88,25 @@ if (r.status == Sgp4Status::Decayed) { /* decayed */ }
 keplerianToEquinoctial(hyperbola);                   // throws astro::Error
 ```
 
+### Added
+
+- **Conan 2 recipe** (`conanfile.py`, with `test_package/`), for static and shared builds. It gets
+  Boost's headers from ConanCenter. CI builds and tests both kinds of package.
+- Example `data_files`: loads whichever data files are present, falls back to what is built in, and
+  reports how long the loaded data remains valid.
+
+### Documentation
+
+- **[Compatibility](docs/compatibility.md)**, the official policy:
+  - what a version number promises: 0.x is in flux; 1.x keeps source compatibility, not binary
+    compatibility
+  - what counts as public API, and what not to rely on
+  - deprecation in 1.x, removal only in 2.0
+  - the supported platforms
+- **[Data files](docs/guide/data-files.md)**: what is built in, where each file comes from, how often
+  it changes, what is lost without it, how to load it, and how each loader behaves when its data runs
+  out (EOP throws; a leap-second table goes quietly stale, so check its expiry at start-up).
+
 ### Build and packaging
 
 - **The shared library exports only the public API.** It is built with hidden visibility; public
@@ -103,7 +122,7 @@ keplerianToEquinoctial(hyperbola);                   // throws astro::Error
   complete, and the build checks that every public header compiles on its own.
 - CI builds and tests a shared library too, and builds a program against the installed result.
 
-## [0.2.0] - unreleased
+## [0.2.0] - 2026-11-14
 
 The first tagged release. It follows a top-to-bottom review of the library (November 2026), which
 fixed its defects, made its interface consistent, and strengthened its tests and documentation.

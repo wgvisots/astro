@@ -35,6 +35,8 @@ radians everywhere. Validated against ERFA/SOFA, JPL DE440 and Vallado's SGP4 ve
 - **[Accuracy](docs/accuracy.md)** and **[Performance](docs/performance.md)**: what is validated
   against what, measured propagation and consistency-check accuracy, timings, and the programs
   that reproduce them.
+- **[Compatibility](docs/compatibility.md)**: what a version number promises (0.x is still in flux;
+  1.x will keep source compatibility), deprecation, and the supported platforms.
 - **[References](docs/references.md)**: the standards, papers and books the code follows.
 - **[Glossary](docs/glossary.md)**: every acronym and term used in the docs, spelled out.
 - **API reference**: `cmake --build build --target docs` builds it (with the pages above) into
@@ -96,7 +98,8 @@ const auto track = prop.propagateGrid(0.0, 10.0, 1441);
 
 The library never touches the network. `scripts/fetch_iers_data.sh -o data` downloads the IERS Earth
 orientation and leap-second files (`--de440s` adds the JPL ephemeris); each file is checked before
-it replaces the previous copy, so it is cron-friendly. See [Getting started](docs/guide/getting-started.md#external-data).
+it replaces the previous copy, so it is cron-friendly. See [Data files](docs/guide/data-files.md) for
+where each file comes from, how to load it, and how to tell when it runs out.
 
 ## Contributing
 

@@ -40,6 +40,20 @@ under `/usr`. It depends on the Boost headers (`libboost-dev`, `boost-devel`). T
 needs `rpmbuild`. The vendor, maintainer and home page come from the cache variables
 `ASTRO_PACKAGE_VENDOR`, `ASTRO_PACKAGE_CONTACT` and `ASTRO_PACKAGE_HOMEPAGE`.
 
+### Conan
+
+`conanfile.py` is a Conan 2 recipe. It builds the library only (no tests or examples). It gets
+Boost's headers from ConanCenter, and needs C++20 in the profile:
+
+```sh
+conan create . --build=missing -s compiler.cppstd=20                           # static
+conan create . --build=missing -s compiler.cppstd=20 -o "astro/*:shared=True"  # shared
+```
+
+A consuming project then requires `astro/<version>` and uses `find_package(astro)` and
+`astro::astro`, exactly as below. `conan create` also runs `test_package`, which builds the same
+consumer program CI builds against the Debian package.
+
 ## Use it from your project
 
 ```cmake
@@ -79,3 +93,5 @@ precession-nutation series, and a low-precision Sun and Moon. For full accuracy 
 
 `scripts/fetch_iers_data.sh -o data` downloads the first two (`--de440s` adds the ephemeris);
 each file is checked before it replaces the previous copy, so it is safe to run from cron.
+[Data files](data-files.md) covers where each file comes from, how to load it, and how to tell
+when it runs out.
