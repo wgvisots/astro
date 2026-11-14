@@ -33,8 +33,20 @@ option(ASTRO_BUILD_BENCHMARKS "Build the astro benchmarks" OFF)
 option(ASTRO_BUILD_STUDIES "Build the accuracy studies behind docs/accuracy.md" OFF)
 option(ASTRO_DOCS_WARNINGS_AS_ERRORS "Fail the docs target on Doxygen warnings" OFF)
 option(ASTRO_BUILD_EXAMPLES "Build (and test) the astro examples" ${PROJECT_IS_TOP_LEVEL})
+option(ASTRO_BUILD_FUZZERS "Build libFuzzer targets for the parsers (needs Clang)" OFF)
 
 include(GNUInstallDirs)
+
+if(ASTRO_BUILD_FUZZERS)
+    # Fuzzing instruments everything: coverage feedback for libFuzzer, and the address and
+    # undefined-behaviour sanitizers so that a memory error or an overflow stops the run.
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "ASTRO_BUILD_FUZZERS needs Clang (libFuzzer); set CMAKE_CXX_COMPILER=clang++")
+    endif()
+    add_compile_options(-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined
+                        -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 file(GLOB_RECURSE ASTRO_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/*.cpp)
 file(GLOB_RECURSE ASTRO_HEADERS CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/include/astro/*.h)
@@ -112,6 +124,10 @@ if(ASTRO_BUILD_BENCHMARKS)
 endif()
 if(ASTRO_BUILD_STUDIES)
     add_subdirectory(studies)
+endif()
+if(ASTRO_BUILD_FUZZERS)
+    enable_testing()
+    add_subdirectory(fuzz)
 endif()
 
 # ---------------------------------------------------------------- docs
