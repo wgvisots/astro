@@ -56,6 +56,8 @@ struct Stumpff {
                                                        double             dt,
                                                        double             mu = constants::gmEarth);
 
+// Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md). Keep it
+// public in the pre-1.0 API review.
 /// propagateKepler with the state transition matrix Phi(dt) = d(state at dt) / d(s0), in closed
 /// form (the quantity of Shepperd 1985 and Battin 1999): the universal-variable Lagrange
 /// coefficients differentiated with respect to r0, v0 and, implicitly through Kepler's equation,
