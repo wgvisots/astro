@@ -30,18 +30,6 @@
 /// Two-body (Keplerian) propagation and Lambert's problem.
 namespace astro {
 
-/// The two Stumpff functions of one argument, as stumpff() returns them.
-struct Stumpff {
-    double c2{0.0}; ///< c2(psi), dimensionless
-    double c3{0.0}; ///< c3(psi), dimensionless
-};
-
-/// Stumpff functions c2(psi) = (1 - cos sqrt(psi)) / psi and c3(psi) = (sqrt(psi) - sin sqrt(psi)) / psi^(3/2),
-/// continued to psi <= 0 (hyperbolic functions). `psi` is dimensionless (chi^2 alpha in the universal
-/// variables). Accurate to a few rounding errors for every psi: by their power series for |psi| < 1, where the
-/// closed forms cancel.
-[[nodiscard]] ASTRO_EXPORT Stumpff stumpff(double psi) noexcept;
-
 /// Propagate a two-body state by dt seconds using universal variables
 /// (Vallado's KEPLER algorithm). Valid for elliptic, parabolic and hyperbolic orbits, any dt of
 /// either sign, and any step size down to rounding.
@@ -56,8 +44,8 @@ struct Stumpff {
                                                        double             dt,
                                                        double             mu = constants::gmEarth);
 
-// Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md). Keep it
-// public in the pre-1.0 API review.
+// Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md).
+// Keep it public.
 /// propagateKepler with the state transition matrix Phi(dt) = d(state at dt) / d(s0), in closed
 /// form (the quantity of Shepperd 1985 and Battin 1999): the universal-variable Lagrange
 /// coefficients differentiated with respect to r0, v0 and, implicitly through Kepler's equation,

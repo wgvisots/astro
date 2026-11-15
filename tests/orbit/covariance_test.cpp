@@ -33,9 +33,13 @@
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/two_body.h"
+#include "orbit/gravity_detail.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::pointMassGradient;
+using astro::detail::zonalGradient;
+using astro::detail::zonalJerk;
 
 namespace {
 
@@ -171,21 +175,18 @@ TEST(Gravity, ZonalGradientIsTheDerivativeOfTheAccelerationAndSymmetric) {
 }
 
 TEST(Gravity, ForceModelPartialsMatchDefaultDifferences) {
-    const StateVector  s = leo();
-    Mat3               G, D, Gfd, Dfd;
-    const GravityField field(kJ2J4);
-    const Vec3         a = field.partials(0.0, s.r, s.v, G, D);
-    EXPECT_EQ(a, field.acceleration(0.0, s.r, s.v));
-    (void)field.ForceModel::partials(0.0, s.r, s.v, Gfd, Dfd);
-    EXPECT_LT(maxRelDiff(G, Gfd), 1e-6);
-    EXPECT_EQ(D, Mat3{});
+    const StateVector   s = leo();
+    const GravityField  field(kJ2J4);
+    const ForcePartials p = field.partials(0.0, s.r, s.v);
+    EXPECT_EQ(p.acceleration, field.acceleration(0.0, s.r, s.v));
+    EXPECT_LT(maxRelDiff(p.dadr, field.ForceModel::partials(0.0, s.r, s.v).dadr), 1e-6);
+    EXPECT_EQ(p.dadv, Mat3{});
 
     const auto           eph = std::make_shared<LowPrecisionEphemeris>();
     const ThirdBodyForce moon(Body::Moon, constants::gmMoon, eph, Time());
-    const Vec3           am = moon.partials(100.0, s.r, s.v, G, D);
-    astro::test::expectVecNear(am, moon.acceleration(100.0, s.r, s.v), 1e-20);
-    (void)moon.ForceModel::partials(100.0, s.r, s.v, Gfd, Dfd);
-    EXPECT_LT(maxRelDiff(G, Gfd), 1e-5);
+    const ForcePartials  pm = moon.partials(100.0, s.r, s.v);
+    astro::test::expectVecNear(pm.acceleration, moon.acceleration(100.0, s.r, s.v), 1e-20);
+    EXPECT_LT(maxRelDiff(pm.dadr, moon.ForceModel::partials(100.0, s.r, s.v).dadr), 1e-5);
 }
 
 namespace {

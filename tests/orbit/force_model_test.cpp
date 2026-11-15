@@ -36,9 +36,14 @@
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/numerical.h"
 #include "astro/time/time.h"
+#include "orbit/gravity_detail.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::pointMassGradient;
+using astro::detail::pointMassJerk;
+using astro::detail::zonalGradient;
+using astro::detail::zonalJerk;
 using astro::test::expectMatNear;
 using astro::test::expectVecNear;
 
@@ -135,11 +140,10 @@ TEST(GravityField, RotatedBodyFrameTurnsTheFieldWithIt) {
         // A few rounding errors of the point-mass term, which dominates (measured 1.8 eps).
         expectVecNear(field.acceleration(0.0, r, v), a, 8.0 * kEps * norm(a), "acceleration");
         expectVecNear(field.jerk(0.0, r, v, a), j, 8.0 * kEps * norm(j), "jerk");
-        Mat3       dadr, dadv;
-        const Vec3 ap = field.partials(0.0, r, v, dadr, dadv);
-        expectVecNear(ap, a, 8.0 * kEps * norm(a), "partials' acceleration");
-        expectMatNear(dadr, G, 8.0 * kEps * mu / std::pow(norm(r), 3), "gradient");
-        expectMatNear(dadv, Mat3{}, 0.0, "no velocity dependence");
+        const ForcePartials p = field.partials(0.0, r, v);
+        expectVecNear(p.acceleration, a, 8.0 * kEps * norm(a), "partials' acceleration");
+        expectMatNear(p.dadr, G, 8.0 * kEps * mu / std::pow(norm(r), 3), "gradient");
+        expectMatNear(p.dadv, Mat3{}, 0.0, "no velocity dependence");
     }
 }
 
@@ -165,17 +169,16 @@ TEST(ThirdBodyForce, IsTheTidalPullOfTheBodyAtEpochPlusT) {
             // (measured 0.8 eps mu / |s|^2).
             const double tol = 8.0 * kEps * mu / (sm * sm);
             expectVecNear(force.acceleration(t, r, Vec3{}), a, tol, "acceleration");
-            Mat3       dadr, dadv;
-            const Vec3 ap = force.partials(t, r, Vec3{}, dadr, dadv);
-            expectVecNear(ap, a, tol, "partials' acceleration");
+            const ForcePartials p = force.partials(t, r, Vec3{});
+            expectVecNear(p.acceleration, a, tol, "partials' acceleration");
             Mat3 G;
             for (std::size_t i = 0; i < 3; ++i) {
                 for (std::size_t k = 0; k < 3; ++k) {
                     G(i, k) = mu / (dm * dm * dm) * (3.0 * d[i] * d[k] / (dm * dm) - (i == k ? 1.0 : 0.0));
                 }
             }
-            expectMatNear(dadr, G, 8.0 * kEps * mu / (dm * dm * dm), "gradient");
-            expectMatNear(dadv, Mat3{}, 0.0, "no velocity dependence");
+            expectMatNear(p.dadr, G, 8.0 * kEps * mu / (dm * dm * dm), "gradient");
+            expectMatNear(p.dadv, Mat3{}, 0.0, "no velocity dependence");
         }
     }
     // Zero at the geocentre: the pull on the satellite is the pull on the Earth.
@@ -192,10 +195,10 @@ TEST(UnmodeledAcceleration, IsLinearInTimeAndItsTrajectoryAloneIsACubic) {
     for (const double t : {0.0, 100.0, -250.0}) {
         expectVecNear(force.acceleration(t, r, v), a0 + j0 * t, 4.0 * kEps * norm(a0 + j0 * t));
         expectVecNear(force.jerk(t, r, v, Vec3{1.0, 2.0, 3.0}), j0, 0.0);
-        Mat3 dadr, dadv;
-        expectVecNear(force.partials(t, r, v, dadr, dadv), a0 + j0 * t, 4.0 * kEps * norm(a0 + j0 * t));
-        expectMatNear(dadr, Mat3{}, 0.0);
-        expectMatNear(dadv, Mat3{}, 0.0);
+        const ForcePartials p = force.partials(t, r, v);
+        expectVecNear(p.acceleration, a0 + j0 * t, 4.0 * kEps * norm(a0 + j0 * t));
+        expectMatNear(p.dadr, Mat3{}, 0.0);
+        expectMatNear(p.dadv, Mat3{}, 0.0);
     }
     // With no other force the motion is r0 + v0 t + a0 t^2 / 2 + j0 t^3 / 6, a cubic, which the
     // eighth-order integrator reproduces to rounding (measured 1.2e-16 relative).

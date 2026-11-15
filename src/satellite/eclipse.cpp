@@ -24,7 +24,7 @@
 #include "../core/enum_io.h"
 #include "../orbit/trajectory_detail.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
+#include "core/rootfind.h"
 
 namespace astro {
 
@@ -135,7 +135,7 @@ std::vector<EclipseInterval> findEclipses(const Trajectory& sat,
         for (int i = 1; i <= n; ++i) {
             const double cur = f(i * h);
             if ((prev < 0.0) != (cur < 0.0)) {
-                c.push_back({brentRoot(f, (i - 1) * h, i * h, 1e-3), cur < 0.0});
+                c.push_back({detail::brentRoot(f, (i - 1) * h, i * h, 1e-3), cur < 0.0});
             }
             prev = cur;
         }

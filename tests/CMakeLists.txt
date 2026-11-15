@@ -34,7 +34,8 @@ file(GLOB_RECURSE ASTRO_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DI
 add_executable(astro_tests ${ASTRO_TEST_SOURCES})
 find_package(Threads REQUIRED)
 target_link_libraries(astro_tests PRIVATE astro::astro GTest::gtest_main Threads::Threads)
-target_include_directories(astro_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# src/ holds the internal headers (not installed), which the tests also check.
+target_include_directories(astro_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(astro_tests PRIVATE ASTRO_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 target_compile_options(astro_tests PRIVATE ${ASTRO_WARNING_FLAGS})
 

@@ -33,7 +33,6 @@
 #include "astro/core/constants.h"
 #include "astro/core/error.h"
 #include "astro/core/mat6.h"
-#include "astro/core/rootfind.h"
 #include "astro/core/rotation.h"
 #include "astro/core/vec.h"
 
@@ -73,7 +72,7 @@
 #include "astro/orbit/elements.h"
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/impact.h"
-#include "astro/orbit/integrators.h"
+#include "astro/orbit/integration.h"
 #include "astro/orbit/kepler.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"

@@ -26,9 +26,14 @@
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
+#include "core/rootfind.h"
 
 using namespace astro;
+using astro::detail::bisect;
+using astro::detail::brentMinimize;
+using astro::detail::brentRoot;
+using astro::detail::MinimizeResult;
+using astro::detail::newtonRoot;
 using constants::pi;
 using constants::twoPi;
 

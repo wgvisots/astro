@@ -28,15 +28,17 @@
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
 #include "astro/orbit/close_approach.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/two_body.h"
+#include "core/rootfind.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::brentMinimize;
+using astro::detail::MinimizeResult;
 
 namespace {
 

@@ -24,8 +24,8 @@
 #include "../core/enum_io.h"
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
 #include "astro/frames/precession_nutation.h"
+#include "core/rootfind.h"
 
 namespace astro {
 
@@ -66,13 +66,13 @@ std::vector<SkyEvent> findElevationEvents(const std::function<double(const Time&
     // resolve, and is 0.05 ms of a 20 minute bracket.
     auto highest = [&](double lo, double hi) {
         auto       s = [&](double u) { return lo + (u - 1.0) * (hi - lo); };
-        const auto m = brentMinimize([&](double u) { return -f(s(u)); }, 1.0, 2.0, 2e-8);
+        const auto m = detail::brentMinimize([&](double u) { return -f(s(u)); }, 1.0, 2.0, 2e-8);
         return SkyEvent{SkyEventType::Transit, start + s(m.x), -m.fx};
     };
     for (std::size_t i = 1; i < x.size(); ++i) {
         const double a = y[i - 1] - threshold, b = y[i] - threshold;
         if ((a < 0.0) != (b < 0.0)) {
-            const double root = brentRoot([&](double s) { return f(s) - threshold; }, x[i - 1], x[i], 1e-3);
+            const double root = detail::brentRoot([&](double s) { return f(s) - threshold; }, x[i - 1], x[i], 1e-3);
             events.push_back({a < 0.0 ? SkyEventType::Rise : SkyEventType::Set, start + root, threshold});
         }
         // Local maximum bracketed by samples i-1, i, i+1.

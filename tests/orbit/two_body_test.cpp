@@ -31,9 +31,12 @@
 #include "astro/core/error.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/two_body.h"
+#include "orbit/stumpff.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::Stumpff;
+using astro::detail::stumpff;
 
 namespace {
 

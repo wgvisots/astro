@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <array>
 #include <functional>
 #include <iosfwd>
 #include <memory>
@@ -33,7 +34,7 @@
 #include "astro/export.h"
 #include "astro/frames/transform.h"
 #include "astro/orbit/central_body.h"
-#include "astro/orbit/integrators.h"
+#include "astro/orbit/integration.h"
 #include "astro/orbit/state12.h"
 #include "astro/orbit/state_covariance.h"
 #include "astro/time/time.h"
@@ -43,11 +44,18 @@
 namespace astro {
 ASTRO_DLL_WARNINGS_PUSH
 
+/// A force model's acceleration and its partial derivatives, as ForceModel::partials returns them.
+struct ForcePartials {
+    Vec3 acceleration; ///< acceleration (m/s^2)
+    Mat3 dadr;         ///< d(acceleration)/d(position) (1/s^2)
+    Mat3 dadv;         ///< d(acceleration)/d(velocity) (1/s)
+};
+
 /// A perturbing (or central) acceleration. `t` is seconds since the propagator epoch;
 /// r, v are in the propagator's inertial frame.
 ///
 /// A force that depends on `t` alone, or has a part that does (a thrust profile, for example), is
-/// invisible to the integrator's step-size control: see integrateRkf78Steps. Bound the step with
+/// invisible to the integrator's step-size control: see AdaptiveOptions. Bound the step with
 /// AdaptiveOptions::maxStep if it varies smoothly, and start a new propagation where it jumps.
 class ASTRO_EXPORT ForceModel {
 public:
@@ -65,11 +73,12 @@ public:
     /// The default throws what acceleration() throws.
     [[nodiscard]] virtual Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const;
 
-    /// acceleration(t, r, v), and its partial derivatives with respect to position (dadr) and
-    /// velocity (dadv), for the state transition matrix. The default uses central differences
-    /// (12 extra acceleration evaluations); override it with an exact form where one exists.
-    /// The default throws what acceleration() throws.
-    virtual Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const;
+    // Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md).
+    // Keep it public.
+    /// acceleration(t, r, v) and its partial derivatives, for the state transition matrix. The
+    /// default uses central differences (12 extra acceleration evaluations); override it with an
+    /// exact form where one exists. The default throws what acceleration() throws.
+    [[nodiscard]] virtual ForcePartials partials(double t, const Vec3& r, const Vec3& v) const;
 };
 
 /// Central body gravity: point mass plus zonal harmonics J2..Jn.
@@ -86,7 +95,7 @@ public:
     /// Exact (point mass and zonal terms).
     [[nodiscard]] Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
     /// Exact gravity gradient; no velocity dependence.
-    Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
+    [[nodiscard]] ForcePartials partials(double t, const Vec3& r, const Vec3& v) const override;
     /// The central body of the field.
     [[nodiscard]] const CentralBody& body() const noexcept { return body_; }
 
@@ -108,7 +117,7 @@ public:
     /// for the body at `epoch` + t (see Ephemeris::state).
     [[nodiscard]] Vec3 acceleration(double t, const Vec3& r, const Vec3& v) const override;
     /// Exact tidal gradient; no velocity dependence. Throws astro::Error as acceleration() does.
-    Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
+    [[nodiscard]] ForcePartials partials(double t, const Vec3& r, const Vec3& v) const override;
 
 private:
     Body                             body_;
@@ -130,7 +139,7 @@ public:
     /// j0 (m/s^3).
     [[nodiscard]] Vec3 jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const override;
     /// Zero: the unmodeled acceleration depends on time only.
-    Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
+    [[nodiscard]] ForcePartials partials(double t, const Vec3& r, const Vec3& v) const override;
 
 private:
     Vec3 a0_;
@@ -276,8 +285,8 @@ public:
     [[nodiscard]] std::vector<StateVector12>
     propagateGrid12(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
 
-    // Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md). Keep it
-    // public in the pre-1.0 API review.
+    // Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md).
+    // Keep it public.
     /// State dt seconds after the epoch and the state transition matrix Phi(dt, epoch) = d(state at
     /// dt) / d(initial state), integrated with the state as in propagateGridStm: the same steps and
     /// the same result as a grid of one output at dt. Phi(0) is the identity. Throws astro::Error as
@@ -334,8 +343,8 @@ public:
                                                                            double         accelerationNoisePsd = 0.0,
                                                                            AdaptiveStats* stats = nullptr) const;
 
-    // Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md). Keep it
-    // public in the pre-1.0 API review.
+    // Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md).
+    // Keep it public.
     /// States and state transition matrices Phi(t, epoch) at dt = start + k * step, as for
     /// propagateGridWithCovariance. states and stm must have the same size. Throws astro::Error if
     /// they differ in size, and as propagateGrid does.
@@ -377,7 +386,7 @@ public:
     [[nodiscard]] const Time& epoch() const noexcept { return epoch_; }
 
 private:
-    [[nodiscard]] OdeState<6> derivative(double t, const OdeState<6>& y) const;
+    [[nodiscard]] std::array<double, 6> derivative(double t, const std::array<double, 6>& y) const;
     template <class Emit>
     void grid(double start, double step, std::size_t count, AdaptiveStats* stats, Emit&& emit) const;
     template <std::size_t N, class Emit>

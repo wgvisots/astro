@@ -26,7 +26,6 @@
 #include "astro/core/error.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/gravity.h"
-#include "astro/orbit/integrators.h"
 #include "astro/orbit/kepler.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
@@ -39,6 +38,16 @@ using astro::test::expectVecNear;
 namespace {
 
 constexpr double km = 1000.0;
+
+/// The closed-form J2 acceleration, the reference for zonalAcceleration: body.zonal(2) with body.mu
+/// and body.re; the other harmonics of `body` are ignored.
+Vec3 j2Acceleration(const Vec3& r, const CentralBody& body = CentralBody::earth()) {
+    const double rm   = norm(r);
+    const double r2   = rm * rm;
+    const double z2r2 = r.z * r.z / r2;
+    const double k    = -1.5 * body.zonal(2) * body.mu * body.re * body.re / (r2 * r2 * rm);
+    return {k * r.x * (1.0 - 5.0 * z2r2), k * r.y * (1.0 - 5.0 * z2r2), k * r.z * (3.0 - 5.0 * z2r2)};
+}
 
 /// Brouwer's (1959) secular rates of the mean anomaly, argument of perigee and node, to first order
 /// in J2 and with the J2^2 and J4 terms, written out in extended precision. Brouwer's small

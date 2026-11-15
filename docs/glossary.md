@@ -91,7 +91,6 @@ they are in alphabetical order.
 | ODE | Ordinary Differential Equation | the equations of motion the integrators solve |
 | Osculating elements | | the elements of the two-body orbit that matches a position and velocity at one instant (`stateToElements`) |
 | RAAN | Right Ascension of the Ascending Node | orientation of the orbit plane |
-| RK4 | Runge-Kutta, 4th order | fixed-step integrator (`integrateRk4`) |
 | RKF7(8) | Runge-Kutta-Fehlberg 7(8) | adaptive-step integrator used by `NumericalPropagator` |
 | SGP4 / SDP4 | Simplified General / Deep-space Perturbations 4 | the analytic propagators for TLEs (`Sgp4`) |
 | SSO | Sun-Synchronous Orbit | orbit whose plane turns with the Sun, through J2 |

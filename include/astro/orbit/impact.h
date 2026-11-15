@@ -31,7 +31,7 @@
 #include "astro/geodesy/ellipsoid.h"
 #include "astro/geodesy/geodetic.h"
 #include "astro/orbit/central_body.h"
-#include "astro/orbit/integrators.h"
+#include "astro/orbit/integration.h"
 #include "astro/orbit/numerical.h"
 #include "astro/time/time.h"
 

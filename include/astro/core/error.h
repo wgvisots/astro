@@ -44,7 +44,7 @@
 ///    positive definite.
 /// 5. **A value that was not computed is a documented NaN** in a field of the result, such as
 ///    LookAngles::rangeRate when no velocity was given.
-/// 6. **No out-parameters.** A function with more than one result returns a struct (Stumpff,
+/// 6. **No out-parameters.** A function with more than one result returns a struct (ForcePartials,
 ///    YearMonthDay, Sgp4Result).
 /// 7. **A non-throwing variant exists only where a caller must handle a failure at every sample of a
 ///    loop** (today only SGP4). It is named `try...`, is `noexcept`, and returns a struct holding the

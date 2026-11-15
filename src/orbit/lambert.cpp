@@ -40,7 +40,7 @@
 
 #include "astro/core/constants.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
+#include "core/rootfind.h"
 
 namespace astro {
 
@@ -228,7 +228,7 @@ constexpr double kEdge = 1e-13;
             bestT = t;
         }
     }
-    const MinimizeResult m = brentMinimize(T, best - 2.0 / kScan, best + 2.0 / kScan, 1.5e-8);
+    const detail::MinimizeResult m = detail::brentMinimize(T, best - 2.0 / kScan, best + 2.0 / kScan, 1.5e-8);
     return {m.x, m.fx};
 }
 
@@ -306,7 +306,7 @@ householder(const FlightCurve& curve, double x0, int M, double target, Branch br
     if (!std::isfinite(glo) || !std::isfinite(ghi) || (glo > 0.0) == (ghi > 0.0)) {
         return glo == 0.0 ? std::optional<double>(lo) : ghi == 0.0 ? std::optional<double>(hi) : std::nullopt;
     }
-    return brentRoot(g, lo, hi, 1e-15);
+    return detail::brentRoot(g, lo, hi, 1e-15);
 }
 
 /// The root of T(x; M) = target on `branch`, starting Householder's iteration from x0.

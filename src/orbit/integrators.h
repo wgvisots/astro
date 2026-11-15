@@ -26,17 +26,17 @@
 #include <utility>
 
 #include "astro/core/error.h"
+#include "astro/orbit/integration.h"
 
-/// \file
-/// Explicit Runge-Kutta ODE integrators (header-only) for y' = f(t, y),
-/// y an std::array<double, N>.
-namespace astro {
+// Explicit Runge-Kutta ODE integrators (header-only) for y' = f(t, y), y an std::array<double, N>.
+// Internal: not installed. The options and statistics they take are public, in
+// astro/orbit/integration.h.
+namespace astro::detail {
 
 /// State vector of an N-dimensional first-order ODE system.
 template <std::size_t N>
 using OdeState = std::array<double, N>;
 
-namespace detail {
 template <std::size_t N>
 OdeState<N> axpy(const OdeState<N>& y, double h, std::initializer_list<std::pair<double, const OdeState<N>*>> terms) {
     OdeState<N> out = y;
@@ -49,29 +49,28 @@ OdeState<N> axpy(const OdeState<N>& y, double h, std::initializer_list<std::pair
     }
     return out;
 }
-} // namespace detail
 
 /// One classical 4th-order Runge-Kutta step. An exception thrown by `f` passes through.
 template <std::size_t N, class F>
 [[nodiscard]] OdeState<N> rk4Step(F&& f, double t, const OdeState<N>& y, double h) {
     const OdeState<N> k1  = f(t, y);
     const OdeState<N> k2  = f(t + 0.5 * h,
-                             detail::axpy<N>(y,
-                                             h,
-                                              {
-                                                 {0.5, &k1}
+                             axpy<N>(y,
+                                     h,
+                                      {
+                                         {0.5, &k1}
     }));
     const OdeState<N> k3  = f(t + 0.5 * h,
-                             detail::axpy<N>(y,
-                                             h,
-                                              {
-                                                 {0.5, &k2}
+                             axpy<N>(y,
+                                     h,
+                                      {
+                                         {0.5, &k2}
     }));
     const OdeState<N> k4  = f(t + h,
-                             detail::axpy<N>(y,
-                                             h,
-                                              {
-                                                 {1.0, &k3}
+                             axpy<N>(y,
+                                     h,
+                                      {
+                                         {1.0, &k3}
     }));
     OdeState<N>       out = y;
     for (std::size_t i = 0; i < N; ++i) {
@@ -96,27 +95,6 @@ template <std::size_t N, class F>
     }
     return y;
 }
-
-/// Settings for the adaptive integrators (integrateRkf78, integrateRkf78Steps). Steps and times
-/// are in the units of the independent variable (seconds for the orbit propagators).
-struct AdaptiveOptions {
-    double relTol{1e-12};      ///< relative error tolerance per component
-    double absTol{1e-9};       ///< absolute error tolerance per component (units of y)
-    double initialStep{60.0};  ///< size of the first trial step (clipped to |t1 - t0| and to maxStep)
-    double minStep{1e-6};      ///< smallest step; throws astro::Error if the error is still too large
-    double maxStep{1e30};      ///< largest step, the first included
-    int    maxSteps{10000000}; ///< limit on attempted steps; throws astro::Error when exceeded
-    /// Only the first errorComponents components enter the error control (e.g. the state but not
-    /// an attached state transition matrix). Default: all.
-    std::size_t errorComponents{static_cast<std::size_t>(-1)};
-};
-
-/// Work done by an adaptive integration.
-struct AdaptiveStats {
-    int accepted{0};    ///< accepted steps
-    int rejected{0};    ///< rejected (retried) steps
-    int evaluations{0}; ///< evaluations of the derivative function (13 per attempted step)
-};
 
 /// Runge-Kutta-Fehlberg 7(8) adaptive integration from t0 to t1 (see integrateRkf78), calling
 /// onStep(tPrev, yPrev, t, y) after every accepted step. Use it for dense output: let the
@@ -278,4 +256,4 @@ template <std::size_t N, class F>
         stats);
 }
 
-} // namespace astro
+} // namespace astro::detail

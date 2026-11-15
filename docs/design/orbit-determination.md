@@ -38,12 +38,14 @@ parameters.
 
 ## Before 1.0: keep the state transition matrix public
 
-The fit's core is the state transition matrix. The pre-1.0 review of the public API (which moves
-internal headers such as `integrators.h` out of the public set) must keep these public:
+The fit's core is the state transition matrix. The pre-1.0 review of the public API
+([inventory and decisions](api-review-1.0.md), done in 0.4.0) kept these public:
 
 - `NumericalPropagator::propagateStm` and `propagateGridStm`
 - `propagateKeplerStm`
 - `StateTransition` (`astro/orbit/state_covariance.h`)
+- `ForceModel::partials`, which the new force models will implement (the review changed it to
+  return a `ForcePartials`)
 
 Then orbit determination can arrive in a 1.x release as a pure addition, as the
 [compatibility policy](../compatibility.md) requires. Each of these declarations carries a comment

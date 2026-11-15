@@ -25,11 +25,16 @@
 
 #include "../core/enum_io.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
 #include "astro/orbit/gravity.h"
+#include "core/rootfind.h"
 #include "gravity_detail.h"
+#include "integrators.h"
 
 namespace astro {
+
+using detail::integrateRkf78;
+using detail::integrateRkf78Steps;
+using detail::OdeState;
 
 namespace {
 
@@ -43,24 +48,26 @@ Vec3 derivativeAlongMotion(const F& accel, double t, const Vec3& r, const Vec3& 
 
 } // namespace
 
-Vec3 ForceModel::partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const {
+ForcePartials ForceModel::partials(double t, const Vec3& r, const Vec3& v) const {
     // Central differences, one column per position and velocity component.
-    const double hr = 1e-6 * std::max(norm(r), 1.0);
-    const double hv = 1e-6 * std::max(norm(v), 1.0);
+    ForcePartials p;
+    const double  hr = 1e-6 * std::max(norm(r), 1.0);
+    const double  hv = 1e-6 * std::max(norm(v), 1.0);
     for (std::size_t j = 0; j < 3; ++j) {
         Vec3 dr, dv;
         (j == 0 ? dr.x : j == 1 ? dr.y : dr.z) = hr;
         (j == 0 ? dv.x : j == 1 ? dv.y : dv.z) = hv;
         const Vec3 ar                          = (acceleration(t, r + dr, v) - acceleration(t, r - dr, v)) / (2.0 * hr);
         const Vec3 av                          = (acceleration(t, r, v + dv) - acceleration(t, r, v - dv)) / (2.0 * hv);
-        dadr(0, j)                             = ar.x;
-        dadr(1, j)                             = ar.y;
-        dadr(2, j)                             = ar.z;
-        dadv(0, j)                             = av.x;
-        dadv(1, j)                             = av.y;
-        dadv(2, j)                             = av.z;
+        p.dadr(0, j)                           = ar.x;
+        p.dadr(1, j)                           = ar.y;
+        p.dadr(2, j)                           = ar.z;
+        p.dadv(0, j)                           = av.x;
+        p.dadv(1, j)                           = av.y;
+        p.dadv(2, j)                           = av.z;
     }
-    return acceleration(t, r, v);
+    p.acceleration = acceleration(t, r, v);
+    return p;
 }
 
 Vec3 ForceModel::jerk(double t, const Vec3& r, const Vec3& v, const Vec3& totalAcceleration) const {
@@ -96,17 +103,16 @@ Vec3 GravityField::jerk(double /*t*/, const Vec3& r, const Vec3& v, const Vec3& 
     return R_.transpose() * p.jerk(R_ * v);
 }
 
-Vec3 GravityField::partials(double /*t*/, const Vec3& r, const Vec3& /*v*/, Mat3& dadr, Mat3& dadv) const {
+ForcePartials GravityField::partials(double /*t*/, const Vec3& r, const Vec3& /*v*/) const {
     detail::GravityPartials p;
-    dadv = Mat3{};
     if (identity_) {
         detail::gravity<true>(r, body_.J.data(), body_.J.size(), body_.mu, body_.re, true, nullptr, &p);
-        dadr = p.gradient();
-        return p.acceleration;
+        return {.acceleration = p.acceleration, .dadr = p.gradient(), .dadv = Mat3{}};
     }
     detail::gravity<true>(R_ * r, body_.J.data(), body_.J.size(), body_.mu, body_.re, true, nullptr, &p);
-    dadr = R_.transpose() * p.gradient() * R_;
-    return R_.transpose() * p.acceleration;
+    return {.acceleration = R_.transpose() * p.acceleration,
+            .dadr         = R_.transpose() * p.gradient() * R_,
+            .dadv         = Mat3{}};
 }
 
 Vec3 UnmodeledAcceleration::acceleration(double t, const Vec3& /*r*/, const Vec3& /*v*/) const {
@@ -117,10 +123,8 @@ Vec3 UnmodeledAcceleration::jerk(double /*t*/, const Vec3& /*r*/, const Vec3& /*
     return j0_;
 }
 
-Vec3 UnmodeledAcceleration::partials(double t, const Vec3& /*r*/, const Vec3& /*v*/, Mat3& dadr, Mat3& dadv) const {
-    dadr = Mat3{};
-    dadv = Mat3{};
-    return a0_ + j0_ * t;
+ForcePartials UnmodeledAcceleration::partials(double t, const Vec3& /*r*/, const Vec3& /*v*/) const {
+    return {.acceleration = a0_ + j0_ * t, .dadr = Mat3{}, .dadv = Mat3{}};
 }
 
 ThirdBodyForce::ThirdBodyForce(Body body, double muBody, std::shared_ptr<const Ephemeris> ephemeris, const Time& epoch)
@@ -137,12 +141,12 @@ Vec3 ThirdBodyForce::acceleration(double t, const Vec3& r, const Vec3& /*v*/) co
     return thirdBodyAcceleration(r, eph_->position(body_, Body::Earth, epoch_ + t), mu_);
 }
 
-Vec3 ThirdBodyForce::partials(double t, const Vec3& r, const Vec3& /*v*/, Mat3& dadr, Mat3& dadv) const {
+ForcePartials ThirdBodyForce::partials(double t, const Vec3& r, const Vec3& /*v*/) const {
     // a = mu (d / |d|^3 - s / |s|^3) with d = s - r, so da/dr = mu / |d|^3 (3 d_hat d_hat^T - I).
     const Vec3 s = eph_->position(body_, Body::Earth, epoch_ + t);
-    dadr         = pointMassGradient(s - r, mu_);
-    dadv         = Mat3{};
-    return thirdBodyAcceleration(r, s, mu_);
+    return {.acceleration = thirdBodyAcceleration(r, s, mu_),
+            .dadr         = detail::pointMassGradient(s - r, mu_),
+            .dadv         = Mat3{}};
 }
 
 NumericalPropagator::NumericalPropagator(const Time&                                    epoch,
@@ -479,7 +483,9 @@ std::optional<PropagationEvent> NumericalPropagator::propagateToEvent(const Even
             const double gt = value(t, stateAt(t));
             if (isEvent(gPrev, gt)) {
                 const double tEvent =
-                    gt == 0.0 ? t : brentRoot([&](double x) { return value(x, stateAt(x)); }, tPrev, t, timeTolerance);
+                    gt == 0.0
+                        ? t
+                        : detail::brentRoot([&](double x) { return value(x, stateAt(x)); }, tPrev, t, timeTolerance);
                 found = PropagationEvent{tEvent, stateAt(tEvent)};
                 return false; // stop the integration
             }
@@ -579,23 +585,20 @@ void NumericalPropagator::variationalGrid(double         start,
     opt.errorComponents = 6; // same steps as the state alone
 
     // Sum of the force models' acceleration and partials.
-    auto partialsAt = [this](double t, const Vec3& r, const Vec3& v, Mat3& G, Mat3& D) {
-        Vec3 a;
-        G = Mat3{};
-        D = Mat3{};
+    auto partialsAt = [this](double t, const Vec3& r, const Vec3& v) {
+        ForcePartials sum;
         for (const auto& force : forces_) {
-            Mat3 gr, gv;
-            a += force->partials(t, r, v, gr, gv);
-            G += gr;
-            D += gv;
+            const ForcePartials p  = force->partials(t, r, v);
+            sum.acceleration      += p.acceleration;
+            sum.dadr              += p.dadr;
+            sum.dadv              += p.dadv;
         }
-        return a;
+        return sum;
     };
     double qs = 1.0; // sign of t on the side of the epoch being integrated: the noise term is qs * q
     auto   f  = [&](double t, const OdeState<N>& y) {
-        const Vec3  r{y[0], y[1], y[2]}, v{y[3], y[4], y[5]};
-        Mat3        G, D;
-        const Vec3  a = partialsAt(t, r, v, G, D);
+        const Vec3 r{y[0], y[1], y[2]}, v{y[3], y[4], y[5]};
+        const auto [a, G, D] = partialsAt(t, r, v);
         OdeState<N> d{};
         d[0] = v.x;
         d[1] = v.y;
@@ -619,16 +622,17 @@ void NumericalPropagator::variationalGrid(double         start,
     //     Phi'' = A Phi' + Adot Phi,   Q'' = A Q' + Q' A^T + Adot Q + Q Adot^T,
     // with Adot from a central difference of G and D along the motion.
     auto second = [&partialsAt](double t, const OdeState<N>& y, const OdeState<N>& dy) {
-        const Vec3   r{y[0], y[1], y[2]}, v{y[3], y[4], y[5]}, a{dy[3], dy[4], dy[5]};
-        const double vm = norm(v);
-        const double h  = vm > 0.0 ? 1e-5 * norm(r) / vm : 1.0;
-        Mat3         G, D, Gp, Dp, Gm, Dm;
-        (void)partialsAt(t, r, v, G, D);
-        (void)partialsAt(t + h, r + v * h, v + a * h, Gp, Dp);
-        (void)partialsAt(t - h, r - v * h, v - a * h, Gm, Dm);
-        const Mat3  Gd = (Gp - Gm) * (0.5 / h);
-        const Mat3  Dd = (Dp - Dm) * (0.5 / h);
-        OdeState<N> dd{};
+        const Vec3          r{y[0], y[1], y[2]}, v{y[3], y[4], y[5]}, a{dy[3], dy[4], dy[5]};
+        const double        vm = norm(v);
+        const double        h  = vm > 0.0 ? 1e-5 * norm(r) / vm : 1.0;
+        const ForcePartials p  = partialsAt(t, r, v);
+        const ForcePartials pp = partialsAt(t + h, r + v * h, v + a * h);
+        const ForcePartials pm = partialsAt(t - h, r - v * h, v - a * h);
+        const Mat3&         G  = p.dadr;
+        const Mat3&         D  = p.dadv;
+        const Mat3          Gd = (pp.dadr - pm.dadr) * (0.5 / h);
+        const Mat3          Dd = (pp.dadv - pm.dadv) * (0.5 / h);
+        OdeState<N>         dd{};
         applyA(dy.data() + kPhi, dd.data() + kPhi, G, D);
         addAdot(y.data() + kPhi, dd.data() + kPhi, Gd, Dd);
         if constexpr (withNoise) {

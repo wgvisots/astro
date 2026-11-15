@@ -28,42 +28,12 @@
 #include "astro/core/error.h"
 #include "astro/orbit/elements.h"
 #include "astro/satellite/orbital_frames.h"
+#include "chi_square.h"
 
 namespace astro {
 
 std::ostream& operator<<(std::ostream& os, ConsistencyTest value) {
     return detail::writeEnum(os, "ConsistencyTest", value);
-}
-
-double chiSquareSurvival3(double x) noexcept {
-    if (std::isnan(x)) {
-        return x;
-    }
-    if (!(x > 0.0)) {
-        return 1.0;
-    }
-    // Once exp(-x/2) underflows (x > 1490) the tail is below the smallest double. Returning 0 there
-    // also keeps a huge or infinite x from giving infinity * 0 = NaN.
-    const double e = std::exp(-0.5 * x);
-    if (e == 0.0) {
-        return 0.0;
-    }
-    return std::erfc(std::sqrt(0.5 * x)) + std::sqrt(2.0 * x / constants::pi) * e;
-}
-
-double chiSquareSurvival6(double x) noexcept {
-    if (std::isnan(x)) {
-        return x;
-    }
-    if (!(x > 0.0)) {
-        return 1.0;
-    }
-    const double h = 0.5 * x;
-    const double e = std::exp(-h);
-    if (e == 0.0) { // as in chiSquareSurvival3: the polynomial overflows from x = 2.7e154
-        return 0.0;
-    }
-    return e * (1.0 + h + 0.5 * h * h);
 }
 
 NumericalPropagator trackerPropagator(const StateEstimate& e, const TrackerOptions& options) {
@@ -150,9 +120,9 @@ ConsistencyCheck compare(const StateCovariance& pred, const StateEstimate& next,
         c.mahalanobis2         = *d6;
         c.positionMahalanobis2 = *d3;
         c.elementsMahalanobis2 = *de;
-        c.pValue               = chiSquareSurvival6(*d6);
-        c.positionPValue       = chiSquareSurvival3(*d3);
-        c.elementsPValue       = chiSquareSurvival6(*de);
+        c.pValue               = detail::chiSquareSurvival6(*d6);
+        c.positionPValue       = detail::chiSquareSurvival3(*d3);
+        c.elementsPValue       = detail::chiSquareSurvival6(*de);
         const double p         = opt.test == ConsistencyTest::Position         ? c.positionPValue
                                : opt.test == ConsistencyTest::PositionVelocity ? c.pValue
                                                                                : c.elementsPValue;

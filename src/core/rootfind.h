@@ -24,9 +24,8 @@
 
 #include "astro/core/error.h"
 
-/// \file
-/// Scalar root finding and minimization (header-only templates).
-namespace astro {
+// Scalar root finding and minimization (header-only templates). Internal: not installed.
+namespace astro::detail {
 
 /// Find a root of f in [a, b] by bisection. f(a) and f(b) must differ in sign.
 ///
@@ -272,4 +271,4 @@ template <class FdF>
     throw Error("newtonRoot: did not converge");
 }
 
-} // namespace astro
+} // namespace astro::detail
