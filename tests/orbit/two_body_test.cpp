@@ -31,6 +31,7 @@
 #include "astro/core/error.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/two_body.h"
+#include "test_util.h"
 
 using namespace astro;
 
@@ -159,6 +160,7 @@ TEST(Stumpff, MatchesExtendedPrecision) {
     // c2 and c3 over elliptic (psi > 0) and hyperbolic (psi < 0) arguments, from 1e-12 to 400. Allowed:
     // a few rounding errors of the value, or of 1 / psi where the closed forms subtract (psi > 1; c2
     // and c3 pass through zero at psi = (2 pi k)^2).
+    ASTRO_SKIP_UNLESS_EXTENDED_LONG_DOUBLE();
     for (double sign : {1.0, -1.0}) {
         for (int k = -120; k <= 26; ++k) {
             const double psi    = sign * std::pow(10.0, 0.1 * k);
