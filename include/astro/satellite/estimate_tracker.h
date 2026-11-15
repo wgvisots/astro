@@ -30,7 +30,7 @@
 #include "astro/export.h"
 #include "astro/frames/transform.h"
 #include "astro/orbit/central_body.h"
-#include "astro/orbit/integrators.h"
+#include "astro/orbit/integration.h"
 #include "astro/orbit/numerical.h"
 #include "astro/time/time.h"
 
@@ -142,15 +142,6 @@ struct ConsistencyCheck {
     bool   consistent{false}; ///< valid and the selected test's p-value >= alarmProbability
     bool   replaced{false};   ///< whether the tracker took the new estimate (it is not older)
 };
-
-/// @{
-
-/// Survival function of the chi-square distribution with 3 and 6 degrees of freedom, P(X >= x).
-/// 1 for x <= 0; 0 for +infinity and for any x so large that the value is below the smallest double
-/// (x > 1490). NaN for NaN, so a NaN statistic never passes a p-value test.
-[[nodiscard]] ASTRO_EXPORT double chiSquareSurvival3(double x) noexcept;
-[[nodiscard]] ASTRO_EXPORT double chiSquareSurvival6(double x) noexcept;
-/// @}
 
 /// The numerical propagator TrackerOptions describes, started from `e` (in options.frame): point
 /// mass and zonal field aligned with the true pole at e.epoch, with options.frame treated as

@@ -33,9 +33,12 @@
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
+#include "orbit/gravity_detail.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::pointMassJerk;
+using astro::detail::zonalJerk;
 using astro::test::expectVecNear;
 
 namespace {
@@ -109,10 +112,6 @@ TEST(Gravity, ZonalJerkIsDirectionalDerivative) {
         const Vec3   fd = (zonalAcceleration(r + v * h, body) - zonalAcceleration(r - v * h, body)) / (2 * h);
         const Vec3   j  = zonalJerk(r, v, body);
         expectVecNear(j, fd, 1e-9 * norm(fd) + 1e-20);
-        Vec3 a2, j2;
-        zonalAccelerationAndJerk(r, v, a2, j2, body);
-        expectVecNear(a2, zonalAcceleration(r, body), 1e-22);
-        expectVecNear(j2, j, 1e-24);
     }
 }
 

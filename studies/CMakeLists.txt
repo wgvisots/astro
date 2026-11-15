@@ -30,3 +30,4 @@ foreach(t astro_study_propagation astro_study_consistency astro_study_impact ast
 endforeach()
 # The conjunction study shares its reference cases with the tests.
 target_include_directories(astro_study_conjunctions PRIVATE ${PROJECT_SOURCE_DIR}/tests)
+target_include_directories(astro_study_impact PRIVATE ${PROJECT_SOURCE_DIR}/src) # core/rootfind.h (internal)

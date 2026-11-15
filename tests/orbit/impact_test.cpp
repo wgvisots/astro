@@ -26,14 +26,15 @@
 
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
 #include "astro/geodesy/local.h"
 #include "astro/orbit/elements.h"
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/impact.h"
+#include "core/rootfind.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::brentRoot;
 
 namespace {
 

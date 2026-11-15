@@ -30,9 +30,11 @@
 #include "astro/orbit/secular.h"
 #include "astro/orbit/state12.h"
 #include "astro/orbit/two_body.h"
+#include "orbit/gravity_detail.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::pointMassJerk;
 using astro::test::expectVecNear;
 
 namespace {

@@ -31,11 +31,16 @@
 #include "astro/core/constants.h"
 #include "astro/core/error.h"
 #include "astro/orbit/elements.h"
-#include "astro/orbit/integrators.h"
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/two_body.h"
+#include "orbit/integrators.h"
 
 using namespace astro;
+using astro::detail::integrateRk4;
+using astro::detail::integrateRkf78;
+using astro::detail::integrateRkf78Steps;
+using astro::detail::OdeState;
+using astro::detail::rk4Step;
 
 namespace {
 

@@ -33,9 +33,12 @@
 #include "astro/orbit/elements.h"
 #include "astro/satellite/estimate_tracker.h"
 #include "astro/satellite/orbital_frames.h"
+#include "satellite/chi_square.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::chiSquareSurvival3;
+using astro::detail::chiSquareSurvival6;
 
 namespace {
 

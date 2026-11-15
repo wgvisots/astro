@@ -33,8 +33,11 @@
 #include "astro/orbit/numerical.h"
 #include "astro/orbit/secular.h"
 #include "astro/orbit/two_body.h"
+#include "orbit/gravity_detail.h"
 
 using namespace astro;
+using astro::detail::pointMassGradient;
+using astro::detail::zonalGradient;
 
 namespace {
 

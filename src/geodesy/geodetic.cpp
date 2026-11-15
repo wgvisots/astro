@@ -21,7 +21,7 @@
 #include <cmath>
 #include <limits>
 
-#include "astro/core/rootfind.h"
+#include "core/rootfind.h"
 
 namespace astro {
 
@@ -68,7 +68,7 @@ double latitudeNearCenter(double rho, double z, const Ellipsoid& ell) {
         if (fi == 0.0) {
             consider(phi);
         } else if (prevF != 0.0 && (fi > 0.0) != (prevF > 0.0)) {
-            consider(brentRoot(f, prevPhi, phi, 1e-16));
+            consider(detail::brentRoot(f, prevPhi, phi, 1e-16));
         }
         prevPhi = phi;
         prevF   = fi;

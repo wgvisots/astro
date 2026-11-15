@@ -118,6 +118,8 @@ target_include_directories(astro PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+# src/ holds the internal headers: not installed, so not part of the public API.
+target_include_directories(astro PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 # Boost.Describe (header-only, Boost >= 1.77) provides enum reflection; it is the only dependency.
 find_package(Boost 1.77 CONFIG REQUIRED)

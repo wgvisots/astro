@@ -6,6 +6,41 @@ change that breaks existing code raises the minor number.
 
 ## [Unreleased]
 
+### Breaking changes
+
+The review of the public API before 1.0 ([inventory and decisions](docs/design/api-review-1.0.md)).
+From 1.0, making something public is an addition, but making it internal needs 2.0. So what users
+have no need for became internal now, and the interfaces that 1.0 will freeze were fixed first.
+
+- **`ForceModel::partials` returns a struct.** `partials(t, r, v)` returns
+  `ForcePartials {acceleration, dadr, dadv}`, instead of returning the acceleration and filling two
+  `Mat3&` out-parameters. A force model that overrides it changes its signature:
+
+```cpp
+// 0.3
+Vec3 partials(double t, const Vec3& r, const Vec3& v, Mat3& dadr, Mat3& dadv) const override;
+// 0.4
+ForcePartials partials(double t, const Vec3& r, const Vec3& v) const override;
+```
+
+- **Removed `eciToEcef` and `ecefToEci`.** Use `gcrsToItrs` and `itrsToGcrs`, which they called.
+  "ECI" does not say which frame is meant.
+- **`AdaptiveOptions` and `AdaptiveStats` moved to the new header `astro/orbit/integration.h`.**
+  `numerical.h`, `impact.h` and `estimate_tracker.h` include it, so code that reaches them through
+  those headers is unaffected.
+- **Now internal**, in headers under `src/`, which are not installed:
+
+| No longer public | Use instead |
+|---|---|
+| `astro/core/rootfind.h`: `bisect`, `brentRoot`, `brentMinimize`, `MinimizeResult`, `newtonRoot` | Boost.Math (header-only): `boost::math::tools::bisect`, `toms748_solve`, `brent_find_minima` |
+| `astro/orbit/integrators.h`: `OdeState`, `rk4Step`, `integrateRk4`, `integrateRkf78`, `integrateRkf78Steps` | `NumericalPropagator`; for other equations, Boost.Odeint |
+| `stumpff`, `Stumpff` | nothing: they were a detail of `propagateKepler` |
+| `pointMassJerk`, `zonalJerk`, `pointMassGradient`, `zonalGradient`; `zonalAccelerationAndJerk` (removed) | `GravityField::jerk` and `GravityField::partials` (point mass and zonal terms together) |
+| `j2Acceleration`, now a reference in the tests | `zonalAcceleration` with a `CentralBody` whose `J` holds J2 only |
+| `chiSquareSurvival3`, `chiSquareSurvival6` | the p-values in `ConsistencyCheck` |
+
+- The shared library exports 492 symbols, 9 fewer.
+
 ### Platforms
 
 - **Windows with MSVC is supported** (docs/compatibility.md): Visual Studio 2022 and newer, static
@@ -31,6 +66,8 @@ change that breaks existing code raises the minor number.
 
 ### Documentation
 
+- **[Public API review](docs/design/api-review-1.0.md):** every public header, whether it stays
+  public, and why.
 - **[Orbit determination design](docs/design/orbit-determination.md):** the agreed plan for fitting
   orbits to position and velocity reports and to lines of sight, after 1.0: inputs, force models
   needed, methods, validation, order of work and open questions.

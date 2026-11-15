@@ -31,8 +31,8 @@ struct StateCovariance {
     Mat6        covariance; ///< covariance of (r, v) in the same frame (m^2, m^2/s, m^2/s^2)
 };
 
-// Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md). Keep it
-// public in the pre-1.0 API review.
+// Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md).
+// Keep it public.
 /// A state and its state transition matrix Phi(t, epoch) = d(state at t) / d(state at the epoch),
 /// rows and columns ordered (r, v): P(t) = Phi P0 Phi^T.
 struct StateTransition {

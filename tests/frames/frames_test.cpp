@@ -378,11 +378,11 @@ TEST_F(ValladoExample, OneOffConversionsBetweenTemeItrsAndGcrs) {
     expectState(itrsToTeme(itrf, utc, eop), teme, "ITRS to TEME");
     expectState(temeToGcrs(teme, utc, eop), gcrf, "TEME to GCRS");
     expectState(gcrsToTeme(gcrf, utc, eop), teme, "GCRS to TEME");
-    expectState(eciToEcef(gcrf, utc, eop), itrf, "ECI to ECEF");
-    expectState(ecefToEci(itrf, utc, eop), gcrf, "ECEF to ECI");
+    expectState(gcrsToItrs(gcrf, utc, eop), itrf, "GCRS to ITRS");
+    expectState(itrsToGcrs(itrf, utc, eop), gcrf, "ITRS to GCRS");
     // The position-only forms have no Earth-rotation term and give the same positions.
-    expectVecNear(eciToEcef(gcrf.r, utc, eop), itrf.r, 0.02, "ECI to ECEF, position");
-    expectVecNear(ecefToEci(itrf.r, utc, eop), gcrf.r, 0.02, "ECEF to ECI, position");
+    expectVecNear(gcrsToItrs(gcrf.r, utc, eop), itrf.r, 0.02, "GCRS to ITRS, position");
+    expectVecNear(itrsToGcrs(itrf.r, utc, eop), gcrf.r, 0.02, "ITRS to GCRS, position");
 }
 
 TEST(FrameTransformer, ConsistencyAndRoundTrips) {

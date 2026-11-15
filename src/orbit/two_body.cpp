@@ -30,57 +30,12 @@
 #include "astro/core/error.h"
 #include "astro/orbit/gravity.h"
 #include "astro/orbit/numerical.h"
+#include "gravity_detail.h"
+#include "stumpff.h"
 
 namespace astro {
 
 using constants::pi;
-
-namespace {
-
-constexpr double reciprocalFactorial(int n) noexcept {
-    double f = 1.0;
-    for (int i = 2; i <= n; ++i) {
-        f *= i;
-    }
-    return 1.0 / f;
-}
-
-} // namespace
-
-Stumpff stumpff(double psi) noexcept {
-    Stumpff s;
-    if (std::abs(psi) < 1.0) {
-        // The series c2 = sum (-psi)^k / (2k+2)!, c3 = sum (-psi)^k / (2k+3)!, to 1/20! and 1/21!. The
-        // closed forms below subtract nearly equal numbers here: 1 - cos(sqrt(psi)) is good to one
-        // rounding error of 1, a relative error of 2e-16 / psi in c2 (and 6e-16 / psi in c3).
-        // clang-format off
-        constexpr double a[10] = {reciprocalFactorial(2),  reciprocalFactorial(4),  reciprocalFactorial(6),
-                                  reciprocalFactorial(8),  reciprocalFactorial(10), reciprocalFactorial(12),
-                                  reciprocalFactorial(14), reciprocalFactorial(16), reciprocalFactorial(18),
-                                  reciprocalFactorial(20)};
-        constexpr double b[10] = {reciprocalFactorial(3),  reciprocalFactorial(5),  reciprocalFactorial(7),
-                                  reciprocalFactorial(9),  reciprocalFactorial(11), reciprocalFactorial(13),
-                                  reciprocalFactorial(15), reciprocalFactorial(17), reciprocalFactorial(19),
-                                  reciprocalFactorial(21)};
-        // clang-format on
-        double s2 = a[9], s3 = b[9];
-        for (int k = 8; k >= 0; --k) {
-            s2 = a[k] - psi * s2;
-            s3 = b[k] - psi * s3;
-        }
-        s.c2 = s2;
-        s.c3 = s3;
-    } else if (psi > 0.0) {
-        const double sp = std::sqrt(psi);
-        s.c2            = (1.0 - std::cos(sp)) / psi;
-        s.c3            = (sp - std::sin(sp)) / (sp * psi);
-    } else {
-        const double sp = std::sqrt(-psi);
-        s.c2            = (1.0 - std::cosh(sp)) / psi;
-        s.c3            = (std::sinh(sp) - sp) / (sp * -psi);
-    }
-    return s;
-}
 
 namespace {
 
@@ -153,7 +108,7 @@ UniversalSolution solveUniversal(const Vec3& r0, const Vec3& v0, double dt, doub
     bool             converged = false;
     for (int it = 0; it < 200 && !converged; ++it) {
         const double psi    = chi * chi * alpha;
-        const auto [c2, c3] = stumpff(psi);
+        const auto [c2, c3] = detail::stumpff(psi);
         const double t2 = sig0 * chi * chi * c2, t3 = k3 * chi * chi * chi * c3, t1 = r0m * chi;
         const double F = t2 + t3 + t1 - t0;
         if (F == 0.0) { // also the whole number of periods: dt reduced to 0, chi = 0
@@ -217,7 +172,7 @@ StateVector universalState(const Vec3& r0, const Vec3& v0, const UniversalSoluti
     const double alpha  = -norm2(v0) / mu + 2.0 / r0m;
     const double chi    = u.chi;
     const double psi    = chi * chi * alpha;
-    const auto [c2, c3] = stumpff(psi);
+    const auto [c2, c3] = detail::stumpff(psi);
     const double r      = chi * chi * c2 + rdotv / smu * chi * (1.0 - psi * c3) + r0m * (1.0 - psi * c2);
     const double f      = 1.0 - chi * chi / r0m * c2;
     const double g      = u.dtReduced - chi * chi * chi / smu * c3;
@@ -410,7 +365,7 @@ StateCovariance propagateKeplerWithCovariance(const StateVector& s0, double dt, 
 Propagation12 propagateKepler(const StateVector12& s0, double dt, double mu, HigherOrderMode mode) {
     Propagation12 out;
     out.accelerationResidual = s0.a - pointMassAcceleration(s0.r, mu);
-    out.jerkResidual         = s0.j - pointMassJerk(s0.r, s0.v, mu); // point-mass jerk does not depend on a
+    out.jerkResidual         = s0.j - detail::pointMassJerk(s0.r, s0.v, mu); // point-mass jerk does not depend on a
     const bool unmodeled =
         mode == HigherOrderMode::UnmodeledForce && (out.accelerationResidual != Vec3{} || out.jerkResidual != Vec3{});
     if (unmodeled) {
@@ -418,7 +373,7 @@ Propagation12 propagateKepler(const StateVector12& s0, double dt, double mu, Hig
         out.state = prop.propagate12(dt);
     } else {
         const StateVector s = propagateKepler(s0.rv(), dt, mu);
-        out.state           = {s.r, s.v, pointMassAcceleration(s.r, mu), pointMassJerk(s.r, s.v, mu)};
+        out.state           = {s.r, s.v, pointMassAcceleration(s.r, mu), detail::pointMassJerk(s.r, s.v, mu)};
     }
     return out;
 }

@@ -30,7 +30,7 @@
 
 #include "astro/core/constants.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
+#include "core/rootfind.h"
 #include "trajectory_detail.h"
 
 namespace astro {
@@ -90,7 +90,8 @@ public:
             // Closing, then separating: a minimum in (prev, cur]. A change of sign within the
             // rounding error of both samples is not one: the distance is constant there.
             if (prev.g < 0.0 && cur.g >= 0.0 && (-prev.g > prev.noise || cur.g > cur.noise)) {
-                const double tca = brentRoot([this](double s) { return at(s).g; }, prev.s, cur.s, opt_.timeTolerance);
+                const double tca =
+                    detail::brentRoot([this](double s) { return at(s).g; }, prev.s, cur.s, opt_.timeTolerance);
                 onMinimum(at(tca));
             }
             prev = std::move(cur);

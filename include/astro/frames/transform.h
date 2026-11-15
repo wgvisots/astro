@@ -163,6 +163,9 @@ private:
 /// term. Each call builds a FrameTransformer; reuse one for many conversions at
 /// the same epoch. Throws astro::Error if `eop` has no data at `t`, or if `t`
 /// is before 1960, where UTC is undefined.
+///
+/// For the common names: the GCRS is the modern "ECI" and the ITRS the "ECEF". "ECI" alone is
+/// ambiguous (J2000, TOD and TEME are ECI frames too), so the functions name the frames.
 /// @{
 [[nodiscard]] ASTRO_EXPORT Vec3        gcrsToItrs(const Vec3& r, const Time& t, const EopProvider& eop);
 [[nodiscard]] ASTRO_EXPORT Vec3        itrsToGcrs(const Vec3& r, const Time& t, const EopProvider& eop);
@@ -172,23 +175,6 @@ private:
 [[nodiscard]] ASTRO_EXPORT StateVector itrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
 [[nodiscard]] ASTRO_EXPORT StateVector temeToGcrs(const StateVector& s, const Time& t, const EopProvider& eop);
 [[nodiscard]] ASTRO_EXPORT StateVector gcrsToTeme(const StateVector& s, const Time& t, const EopProvider& eop);
-/// @}
-
-/// Aliases using the common names: ECI = GCRS, ECEF = ITRS. They throw
-/// astro::Error as gcrsToItrs and itrsToGcrs do.
-/// @{
-[[nodiscard]] inline Vec3 eciToEcef(const Vec3& r, const Time& t, const EopProvider& eop) {
-    return gcrsToItrs(r, t, eop);
-}
-[[nodiscard]] inline Vec3 ecefToEci(const Vec3& r, const Time& t, const EopProvider& eop) {
-    return itrsToGcrs(r, t, eop);
-}
-[[nodiscard]] inline StateVector eciToEcef(const StateVector& s, const Time& t, const EopProvider& eop) {
-    return gcrsToItrs(s, t, eop);
-}
-[[nodiscard]] inline StateVector ecefToEci(const StateVector& s, const Time& t, const EopProvider& eop) {
-    return itrsToGcrs(s, t, eop);
-}
 /// @}
 
 ASTRO_DLL_WARNINGS_POP

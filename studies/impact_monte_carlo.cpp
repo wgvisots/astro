@@ -31,9 +31,9 @@
 #include <vector>
 
 #include "astro/core/angle.h"
-#include "astro/core/rootfind.h"
 #include "astro/geodesy/local.h"
 #include "astro/orbit/impact.h"
+#include "core/rootfind.h"
 
 using namespace astro;
 
@@ -66,7 +66,7 @@ double referenceError(const StateVector& s0, const Impact& imp, const EopProvide
                                    {std::make_shared<GravityField>(o.body, poleOfDateMatrix(Frame::GCRS, kEpoch))},
                                    tight);
     const auto height = [&](double dt) { return ecefToGeodetic(gcrsToItrs(prop.propagate(dt).r, kEpoch + dt, eop)).h; };
-    const double dt   = brentRoot(height, imp.flightTime - 2.0, imp.flightTime + 2.0, 1e-9);
+    const double dt   = detail::brentRoot(height, imp.flightTime - 2.0, imp.flightTime + 2.0, 1e-9);
     return norm(gcrsToItrs(prop.propagate(dt).r, kEpoch + dt, eop) - imp.itrs.r);
 }
 

@@ -29,12 +29,13 @@
 #include "astro/astrometry/spherical.h"
 #include "astro/core/angle.h"
 #include "astro/core/error.h"
-#include "astro/core/rootfind.h"
 #include "astro/ephemeris/low_precision.h"
 #include "astro/ephemeris/spk.h"
+#include "core/rootfind.h"
 #include "test_util.h"
 
 using namespace astro;
+using astro::detail::brentRoot;
 using astro::test::dataPath;
 using astro::test::readCsv;
 
