@@ -30,6 +30,7 @@
 /// \file
 /// Earth orientation parameters (UT1 - UTC, polar motion, celestial pole offsets): providers and IERS file readers.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Earth orientation parameters at one epoch. Angles in radians, times in seconds.
 struct EopValues {
@@ -147,4 +148,5 @@ private:
     EopInterpolation       interp_;
 };
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

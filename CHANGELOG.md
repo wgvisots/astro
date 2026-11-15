@@ -6,6 +6,20 @@ change that breaks existing code raises the minor number.
 
 ## [Unreleased]
 
+### Platforms
+
+- **Windows with MSVC is supported** (docs/compatibility.md): Visual Studio 2022 and newer, static
+  library and DLL, and the Conan package. CI builds and tests the static library with Visual Studio
+  2022 and 2026 and the DLL with 2026, warnings as errors, and runs `conan create` for both library
+  types. The getting-started guide explains the Windows build.
+- **Fixed:** 25 functions were declared `ASTRO_EXPORT` twice (0.3.0's export change), which MSVC
+  rejects; GCC and Clang accepted it.
+- The generated `astro/export.h` also defines `ASTRO_DLL_WARNINGS_PUSH` and `ASTRO_DLL_WARNINGS_POP`,
+  which silence MSVC's warnings about exported classes with standard-library members (C4251, C4275)
+  in astro's own headers only.
+- Tests: references computed in `long double` are skipped where it is no wider than `double`
+  (MSVC); the Lambert closure test draws its cases in a way that is the same on every standard
+  library.
 ### Build and packaging
 
 - **A release tag publishes the GitHub release.** When CI passes on a tag `vX.Y.Z`, its new last

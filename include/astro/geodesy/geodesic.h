@@ -44,11 +44,11 @@ struct GeodesicDirectResult {
 
 /// Distance and azimuths between two points (lat/lon in radians). Throws astro::Error if the
 /// iteration does not converge: for nearly antipodal points, and for an input that is not finite.
-[[nodiscard]] ASTRO_EXPORT GeodesicInverseResult ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT GeodesicInverseResult
 geodesicInverse(double lat1, double lon1, double lat2, double lon2, const Ellipsoid& ell = Ellipsoid::wgs84());
 
 /// Destination after travelling `distance` meters from (lat1, lon1) along initial azimuth `azimuth1`.
-[[nodiscard]] ASTRO_EXPORT GeodesicDirectResult ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT GeodesicDirectResult
 geodesicDirect(double lat1, double lon1, double azimuth1, double distance, const Ellipsoid& ell = Ellipsoid::wgs84());
 
 /// Great-circle (haversine) distance on a sphere of radius r.

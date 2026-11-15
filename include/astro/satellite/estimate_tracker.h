@@ -43,6 +43,7 @@
 /// previous one propagated to the new epoch, to flag manoeuvres, bad data or unrealistic
 /// covariances.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// A state estimate: position and velocity in the celestial frame named by TrackerOptions::frame
 /// (GCRS by default) and their 6x6 covariance (m^2, m^2/s, m^2/s^2) at an epoch.
@@ -164,9 +165,9 @@ struct ConsistencyCheck {
 /// NumericalPropagator::propagateGridWithCovariance does, a negative
 /// options.accelerationNoisePsd included), and if the two epochs cannot be subtracted (see Time).
 /// A prediction on an open orbit does not throw: see ConsistencyTest::Elements.
-[[nodiscard]] ASTRO_EXPORT ConsistencyCheck ASTRO_EXPORT checkConsistency(const StateEstimate&  prior,
-                                                                          const StateEstimate&  next,
-                                                                          const TrackerOptions& options = {});
+[[nodiscard]] ASTRO_EXPORT ConsistencyCheck checkConsistency(const StateEstimate&  prior,
+                                                             const StateEstimate&  next,
+                                                             const TrackerOptions& options = {});
 
 /// Latest-wins tracking of an upstream filter's estimates with a consistency check per delivery.
 /// Like the standard containers: const member functions (current, predict, predictGrid, options)
@@ -215,4 +216,5 @@ private:
     std::optional<NumericalPropagator> prop_;        // propagates currentGcrs_
 };
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

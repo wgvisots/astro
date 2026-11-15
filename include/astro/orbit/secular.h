@@ -38,6 +38,7 @@
 /// of which the theory uses mu, re, zonal(2) and zonal(4). J3 and the higher zonal terms do not
 /// enter it, so CentralBody::earth() and CentralBody::earthJ2J4() give the same results.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Which zonal terms enter the secular rates.
 enum class SecularOrder {
@@ -307,14 +308,15 @@ public:
 /// Inclination (rad) of a sun-synchronous orbit with mean a and e (first-order J2;
 /// nodal rate 360 deg per tropical year). Throws astro::Error unless the orbit is elliptic
 /// (a > 0, 0 <= e < 1), or if no solution exists.
-[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT double
 sunSynchronousInclination(double a, double e = 0.0, const CentralBody& body = CentralBody::earth());
 
 /// Mean semi-major axis of a repeat-ground-track orbit that completes `revs`
 /// revolutions in `days` nodal days, for given e and i (J2, iterative). Throws astro::Error if
 /// revs or days is not positive, unless 0 <= e < 1, and if the iteration does not converge (to
 /// 1e-13 of a): there is then no such orbit in the J2 model, e.g. 2 revolutions a day at e = 0.99.
-[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT double
 repeatGroundTrackSemiMajorAxis(int revs, int days, double e, double i, const CentralBody& body = CentralBody::earth());
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

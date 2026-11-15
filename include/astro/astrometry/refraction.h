@@ -64,9 +64,8 @@ struct RefractionConstants {
 /// at 1010 hPa and 10 C); for every elevation below that, where the formula as printed turns back
 /// down and then divides by zero, that largest value is returned. The result is therefore finite,
 /// continuous and never negative for any elevation; a NaN elevation gives NaN.
-[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT refractionBennett(double observedElevation,
-                                                                 double pressureHpa  = 1010.0,
-                                                                 double temperatureC = 10.0) noexcept;
+[[nodiscard]] ASTRO_EXPORT double
+refractionBennett(double observedElevation, double pressureHpa = 1010.0, double temperatureC = 10.0) noexcept;
 /// Saemundsson (1986): refraction (rad) for a *true* elevation; scaled for pressure and
 /// temperature as refractionBennett(), with which it agrees to ~0.1 arcmin.
 ///
@@ -76,8 +75,7 @@ struct RefractionConstants {
 /// to the zenith. Below that it is an extrapolation, and it is largest at -1.90 deg (44.6 arcmin at
 /// 1010 hPa and 10 C); for every elevation below that the largest value is returned. The result is
 /// finite, continuous and never negative for any elevation; a NaN elevation gives NaN.
-[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT refractionSaemundsson(double trueElevation,
-                                                                     double pressureHpa  = 1010.0,
-                                                                     double temperatureC = 10.0) noexcept;
+[[nodiscard]] ASTRO_EXPORT double
+refractionSaemundsson(double trueElevation, double pressureHpa = 1010.0, double temperatureC = 10.0) noexcept;
 
 } // namespace astro

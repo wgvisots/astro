@@ -35,21 +35,21 @@ namespace astro {
 [[nodiscard]] ASTRO_EXPORT Mat3 ecefToNedMatrix(double lat, double lon) noexcept;
 
 /// ECEF position to ENU relative to a geodetic origin.
-[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT ecefToEnu(const Vec3&      ecef,
-                                                       const Geodetic&  origin,
-                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 ecefToEnu(const Vec3&      ecef,
+                                          const Geodetic&  origin,
+                                          const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// ENU position relative to a geodetic origin to ECEF (m).
-[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT enuToEcef(const Vec3&      enu,
-                                                       const Geodetic&  origin,
-                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 enuToEcef(const Vec3&      enu,
+                                          const Geodetic&  origin,
+                                          const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// ECEF position to NED relative to a geodetic origin (m).
-[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT ecefToNed(const Vec3&      ecef,
-                                                       const Geodetic&  origin,
-                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 ecefToNed(const Vec3&      ecef,
+                                          const Geodetic&  origin,
+                                          const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// NED position relative to a geodetic origin to ECEF (m).
-[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT nedToEcef(const Vec3&      ned,
-                                                       const Geodetic&  origin,
-                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 nedToEcef(const Vec3&      ned,
+                                          const Geodetic&  origin,
+                                          const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 
 /// Topocentric look angles from an observer to a target, relative to the observer's geodetic
 /// horizon (geometric: no refraction or light time, unless the function that returns them says so).
@@ -68,9 +68,9 @@ struct LookAngles {
 /// ENU vector (m) from the azimuth, elevation and range of `look`; its range rate is not used.
 [[nodiscard]] ASTRO_EXPORT Vec3 lookAnglesToEnu(const LookAngles& look) noexcept;
 /// Look angles from an observer to an ECEF target position `target` (m); the range rate is NaN.
-[[nodiscard]] ASTRO_EXPORT LookAngles ASTRO_EXPORT ecefToLookAngles(const Vec3&      target,
-                                                                    const Geodetic&  observer,
-                                                                    const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT LookAngles ecefToLookAngles(const Vec3&      target,
+                                                       const Geodetic&  observer,
+                                                       const Ellipsoid& ell = Ellipsoid::wgs84()) noexcept;
 /// Look angles, with the range rate, from an observer to a target whose state `target` is given in
 /// the ITRS (ECEF; m, m/s). For a target exactly at the observer (zero range) the direction and the
 /// range rate do not exist: the range rate is NaN.
@@ -79,8 +79,8 @@ struct LookAngles {
                                                        const Ellipsoid&   ell = Ellipsoid::wgs84()) noexcept;
 /// ECEF position (m) of a target seen at the azimuth, elevation and range of `look` from an
 /// observer; its range rate is not used.
-[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT lookAnglesToEcef(const LookAngles& look,
-                                                              const Geodetic&   observer,
-                                                              const Ellipsoid&  ell = Ellipsoid::wgs84()) noexcept;
+[[nodiscard]] ASTRO_EXPORT Vec3 lookAnglesToEcef(const LookAngles& look,
+                                                 const Geodetic&   observer,
+                                                 const Ellipsoid&  ell = Ellipsoid::wgs84()) noexcept;
 
 } // namespace astro

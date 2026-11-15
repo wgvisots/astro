@@ -38,6 +38,13 @@ option(ASTRO_COVERAGE "Instrument the build for line coverage (GCC; see tools/co
 
 include(GNUInstallDirs)
 
+# Windows finds a DLL next to the program that loads it, not through a run path. So that the tests and
+# examples run against a shared astro (and gtest_discover_tests can list the tests at build time),
+# every program and DLL of the build goes to one directory.
+if(WIN32 AND PROJECT_IS_TOP_LEVEL AND NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+endif()
+
 if(ASTRO_COVERAGE)
     # Counts how often each line runs (gcov). Use an unoptimized build so that lines map to code.
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -83,10 +90,26 @@ configure_file(include/astro/version.h.in ${PROJECT_BINARY_DIR}/include/astro/ve
 # astro/export.h defines ASTRO_EXPORT, which marks the public API. The library is built with hidden
 # visibility, so a shared build exports only what is marked. In a static build ASTRO_STATIC_DEFINE
 # makes ASTRO_EXPORT empty, for the library and for every program that links it.
+#
+# A class exported from a DLL makes MSVC warn about each member or base that is not exported itself
+# (C4251, C4275): std::vector, std::string, std::runtime_error, and astro's own Vec3 and Mat3. Both
+# warnings are harmless when the DLL and the program use the same compiler and runtime library, which
+# a C++ DLL requires anyway. Each header that exports a class silences them between
+# ASTRO_DLL_WARNINGS_PUSH and ASTRO_DLL_WARNINGS_POP, so the warnings stay on in the user's own code.
 include(GenerateExportHeader)
+set(ASTRO_EXPORT_EXTRA [=[
+/* MSVC: no C4251/C4275 for astro's exported classes (see CMakeLists.txt). */
+#if defined(_MSC_VER) && !defined(ASTRO_STATIC_DEFINE)
+#  define ASTRO_DLL_WARNINGS_PUSH __pragma(warning(push)) __pragma(warning(disable : 4251 4275))
+#  define ASTRO_DLL_WARNINGS_POP __pragma(warning(pop))
+#else
+#  define ASTRO_DLL_WARNINGS_PUSH
+#  define ASTRO_DLL_WARNINGS_POP
+#endif]=])
 generate_export_header(astro
         BASE_NAME astro
-        EXPORT_FILE_NAME ${PROJECT_BINARY_DIR}/include/astro/export.h)
+        EXPORT_FILE_NAME ${PROJECT_BINARY_DIR}/include/astro/export.h
+        CUSTOM_CONTENT_FROM_VARIABLE ASTRO_EXPORT_EXTRA)
 get_target_property(ASTRO_LIBRARY_TYPE astro TYPE)
 if(ASTRO_LIBRARY_TYPE STREQUAL "STATIC_LIBRARY")
     target_compile_definitions(astro PUBLIC ASTRO_STATIC_DEFINE)

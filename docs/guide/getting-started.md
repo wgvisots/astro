@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Compiler | C++20 (tested with GCC 13 and Clang 18) |
+| Compiler | C++20 (tested with GCC 13 and Clang 18 on Linux, and MSVC on Windows) |
 | Build | CMake 3.20 or newer |
 | Dependency | Boost 1.77 or newer, headers only (for Boost.Describe) |
 | Tests | GoogleTest (an installed copy is used if found, otherwise CMake downloads it) |
@@ -31,6 +31,25 @@ cmake --install build --prefix /your/prefix
 
 `cmake --build build --target docs` builds the HTML documentation into `build/docs/html` when
 Doxygen is installed.
+
+### Windows
+
+With Visual Studio 2022 or newer, the simplest way is the Conan recipe (below): Conan builds astro
+with your compiler and runtime settings, and gets Boost too. To build from the source tree instead,
+get Boost from vcpkg and pass its toolchain file:
+
+```bat
+vcpkg install boost-describe boost-headers --triplet x64-windows
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+The Visual Studio generator builds several configurations, so `--config` and `-C` choose one.
+With `-DBUILD_SHARED_LIBS=ON` astro is a DLL; the programs of the build and `astro.dll` all go to
+`build/bin/<config>`, so the tests find it. A program that uses the DLL needs `astro.dll` next to it
+or on `PATH`. A Debug and a Release build of astro are not interchangeable: link the one that
+matches your program's configuration.
 
 ### Packages
 

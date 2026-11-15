@@ -32,6 +32,7 @@
 /// \file
 /// astro::Time, an instant in a stated time scale, and conversions between UTC, TAI, TT, TDB, TCG, TCB, UT1, GPS, Galileo and BeiDou time, Unix time and GNSS weeks.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 class EopProvider;
 
@@ -249,4 +250,5 @@ private:
 [[nodiscard]] ASTRO_EXPORT int
 resolveWeekRollover(int truncatedWeek, int bits, GnssSystem system, const Time& reference);
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

@@ -39,6 +39,7 @@
 /// Ballistic impact prediction: where and when a trajectory meets the ellipsoid, and the impact
 /// error ellipse from the state covariance.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// An error ellipse in the local horizontal plane.
 struct ASTRO_EXPORT ErrorEllipse {
@@ -157,4 +158,5 @@ struct ImpactOptions {
                                                                const EopProvider&   eop,
                                                                const ImpactOptions& options = {});
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

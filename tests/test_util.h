@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -28,6 +29,18 @@
 #include "astro/core/vec.h"
 
 namespace astro::test {
+
+/// True where long double is wider than double (GCC and Clang on x86-64: a 64-bit significand and a
+/// wider exponent). With MSVC long double is double, so a reference computed in long double is no
+/// more accurate than the code under test, and overflows where the code does.
+inline constexpr bool kLongDoubleIsExtended =
+    std::numeric_limits<long double>::digits > std::numeric_limits<double>::digits;
+
+/// Skips the rest of a test whose reference values need an extended long double (see
+/// kLongDoubleIsExtended). The Linux CI jobs run it.
+#define ASTRO_SKIP_UNLESS_EXTENDED_LONG_DOUBLE() \
+    if (!astro::test::kLongDoubleIsExtended)     \
+    GTEST_SKIP() << "the reference needs a long double wider than double, which this compiler lacks"
 
 inline std::string dataPath(const std::string& name) {
     return std::string(ASTRO_TEST_DATA_DIR) + "/" + name;

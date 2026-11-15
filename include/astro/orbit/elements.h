@@ -26,6 +26,7 @@
 /// \file
 /// Classical and equinoctial orbital elements. SI units, radians.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Classical (Keplerian) osculating elements.
 ///
@@ -65,7 +66,7 @@ struct ASTRO_EXPORT KeplerianElements {
 [[nodiscard]] ASTRO_EXPORT StateVector elementsToState(const KeplerianElements& el, double mu = constants::gmEarth);
 /// Elements from mean anomaly instead of true anomaly. Throws astro::Error as meanToTrueAnomaly
 /// does: for an e that is negative, infinite or NaN.
-[[nodiscard]] ASTRO_EXPORT KeplerianElements ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT KeplerianElements
 elementsFromMeanAnomaly(double a, double e, double i, double raan, double argp, double M);
 
 /// Equinoctial elements of Broucke & Cefola (1972), prograde form (not the "modified equinoctial"
@@ -125,4 +126,5 @@ struct EquinoctialElements {
     return a * (1.0 + e);
 }
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

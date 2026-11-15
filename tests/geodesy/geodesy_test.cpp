@@ -544,6 +544,7 @@ constexpr double kVincentyAzimuth = 5e-11;
 TEST(Geodesic, DirectMatchesTheIntegratedGeodesicEquation) {
     // geodesicDirect() against the curve found by integrating the geodesic equation (see
     // geodesicByIntegration()): short and long lines, near-meridional and near-equatorial ones.
+    ASTRO_SKIP_UNLESS_EXTENDED_LONG_DOUBLE();
     const Ellipsoid ell = Ellipsoid::wgs84();
     for (const GeodesicLine& line : kGeodesicLines) {
         SCOPED_TRACE(line.what);

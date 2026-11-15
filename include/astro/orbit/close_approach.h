@@ -208,7 +208,7 @@ struct ConjunctionAssessment {
 /// Throws astro::Error as closeApproaches, UncertainTrajectory::stateCovariance and
 /// collisionProbability do.
 [[nodiscard]] ASTRO_EXPORT std::vector<ConjunctionAssessment>
-    ASTRO_EXPORT           assessConjunctions(const UncertainTrajectory&  first,
+                           assessConjunctions(const UncertainTrajectory&  first,
                                               const UncertainTrajectory&  second,
                                               const Time&                 start,
                                               const Time&                 end,

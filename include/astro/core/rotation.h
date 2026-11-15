@@ -35,6 +35,7 @@
 /// in the new frame are v' = R3(theta) * v. A passive matrix is the transpose of
 /// the corresponding active (vector-rotating) matrix.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Passive rotation about the x axis.
 [[nodiscard]] ASTRO_EXPORT Mat3 R1(double theta) noexcept;
@@ -166,4 +167,5 @@ struct EulerAngles {
 /// Re-orthonormalize a nearly-orthogonal rotation matrix (via quaternion).
 [[nodiscard]] ASTRO_EXPORT Mat3 orthonormalize(const Mat3& m) noexcept;
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

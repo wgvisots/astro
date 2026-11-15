@@ -51,14 +51,12 @@ namespace astro {
 /// Earth central angle (rad) from the sub-satellite point to the edge of
 /// coverage for a satellite at `altitude` and a minimum elevation, spherical
 /// Earth of radius `radius`.
-[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT coverageHalfAngle(double altitude,
-                                                                 double minElevation = 0.0,
-                                                                 double radius       = constants::wgs84A) noexcept;
+[[nodiscard]] ASTRO_EXPORT double
+coverageHalfAngle(double altitude, double minElevation = 0.0, double radius = constants::wgs84A) noexcept;
 
 /// Slant range (m) to the edge of coverage.
-[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT maxSlantRange(double altitude,
-                                                             double minElevation = 0.0,
-                                                             double radius       = constants::wgs84A) noexcept;
+[[nodiscard]] ASTRO_EXPORT double
+maxSlantRange(double altitude, double minElevation = 0.0, double radius = constants::wgs84A) noexcept;
 
 /// Coverage footprint boundary: `n` points at central angle `halfAngle` around
 /// a sub-satellite point (spherical geometry; lat/lon in rad, h = 0). Point i lies
@@ -72,9 +70,7 @@ namespace astro {
 
 /// True if the straight segment between two positions does not intersect the
 /// ellipsoid (optionally inflated by `margin` meters, e.g. for the atmosphere).
-[[nodiscard]] ASTRO_EXPORT bool ASTRO_EXPORT lineOfSight(const Vec3&      a,
-                                                         const Vec3&      b,
-                                                         const Ellipsoid& ell    = Ellipsoid::wgs84(),
-                                                         double           margin = 0.0) noexcept;
+[[nodiscard]] ASTRO_EXPORT bool
+lineOfSight(const Vec3& a, const Vec3& b, const Ellipsoid& ell = Ellipsoid::wgs84(), double margin = 0.0) noexcept;
 
 } // namespace astro

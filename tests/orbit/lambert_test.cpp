@@ -122,10 +122,12 @@ TEST(Lambert, MinimumEnergyTimeGivesTheMinimumEnergyEllipse) {
 }
 
 TEST(Lambert, ClosesOnTheArrivalPointIncludingMultipleRevolutions) {
-    std::mt19937                           rng(23);
-    std::uniform_real_distribution<double> u(0.0, 1.0);
-    int                                    multi = 0, total = 0;
-    for (int k = 0; k < 300; ++k) {
+    // mt19937's sequence is the same everywhere, but uniform_real_distribution is not (each standard
+    // library has its own algorithm), so the cases are drawn from the raw numbers, in [0, 1).
+    std::mt19937 rng(23);
+    const auto   u     = [](std::mt19937& g) { return static_cast<double>(g()) / 4294967296.0; };
+    int          multi = 0, total = 0;
+    for (int k = 0; k < 400; ++k) {
         const Vec3 r1{(7000 + 20000 * u(rng)) * km * (u(rng) - 0.5),
                       (7000 + 20000 * u(rng)) * km * (u(rng) - 0.5),
                       3000 * km * (u(rng) - 0.5)};

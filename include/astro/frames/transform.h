@@ -37,6 +37,7 @@
 /// with the classical equinox-based frames (J2000/EME2000, MOD, TOD, PEF) and
 /// TEME (the SGP4 output frame) available for interoperability.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Reference frames handled by FrameTransformer. All are geocentric.
 enum class Frame {
@@ -190,4 +191,5 @@ private:
 }
 /// @}
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

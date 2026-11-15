@@ -30,6 +30,7 @@
 /// \file
 /// The Ephemeris interface and the Body identifiers (NAIF ids).
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Solar-system bodies, numbered with their NAIF integer IDs.
 ///
@@ -103,4 +104,5 @@ public:
     [[nodiscard]] Vec3 position(Body target, Body center, const Time& t) const { return state(target, center, t).r; }
 };
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

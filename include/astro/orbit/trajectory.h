@@ -45,6 +45,7 @@
 /// ephemeris. The search functions (findPasses, groundTrack, findEclipses, closestApproach, ...)
 /// take a Trajectory and check its frame.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// How Trajectory propagates an element set or a state vector.
 enum class TrajectoryModel {
@@ -203,4 +204,5 @@ private:
 /// throws astro::Error as Ephemeris::state does.
 [[nodiscard]] ASTRO_EXPORT Trajectory bodyTrajectory(const Ephemeris& eph, Body target);
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

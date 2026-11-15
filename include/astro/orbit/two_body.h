@@ -73,10 +73,10 @@ struct Stumpff {
 /// parameter of the central body (m^3/s^2). No process noise; for that,
 /// or for any force beyond the point mass, use NumericalPropagator::propagateWithCovariance.
 /// Throws astro::Error as propagateKepler does.
-[[nodiscard]] ASTRO_EXPORT StateCovariance ASTRO_EXPORT propagateKeplerWithCovariance(const StateVector& s0,
-                                                                                      double             dt,
-                                                                                      const Mat6&        P0,
-                                                                                      double mu = constants::gmEarth);
+[[nodiscard]] ASTRO_EXPORT StateCovariance propagateKeplerWithCovariance(const StateVector& s0,
+                                                                         double             dt,
+                                                                         const Mat6&        P0,
+                                                                         double             mu = constants::gmEarth);
 
 /// Two-body propagation of a 12-component state (position, velocity, acceleration, jerk) by dt
 /// seconds. The output acceleration and jerk are those of the point mass (plus the unmodeled
@@ -136,7 +136,7 @@ struct LambertSolution {
 
 /// The Lambert solution without a complete revolution (the first of lambertIzzo's). Throws
 /// astro::Error as lambertIzzo does.
-[[nodiscard]] ASTRO_EXPORT LambertSolution ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT LambertSolution
 lambert(const Vec3& r1, const Vec3& r2, double tof, double mu = constants::gmEarth, bool prograde = true);
 
 } // namespace astro
