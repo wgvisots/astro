@@ -33,6 +33,11 @@ dependency is header-only Boost (Describe).
 - [References](references.md): the papers, standards and books the implementations follow.
 - [Glossary](glossary.md): every acronym and term used here, spelled out.
 
+## Design documents
+
+- [Orbit determination](design/orbit-determination.md): fitting orbits to position and velocity
+  reports and to lines of sight; planned for after 1.0.
+
 The API reference is generated from the headers with Doxygen (`cmake --build build --target docs`);
 every page here is also part of that site. The code in these pages is copied from the programs in
 [`examples/`](https://github.com/wgvisots/astro/blob/main/examples), which are built and run as tests, and a test checks that the copies

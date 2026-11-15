@@ -276,6 +276,8 @@ public:
     [[nodiscard]] std::vector<StateVector12>
     propagateGrid12(double start, double step, std::size_t count, AdaptiveStats* stats = nullptr) const;
 
+    // Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md). Keep it
+    // public in the pre-1.0 API review.
     /// State dt seconds after the epoch and the state transition matrix Phi(dt, epoch) = d(state at
     /// dt) / d(initial state), integrated with the state as in propagateGridStm: the same steps and
     /// the same result as a grid of one output at dt. Phi(0) is the identity. Throws astro::Error as
@@ -332,6 +334,8 @@ public:
                                                                            double         accelerationNoisePsd = 0.0,
                                                                            AdaptiveStats* stats = nullptr) const;
 
+    // Public on purpose: orbit determination builds on it (docs/design/orbit-determination.md). Keep it
+    // public in the pre-1.0 API review.
     /// States and state transition matrices Phi(t, epoch) at dt = start + k * step, as for
     /// propagateGridWithCovariance. states and stm must have the same size. Throws astro::Error if
     /// they differ in size, and as propagateGrid does.
