@@ -100,3 +100,21 @@ The CMake options are listed in [Getting started](docs/guide/getting-started.md)
 
 Each release is tagged `vMAJOR.MINOR.PATCH` on `main`, with the version set in `CMakeLists.txt` and
 the changes listed in `CHANGELOG.md` under that version and its date.
+
+To make a release:
+
+1. In a pull request, set `project(VERSION ...)` in `CMakeLists.txt`, and give the version's
+   CHANGELOG section its date and its compare link. Merge it.
+2. Tag that commit on `main` and push the tag: `git tag -s v0.4.0 -m "astro 0.4.0"`, then
+   `git push origin v0.4.0`.
+3. CI runs on the tag. When every job passes, its last job, Release, publishes the GitHub release:
+
+   | Release | From |
+   |---|---|
+   | Files | the `.deb` and `.rpm` built by that run, and `SHA256SUMS` |
+   | Notes | the version's CHANGELOG section (`tools/release_notes.py`) |
+   | Source archives | added by GitHub to every release |
+
+The Release job stops without publishing if the tag does not match the version in `CMakeLists.txt`,
+or if the CHANGELOG section is not dated. It also runs on every other push, without publishing,
+and shows the notes it would use in the job summary: check them there before tagging.

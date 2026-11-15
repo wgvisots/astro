@@ -4,6 +4,16 @@ All notable changes to astro. The format follows [Keep a Changelog](https://keep
 and the version numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html): before 1.0, a
 change that breaks existing code raises the minor number.
 
+## [Unreleased]
+
+### Build and packaging
+
+- **A release tag publishes the GitHub release.** When CI passes on a tag `vX.Y.Z`, its new last
+  job attaches the `.deb` and `.rpm` that run built, with `SHA256SUMS`, and takes the notes from
+  the version's CHANGELOG section (`tools/release_notes.py`). It refuses a tag that does not match
+  `project(VERSION)` and an undated section. On every other push it shows the notes it would use,
+  without publishing. The steps are in CONTRIBUTING.
+
 ## [0.3.0] - 2026-11-14
 
 ### Breaking changes
