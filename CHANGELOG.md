@@ -4,7 +4,7 @@ All notable changes to astro. The format follows [Keep a Changelog](https://keep
 and the version numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html): before 1.0, a
 change that breaks existing code raises the minor number.
 
-## [0.3.0] - unreleased
+## [0.3.0] - 2026-11-14
 
 ### Breaking changes
 
@@ -14,16 +14,17 @@ change that breaks existing code raises the minor number.
   default, and `frame()` returns it. The two-body and secular models are inertial and throw
   `astro::Error` for an Earth-fixed frame (TIRS, PEF, ITRS); a function may be in any frame.
   `UncertainTrajectory(epoch, state, covariance, frame, ...)` takes the frame after the covariance.
+  [#17]
 - **The search functions take a `Trajectory` and check its frame**, throwing `astro::Error` that
   names the frame given and the one needed: `findPasses` and `groundTrack` need `Frame::ITRS`;
   `findEclipses(sat, sun, ...)` needs one frame for both (any frame; it uses positions); and
   `closestApproach`, `closeApproaches`, `assessConjunction` and `assessConjunctions` need one inertial
-  frame for both objects. The results for valid input are unchanged.
+  frame for both objects. The results for valid input are unchanged. [#17]
 - **Removed:** `ItrsStateFunction`, `sgp4ItrsFunction`, and the `std::function<Vec3(const Time&)>`
   parameters of `groundTrack` and `findEclipses`. New helpers make the usual trajectories:
   `sgp4Trajectory(sgp4, eop, frame)` (SGP4's TEME output converted to `frame`; in `Frame::ITRS` it
   gives the same numbers as `sgp4ItrsFunction` did) and `bodyTrajectory(eph, target)` (an
-  ephemeris state, in `Frame::GCRS`).
+  ephemeris state, in `Frame::GCRS`). [#17]
 - **One look-angle type, `LookAngles`** (`astro/geodesy/local.h`), with `az`, `el`, `range` and
   `rangeRate`. It replaces `Aer` and moves from `astro/satellite/look.h` (which includes it).
   `rangeRate` is NaN unless the function was given a velocity, so a missing value never reads as
@@ -31,7 +32,7 @@ change that breaks existing code raises the minor number.
   is `lookAnglesToEnu`, `ecefToAer` is `ecefToLookAngles`, `aerToEcef` is `lookAnglesToEcef`, and
   `lookAngles(satItrs, site, ell)` is the `StateVector` overload `ecefToLookAngles(satItrs, site,
   ell)`. `starObserved`, `bodyObserved` and `gcrsToTopocentric` return `LookAngles` with
-  `rangeRate` NaN. Every computed number is unchanged.
+  `rangeRate` NaN. Every computed number is unchanged. [#18]
 - **One error style**, written down at the top of `astro/core/error.h`: a failure throws
   `astro::Error`; a message starts with the function's name (`"Function: what is wrong (got
   <value>)"`; the messages of the time scales, the leap-second table, `gcrsToCelestialMatrix`,
@@ -47,7 +48,7 @@ change that breaks existing code raises the minor number.
   that is not an ellipse instead of returning NaN, and is no longer `noexcept`; `mahalanobis2`
   throws for `n` outside 1 to 6 instead of returning `nullopt`. `toString(Frame)`,
   `toString(TimeScale)` and `toString(Body)` give `"INVALID_VALUE"` (as `operator<<` does) instead
-  of `"?"` for a value that is not an enumerator. Every computed number is unchanged.
+  of `"?"` for a value that is not an enumerator. Every computed number is unchanged. [#19]
 
 Before / after:
 
@@ -88,22 +89,49 @@ if (r.status == Sgp4Status::Decayed) { /* decayed */ }
 keplerianToEquinoctial(hyperbola);                   // throws astro::Error
 ```
 
+### Added
+
+- **Conan 2 recipe** (`conanfile.py`, with `test_package/`), for static and shared builds. It gets
+  Boost's headers from ConanCenter. CI builds and tests both kinds of package. [#21]
+- Example `data_files`: loads whichever data files are present, falls back to what is built in, and
+  reports how long the loaded data remains valid. [#21]
+
+### Documentation
+
+- **[Compatibility](docs/compatibility.md)**, the official policy [#21]:
+  - what a version number promises: 0.x is in flux; 1.x keeps source compatibility, not binary
+    compatibility
+  - what counts as public API, and what not to rely on
+  - deprecation in 1.x, removal only in 2.0
+  - the supported platforms
+- **[Accuracy and validation](docs/accuracy.md)** completed [#21]:
+  - a summary by module
+  - every number re-measured against today's tests (several tolerances had been tightened since)
+  - rows for every component checked against an independent reference
+  - separate lists of what is checked only for consistency and what is not yet validated
+- Study `astro_study_low_precision`: the low-precision Sun and Moon against the full DE440s kernel,
+  1950-2050. It confirms the documented 30" and 6' (measured 28.6" and 5.76'). [#21]
+- **[Data files](docs/guide/data-files.md)**: what is built in, where each file comes from, how often
+  it changes, what is lost without it, how to load it, and how each loader behaves when its data runs
+  out (EOP throws; a leap-second table goes quietly stale, so check its expiry at start-up). [#21]
+
 ### Build and packaging
 
 - **The shared library exports only the public API.** It is built with hidden visibility; public
-  functions and classes are marked `ASTRO_EXPORT`, from the generated header `astro/export.h`.
+  functions and classes are marked `ASTRO_EXPORT`, from the generated header `astro/export.h`. [#20]
   - No source changes for users.
   - Internal symbols (`detail` namespaces, implementation classes) are no longer exported: 501
     symbols instead of 625.
   - `tools/check_exports.py` (a test in shared builds) fails if an internal symbol leaks.
 - **The soname carries the minor version**, `libastro.so.MAJOR.MINOR` (`libastro.so.0.3` for this
   release), because a minor release may change the binary interface (see the compatibility policy).
-  Programs linked against a shared 0.2 build must be relinked.
+  Programs linked against a shared 0.2 build must be relinked. [#20]
 - **`astro/astro.h`** includes every public header, for convenience. A test checks that it is
-  complete, and the build checks that every public header compiles on its own.
+  complete, and the build checks that every public header compiles on its own. [#20]
 - CI builds and tests a shared library too, and builds a program against the installed result.
+  [#20]
 
-## [0.2.0] - unreleased
+## [0.2.0] - 2026-11-14
 
 The first tagged release. It follows a top-to-bottom review of the library (November 2026), which
 fixed its defects, made its interface consistent, and strengthened its tests and documentation.
@@ -212,5 +240,6 @@ About 60 defects, each with a regression test that failed first [#6, #8, #10]. A
 The first milestone [#1]: time scales, geodesy, reference frames, ephemerides, astrometry, orbit
 propagation and satellite geometry. Not tagged.
 
+[0.3.0]: https://github.com/wgvisots/astro/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/wgvisots/astro/compare/db6a4b2...v0.2.0
 [0.1.0]: https://github.com/wgvisots/astro/pull/1

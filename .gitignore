@@ -39,3 +39,7 @@ build-*/
 cmake-build-*/
 .idea/
 .vscode/
+
+# Conan (conan create writes test_package/build/, already covered by build/ above)
+CMakeUserPresets.json
+__pycache__/

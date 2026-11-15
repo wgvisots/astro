@@ -1,40 +1,53 @@
-# Accuracy
+# Accuracy and validation
 
-Two kinds of evidence: the unit tests compare each component against an independent reference and
-fail if the difference exceeds the stated tolerance; the studies in [`studies/`](https://github.com/wgvisots/astro/blob/main/studies)
-measure the propagators and consistency checks end to end. Everything here can be reproduced (see
-the end of the page).
+This page is the evidence behind each model in the library: what it was checked against, the
+tolerance the check enforces, and how close it actually comes. The first tables are unit tests
+(`ctest` runs them on every build): each compares a component with an independent reference and
+fails if the difference exceeds the **tolerance**. The **largest difference measured** is the worst
+case over all the test's points, measured on the current code; it shows how much margin the
+tolerance leaves. The sections after them are the studies in [`studies/`](https://github.com/wgvisots/astro/blob/main/studies),
+which measure the propagators, the closest-approach search, the collision probability and the
+consistency checks end to end. Every number here can be reproduced with the commands at the end of
+the page. The test named in each row is in `tests/<module>/`.
+
+Three kinds of evidence are kept apart:
+
+- **Independent references**: published reference software (ERFA, jplephem, Vallado's SGP4 code, NASA
+  CARA), worked examples printed in textbooks and standards, or a solution computed in the test by a
+  different method (a closed form, extended precision, brute force).
+- **Consistency only**: round trips, identities and agreement between two routes through the
+  library. They catch mistakes in the plumbing, not in the model.
+- **Not yet validated**: components with no independent check, listed so that nobody assumes one.
+
+## Summary
+
+| Module | Main references | Section |
+|---|---|---|
+| time | ERFA (time scales, TDB), published Julian day numbers, GNSS interface documents | [Time](accuracy.md#time) |
+| frames | ERFA (IAU 2006/2000A precession-nutation, Earth rotation), Vallado Example 3-15, IERS Conventions (2010) | [Reference frames and Earth orientation](accuracy.md#reference-frames-and-earth-orientation) |
+| geodesy | ERFA `gc2gd`, extended-precision references, the Geocentric Datum of Australia geodesic, the geodesic equation integrated, EPSG Guidance Note 7-2 | [Geodesy](accuracy.md#geodesy) |
+| ephemeris | `jplephem` on DE440s | [Ephemerides](accuracy.md#ephemerides) |
+| astrometry | ERFA (`atco13`, `refco`, galactic), Hipparcos catalogue, Meeus, almanac and US Naval Observatory times | [Astrometry](accuracy.md#astrometry) |
+| orbit | Vallado's SGP4 verification set, Vallado and Curtis worked examples, Brouwer (1959), extended-precision two-body solutions, NASA CARA, Alfano (2009) | [Orbits](accuracy.md#orbits), and the studies from [Numerical propagation](accuracy.md#numerical-propagation) to [Impact prediction](accuracy.md#impact-prediction) |
+| satellite | closed-form passes, ground tracks and look angles; shadow geometry; brute-force searches; Monte Carlo | [Satellites](accuracy.md#satellites), [Consistency checks](accuracy.md#consistency-checks) |
 
 ## Validated against independent references (unit tests)
 
-| Component | Reference | Test tolerance |
-|---|---|---|
-| Time scales UTC, TAI, TT, TDB, TCG, TCB, UT1, 1960-2035 incl. leap-second days | ERFA [ERFA](https://github.com/liberfa/erfa) (see the note below the table) | 1 ns |
-| CIP X, Y (IAU 2006/2000A), 1900-2100 | ERFA `xy06` | 0.5 uas |
-| CIO locator s | ERFA `s06` | 0.05 uas |
-| Nutation dpsi / deps | ERFA `nut06a` | 5 / 1 uas (IERS tables and ERFA differ by a few uas at +-100 yr) |
-| GAST | ERFA `gst06a` | 5 uas |
-| GCRS -> ITRS rotation | ERFA `c2tcio` | 1 uas |
-| IAU 2000B vs 2000A | the full model | 5 mas |
-| ITRF -> GCRF, TEME, PEF | Vallado, Example 3-15 [Vallado (2013)](https://celestrak.org/software/vallado-sw.php) | 5 cm, 0.05 mm/s (the example uses IAU 2000) |
-| Geodetic <-> ECEF | ERFA `gc2gd` near the surface; round trips everywhere | 2e-12 rad and 10 um; round trip 1e-8 m |
-| ICRS <-> galactic | ERFA | 1e-14 rad |
-| Refraction constants A, B | ERFA `refco` | 1e-15 |
-| Observed place of a star (ICRS -> az/el) | ERFA `atco13` | 1 mas (1" below 10 deg elevation with refraction) |
-| JPL SPK reader, both byte orders | `jplephem` on DE440s | 1e-12 relative + 1 mm |
-| Low-precision Sun / Moon | DE440 | tested 0.01 deg / 0.1 deg; measured 1950-2050: Sun < 30", 6e-5 in distance; Moon < 6', 0.14% |
-| SGP4 / SDP4 | Vallado's verification set, all cases [Vallado et al. (2006)](https://celestrak.org/publications/AIAA/2006-6753/) | 1 mm, 1 um/s (largest difference measured: 0.12 mm) |
-| Kepler, elements, Lambert | Vallado Examples 2-4, 2-5, 7-5; Curtis Example 5.2 [Curtis](https://shop.elsevier.com/books/orbital-mechanics-for-engineering-students/curtis/978-0-12-824025-0) | about the printed precision (Kepler 1 m, 1 mm/s; Lambert 2 mm/s and 0.06 m/s) |
-| Two-body propagation (`propagateKepler`), every conic | extended-precision universal variables solved by bisection: e from 0 to 50, both sides of e = 1, steps of 0.01 s to 1e5 s | 1e-12 of the state (largest measured: 1.5e-13) |
-| Numerical J2/J4 | energy integral; Brouwer secular rates | energy 1e-10 over 10 days; node rate 0.3% |
-| State transition matrix | finite differences of propagations; symplectic identity | 1e-6 relative; 1e-8 |
-| Interpolated STM between steps | integration to the exact time | 2e-8 (default tolerance), 2e-6 (relTol 1e-9) |
-| Covariance propagation | Monte Carlo: priors sampled from their covariance give chi-square distances | mean d^2 within 6 +- 0.6 (6-D, 400 samples), 6 +- 0.9 (elements, 4 h), 3 +- 0.45 (position, 4 h) |
-
 The ERFA reference values are generated by [`tools/gen_reference.py`](https://github.com/wgvisots/astro/blob/main/tools/gen_reference.py)
-and committed under `tests/data`.
+and committed under `tests/data`, with the JPL fixtures from `tools/make_spk_fixture.py`. Links in the
+Reference column go to [References](references.md).
 
-Two rows of this table are less independent than the others, and say so here:
+### Time
+
+| Component | Reference | Tolerance | Largest difference measured | Test |
+|---|---|---|---|---|
+| UTC to TAI, TT, TDB, TCG, TCB and UT1, 1960-2035, leap-second days included (UT1 from 1972) | [ERFA](references.md#standards-and-reference-software) (see the note below) | 1e-10 s | 1.9e-11 s (TDB, TCG, TCB); TAI and TT identical | `TimeScales.MatchesErfa` |
+| TDB - TT, geocentric and with the observer terms (50 random observers) | ERFA `eraDtdb` | 1e-15 s | identical | `TimeScales.MatchesErfa`, `TimeScales.TopocentricTdb` |
+| UT1 before 1972, while UTC drifted | the published TAI - UTC drift coefficients, with ERFA's TAI | 1e-10 s | 4.8e-12 s (3.1e-12 s on the two shortened UTC days) | `TimeScales.Ut1Before1972IsUtcPlusDut1`, `TimeScales.Ut1OnTheShortenedUtcDaysIsUtcPlusDut1` |
+| Julian day numbers | published dates (J2000, MJD 0, Unix and GPS epochs, the Gregorian reform, JD 0) | exact | identical | `JulianDayNumber.PublishedDates` |
+| GPS, Galileo and BeiDou week and time of week | worked from the epochs of the interface documents ([References](references.md#time)) | 1e-9 s | 8.9e-16 s | `Time.Gnss` |
+
+Two caveats about the rows that compare with ERFA, here and in the tables below:
 
 - **Time scales.** The TDB series and the leap-second table are themselves taken from ERFA, so
   comparing them with ERFA checks the transcription, not the model. Before 1972, UT1 is compared
@@ -44,6 +57,144 @@ Two rows of this table are less independent than the others, and say so here:
 - **Functions that follow ERFA routines** (listed in
   [THIRD_PARTY_NOTICES.md](https://github.com/wgvisots/astro/blob/main/THIRD_PARTY_NOTICES.md)):
   agreement with ERFA shows that they were carried over correctly.
+
+### Reference frames and Earth orientation
+
+| Component | Reference | Tolerance | Largest difference measured | Test |
+|---|---|---|---|---|
+| CIP X, Y (IAU 2006/2000A), 1900-2100 | ERFA `xy06` | 0.5 uas | 4e-7 uas | `PrecessionNutation.MatchesErfa` |
+| CIO locator s | ERFA `s06` | 0.05 uas | 2e-11 uas | `PrecessionNutation.MatchesErfa` |
+| Nutation dpsi / deps (IAU 2000A) | ERFA `nut06a` | 5 / 1 uas (the IERS tables and ERFA apply the IAU 2006 adjustment differently: a few uas at +-100 years) | 3.2 / 0.86 uas | `PrecessionNutation.MatchesErfa` |
+| Nutation IAU 2000B | ERFA `nut00b` | 1e-15 rad | identical | `PrecessionNutation.MatchesErfa` |
+| Earth rotation angle, GMST (1982 and IAU 2006) | ERFA `era00`, `gmst82`, `gmst06` | 1e-12 rad | identical | `PrecessionNutation.MatchesErfa` |
+| GAST | ERFA `gst06a` | 5 uas | 2.9 uas | `PrecessionNutation.MatchesErfa` |
+| Frame bias, precession, bias-precession matrices | ERFA `bp06` | 1e-15, 1e-14, 1e-14 | 1.1e-16, 3.3e-16, 2.2e-16 | `PrecessionNutation.MatchesErfa` |
+| Frame bias matrix | the published bias angles, IERS Conventions (2010) eq. 5.22 | 1 uas (xi0, eta0); 0.05 mas (d alpha0, its printed precision) | 0.20 uas; 0.18 uas | `FrameBias.MatchesThePublishedAngles` |
+| Fundamental arguments | IERS Conventions (2010) eq. 5.43 and 5.44 | 5e-12 rad | 1.5e-12 rad | `PrecessionNutation.FundamentalArgumentsArePublishedPolynomials` |
+| Precession-nutation-bias matrix | ERFA `pnm06a` | 5 uas | 2.9 uas | `PrecessionNutation.MatchesErfa` |
+| GCRS -> ITRS rotation, with polar motion, UT1 and pole offsets | ERFA `c2tcio` | 1 uas | 2.2e-16 rad (5e-5 uas) | `PrecessionNutation.MatchesErfa`, `FrameTransformer.WithEarthOrientationDataMatchesErfa` |
+| True of date and CIRS matrices (IAU 2000B nutation), 1900-2100 | ERFA's IAU 2000A matrices | 2 mas | 1.46 mas (TOD), 0.64 mas (CIRS) | `CelestialMatrix.MatchesErfaFrom1900To2100` |
+| IAU 2000B against IAU 2000A | the full model | 1 mas (GCRS -> ITRS, 2030); 5 mas (dpsi, 1900-2100) | 0.27 mas; 1.6 mas | `FrameTransformer.Model2000BWithinMilliarcsecond`, `PrecessionNutation.MatchesErfa` |
+| ITRF -> GCRF, TEME, PEF | [Vallado (2013)](references.md#orbits-and-propagation), Example 3-15 (which uses IAU 2000) | per component: 2 cm and 1e-5 m/s (GCRF, TEME); 0.5 mm and 1e-6 m/s (PEF) | GCRF 1.0 cm, 4.5e-6 m/s; TEME 6.7 mm, 4.7e-6 m/s; PEF 0.06 mm, 3.0e-7 m/s | `ValladoExample.ItrfToGcrf`, `ValladoExample.TemeAndPef`, `ValladoExample.OneOffConversionsBetweenTemeItrsAndGcrs` |
+
+### Geodesy
+
+| Component | Reference | Tolerance | Largest difference measured | Test |
+|---|---|---|---|---|
+| Geodetic -> ECEF, 400 points with heights from -6300 km to +39 400 km | ERFA `gd2gc` | 1e-8 m + 1e-15 of the radius | 7.5e-9 m | `Geodetic.MatchesErfaAndRoundTrips` |
+| ECEF -> geodetic at the same points | the geodetic coordinates they were generated from | 2e-15 rad; 1e-8 m (scaled with the height above 1000 km) | 8.9e-16 rad, 3.0e-9 m | `Geodetic.MatchesErfaAndRoundTrips` |
+| ECEF -> geodetic within 100 km of the surface | ERFA `gc2gd` | 1e-15 rad, 1e-8 m | 3.3e-16 rad, 2.5e-9 m | `Geodetic.MatchesErfaAndRoundTrips` |
+| ECEF -> geodetic on and next to the polar axis, and inside the evolute | the nearest foot of the normal, found in extended precision in the test | 1e-15 rad, 1e-8 m | 2.2e-16 rad, 2.8e-9 m | `Geodetic.OnAndNextToThePolarAxisMatchesExtendedPrecision`, `Geodetic.InsideTheEvoluteMatchesExtendedPrecision` |
+| WGS84 derived constants (b, e'^2, mean radius) | NIMA TR8350.2, table 3.3, to its printed precision | 1e-6 m, 5e-15, 5e-5 m | 1.8e-7 m, 3.6e-15, 1.5e-5 m | `Ellipsoid.DerivedQuantities`, `Ellipsoid.PublishedAndClosedFormValues` |
+| Geodesics (Vincenty's formulae), inverse and direct | the Flinders Peak to Buninyong line of the [Geocentric Datum of Australia manual](references.md#geodesy) | 1 mm, 0.01" | 0.14 mm, 0.0031" | `Geodesic.VincentyFlindersPeakToBuninyong` |
+| Geodesics, 11 lines from 1 km to 19 000 km, near-meridional and near-equatorial ones included | the geodesic's differential equation, integrated in extended precision in the test | 0.1 mm, 5e-11 rad | 0.076 mm, 3.3e-11 rad | `Geodesic.DirectMatchesTheIntegratedGeodesicEquation`, `Geodesic.InverseMatchesTheIntegratedGeodesicEquation` |
+| Geodesics on a sphere, haversine distance | spherical trigonometry | 5e-8 m, 1e-14 rad | 1.1e-8 m, 6e-17 rad | `Geodesic.OnASphereTheGeodesicIsTheGreatCircle` |
+| Helmert transformation (7 parameters, position-vector convention) | EPSG Guidance Note 7-2, WGS 72 to WGS 84, printed to 1 cm | 1 cm | 5.9 mm | `Helmert.VelocityIsTheTimeDerivativeOfThePositionInMetresPerSecond` |
+
+### Ephemerides
+
+| Component | Reference | Tolerance | Largest difference measured | Test |
+|---|---|---|---|---|
+| JPL SPK reader, both byte orders | `jplephem` on DE440s, 125 states | 1e-12 relative + 1 mm; 1e-6 m/s | 0.37 of the tolerance (0.5 mm); 2.9e-9 m/s | `SpkTest.MatchesJplephem` |
+| Low-precision Sun | [DE440](references.md#ephemerides-and-astrometry), January to March 2024 | 0.01 deg, 6e-5 in distance | 0.0038 deg (14"), 9.0e-6 | `LowPrecision.SunAndMoonAgainstDe440` |
+| Low-precision Moon | DE440, January to March 2024 | 0.1 deg, 2e-3 in distance, 4 m/s | 0.038 deg (2.3'), 6.4e-4, 2.2 m/s | `LowPrecision.SunAndMoonAgainstDe440` |
+| Low-precision Sun, 1950-2050 | DE440s (the full kernel), every 6 h | documented: 30", 6e-5 in distance | 28.6", 5.2e-5 | study `astro_study_low_precision` |
+| Low-precision Moon, 1950-2050 | DE440s (the full kernel), every 6 h | documented: 6', 0.14% in distance | 5.76', 0.13% | study `astro_study_low_precision` |
+
+### Astrometry
+
+| Component | Reference | Tolerance | Largest difference measured | Test |
+|---|---|---|---|---|
+| ICRS <-> galactic | ERFA `icrs2g` | 1e-14 rad | 1.1e-16 rad | `Spherical.GalacticMatchesErfa` |
+| ICRS -> galactic matrix | [Hipparcos catalogue](references.md#ephemerides-and-astrometry), eq. 1.5.11, printed to 10 decimals | 5e-11 | 4.9e-11 (the rounding of the print) | `Spherical.GalacticMatrixIsTheHipparcosOne` |
+| Refraction constants A, B | ERFA `refco` | 1e-15 | identical | `Refraction.ConstantsMatchErfa` |
+| Bennett's and Saemundsson's refraction formulas, 0 to 90 deg | [Meeus (1998)](references.md#ephemerides-and-astrometry), eq. 16.3 and 16.4 | 1e-7 arcmin | 2.2e-8 arcmin | `Refraction.BennettAndSaemundssonMatchMeeus` |
+| The same, Meeus's example 16.a | the printed refraction | 0.002 / 0.0025 arcmin | 0.0011 / 0.0021 arcmin | `Refraction.BennettAndSaemundssonMatchMeeus` |
+| Observed place of a star (ICRS -> azimuth, elevation), with and without refraction | ERFA `atco13`, 120 cases | 0.1 mas | 0.032 mas | `Apparent.ObservedPlaceMatchesErfaAtco13` |
+| Light deflection by the Sun | 2 G M / (c^2 d) cot(theta / 2) | 1e-10 relative + 1e-15 rad | 2.6e-16 rad | `Apparent.LightDeflectionByTheSunIsTwiceTheNewtonianAngle` |
+| Aberration | the Lorentz transformation of direction | 5e-12 rad | 1.9e-12 rad | `Apparent.AberrationIsTheLorentzTransformationOfDirection` |
+| GMST at 0h UT1 | ERFA `gmst06`, printed to 1 ms | 1 ms | 0.036 ms | `Sidereal.LocalSiderealTimeAndHourAngle` |
+| Sunrise, sunset and transit, Greenwich, 2024-06-21 | published almanac times, to the minute | 90 s | 6.1 s (rise), 0.3 s (set), 2.6 s (transit) | `RiseSet.LondonSolstice` |
+| Moon phase (full and new moon, January and February 2024) | US Naval Observatory phases of the Moon, to the minute | 0.02 deg | 0.0058 and 0.0075 deg | `RiseSet.MoonRiseSetAndPhase` |
+
+### Orbits
+
+| Component | Reference | Tolerance | Largest difference measured | Test |
+|---|---|---|---|---|
+| SGP4 / SDP4 | [Vallado et al. (2006)](references.md#orbits-and-propagation): the verification set, all cases | 1 mm, 1 um/s | 0.12 mm, 0.85 um/s | `Sgp4.VerificationAgainstVallado` |
+| SGP4 with an epoch on a leap-second day | the output of Vallado's reference code | 1 mm, 1 um/s | 1.8 um, 7.4e-10 m/s | `Sgp4.EpochOnALeapSecondDayMatchesTheReferenceCode` |
+| TLE parser | CelesTrak's example element set; Vallado's verification file read for the SGP4 row above | exact | identical | `Tle.ParseIssExample`, `Sgp4.VerificationAgainstVallado` |
+| Kepler's equation, elliptic and hyperbolic | 60-digit solutions (mpmath), up to e = 1 - 1e-12 | 4 units in the last place (plus the effect of the last place of M) | 0.09 and 0.19 of the tolerance | `Kepler.EccentricAnomalyMatchesHighPrecisionReference`, `Kepler.HyperbolicAnomalyMatchesHighPrecisionReference` |
+| Two-body propagation (`propagateKepler`), every conic | universal variables solved by bisection in extended precision: e from 0 to 50, both sides of e = 1, steps of 0.01 s to 1e5 s | 1e-12 of \|x0\| + \|x\| | 4.0e-14 (position), 5.1e-14 (velocity) | `PropagateKepler.MatchesExtendedPrecisionOnEveryConic` |
+| Two-body propagation | [Vallado (2013)](references.md#orbits-and-propagation), Example 2-4 | 0.1 m, 0.5 mm/s (twice the example's own rounding) | 4.7 cm, 0.25 mm/s | `TwoBody.ValladoExample2_4` |
+| State to elements | Vallado (2013), Example 2-5 | p, a 10 m; e 1e-6; i, nu 1e-3 deg; node, perigee 0.01 deg (just above the example's own rounding) | 8.3 m, 5.4 m; 4.0e-7; 8.7e-4, 1.6e-4 deg; 8.3e-3, 4.9e-3 deg | `Elements.ValladoExample2_5` |
+| Lambert's problem | Vallado (2013), Example 7-5; [Curtis (2020)](references.md#orbits-and-propagation), Example 5.2 | 2 mm/s; 0.06 m/s (their printed precision) | 0.75 mm/s; 0.040 m/s | `Lambert.ValladoExample7_5`, `Lambert.CurtisExample5_2` |
+| Numerical propagator, point-mass field, 1 day | `propagateKepler` (above) | 1 mm, 1e-6 m/s | 0.57 mm, 6.0e-7 m/s | `NumericalPropagator.PointMassOrbitMatchesKepler` |
+| Secular rates (J2, J2^2, J4) | [Brouwer (1959)](references.md#orbits-and-propagation), written out in extended precision in the test | 16 epsilon of the rates | 0.08 of the tolerance | `Secular.RatesMatchBrouwersFormulasForEccentricOrbits` |
+| Secular rates | slopes of an averaged numerical integration over 20 days (270 revolutions) | node 3e-6, perigee 1e-3, argument of latitude 1e-6 (relative) | 8.4e-7, 1.9e-4, 1.1e-7 | `Secular.RatesMatchAnAveragedNumericalIntegration` |
+| Secular rates, e = 0 | SGP4's rates, written out from `sgp4init` | 1e-15 of the mean motion | 2e-19 | `Secular.BrouwerReducesToSgp4FormForCircularOrbits` |
+| Repeat ground track | Landsat-8 (233 revolutions in 16 days, published a = 7077.7 km) | 1 km | 0.045 km | `Secular.MissionDesignHelpers` |
+| Numerical J2/J4 | the energy integral; the secular node rate | energy 1e-10 over 10 days; node drift 3e-3 | 3.8e-11; 1.5e-5 | `Numerical.J2J4PropagatorConservesEnergyAndFollowsSecularRates` |
+| State transition matrix (numerical) | central differences of propagations; the symplectic identity | 1e-6 relative; 1e-8 | 2.5e-9; 3.6e-10 | `Covariance.StmMatchesFiniteDifferences`, `Covariance.StmIsSymplectic` |
+| Interpolated state transition matrix between steps | integration to the exact time | 2e-8 (relTol 1e-12), 2e-6 (relTol 1e-9) | 1.9e-9, 4.2e-7 | `Covariance.InterpolatedStmMatchesExactStops` |
+| Covariance propagation (numerical) | propagations of the initial state displaced by each column of the covariance's Cholesky factor | 1e-7 of the standard deviations | 1.8e-8 | `Covariance.PropagatedCovarianceMatchesPerturbedTrajectories` |
+| Two-body state transition matrix (`propagateKeplerStm`) | central differences; the integrated point-mass variational equations | 1e-8; 1e-7 (relative to each 3x3 block) | 5.1e-10; 6.9e-11 | `TwoBodyStm.MatchesFiniteDifferences`, `TwoBodyStm.MatchesIntegratedVariationalEquations` |
+| Covariance propagation with the consistency check | Monte Carlo: priors sampled from their covariance give chi-square distances | mean d^2 within 6 +- 0.6 (6-D, 400 samples, 45 min), 6 +- 0.9 (elements, 300 samples, 4 h), 3 +- 0.45 (position, 300 samples, 4 h) | off by 0.24, 0.18, 0.01 | `EstimateTracker.DistanceIsChiSquareForSampledPriors`, `EstimateTracker.ElementTestHoldsOverLongGaps`, `EstimateTracker.PositionTestHoldsOverLongGaps` |
+| Impact point and ellipse | a brute-force reference; central differences of the impact point | 2 cm (three launches; the study in [Impact prediction](accuracy.md#impact-prediction) has four); 1e-4 of the semi-major axis squared | 5.2 mm; 1.4e-8 | `Impact.MatchesBruteForceReference`, `Impact.UncertaintyMatchesFiniteDifferences` |
+
+Closest approaches and collision probabilities have sections of their own below.
+
+### Satellites
+
+| Component | Reference | Tolerance | Largest difference measured | Test |
+|---|---|---|---|---|
+| Pass prediction: rise, set, culmination, azimuths | closed forms: a straight pass over a flat horizon, and a circular equatorial orbit over a spherical Earth | 1 ms in time; 1.2e-9 rad and 1e-12 rad at culmination | 2.5e-6 s; 0 and 1.1e-16 rad | `Passes.WholePassMatchesClosedForm`, `Passes.CircularEquatorialOrbitOverASphereMatchesClosedForm` |
+| Pass prediction on the ISS (SGP4) over a day | a brute-force scan of the elevation (1 s, then 10 ms) | 0.001 deg | 4e-7 deg | `Passes.IssOverSiteMatchesBruteForce` |
+| Look angles and range rate | the closed form of the circular equatorial orbit | 5e-15 rad, 1e-8 m, 2e-11 m/s | 8.9e-16 rad, 1.9e-9 m, 3.6e-12 m/s | `Look.CircularEquatorialOrbitOverASphereMatchesClosedForm` |
+| Coverage half-angle and largest slant range | the same closed form | 2e-15 rad, 1e-8 m | 3.9e-16 rad, 2.8e-9 m | `Passes.CircularEquatorialOrbitOverASphereMatchesClosedForm` |
+| Ground track | the same closed form | 5e-14 rad | 1.4e-14 rad | `Ground.GroundTrackOfACircularEquatorialOrbitRunsAlongTheEquator` |
+| Eclipse entry and exit, cylindrical and conical shadows | the shadow boundaries solved by bisection on the disk geometry in the test ([Montenbruck and Gill](references.md#orbits-and-propagation)) | 2e-4 s | 4.3e-5 s (cylindrical), 2.3e-6 s (conical) | `Eclipse.ConicalAndCylindricalEclipseTimesMatchTheGeometry` |
+| Illumination in the penumbra | the uncovered fraction of the solar disk, integrated numerically in the test | 5e-9 | 1.4e-9 | `Eclipse.PenumbraBoundariesAndIlluminationMatchTheDiskGeometry` |
+
+## Checked for consistency only
+
+These tests pass only if the library agrees with itself; they do not compare with an outside
+reference.
+
+| Component | What is checked | Largest difference measured | Test |
+|---|---|---|---|
+| Earth orientation data (EOP) interpolation | the 4-point Lagrange interpolation reproduces a cubic exactly, and its error on a quartic is the node polynomial; linear interpolation is the chord; finals2000A and C04 files are read as their contents | rounding only: 1.1e-22 rad in polar motion, 4.1e-15 s in UT1 - UTC | `EopTable.Lagrange4ReproducesACubicExactly`, `EopTable.Lagrange4ErrorOnAQuarticIsTheNodePolynomial`, `EopTable.LinearInterpolationIsTheChord`, `EopTable.FilesAreReadLikeTheirContents` |
+| ITRS rotation series (`ItrsRotationSeries`) | exact at its nodes; between them, against `FrameTransformer` | 2.8e-11 rad (tolerance 5e-11) | `ItrsRotationSeries.MatchesFrameTransformerBetweenTheNodes` |
+| Frame transformations | every pair of frames round trips; TIRS and PEF agree to well under 0.1 mas | 5.6e-9 m, 3.6e-12 m/s (tolerances 1e-6 m, 1e-9 m/s) | `FrameTransformer.ConsistencyAndRoundTrips` |
+| Leap-second files | the three formats (IERS `Leap_Second.dat`, IANA `leap-seconds.list`, the table of `tai-utc.dat`) give the built-in table | identical | `LeapSecondFile.AllThreeFormatsGiveTheBuiltInTable` |
+| Helmert transformation with rates (14 parameters) | the velocity is the time derivative of the position written out from the definition; the inverse undoes the transformation to second order | 4e-18 m/s; 1.1e-8 m | `Helmert.VelocityIsTheTimeDerivativeOfThePositionInMetresPerSecond`, `Helmert.TransformAndInverse` |
+| Geodetic <-> ECEF at all heights | round trips | 1.5e-8 m (tolerance 5e-8 m at that point) | `Geodetic.MatchesErfaAndRoundTrips` |
+| Elements <-> state, equinoctial elements | round trips; the definitions | rounding (within a quarter of tolerances of a few units in the last place) | `Elements.RoundTripThroughElementsIsExactToRounding`, `Elements.EquinoctialElementsMatchTheirDefinitionForEllipses` |
+| TLE writer | Vallado's verification file survives parse, format, parse unchanged; each field is written at the nearest value it can hold | identical | `Tle.VerificationSetSurvivesParseFormatParse`, `Tle.ExponentFieldsReadBackWithinHalfAStepOverTheirWholeRange` |
+| Twilight, and Moon rise and set | each event sits on its threshold elevation (the Moon's refracted upper limb) | 1.0e-8 rad (tolerance 1e-6 rad) | `RiseSet.TwilightEventsSitOnTheConventionalSunElevations`, `RiseSet.MoonRiseAndSetAreWhenTheRefractedUpperLimbTouchesTheHorizon` |
+| Solar transit in daily windows | every transit of a year is found once, against a root of the elevation's slope | 1.4 ms (tolerance 10 ms) | `RiseSet.SolarTransitNextToMidnightUtcIsFoundInDailyWindows` |
+| Apparent place of a star | the pipeline written out from the deflection and aberration formulas above | 1.3e-12 rad | `Apparent.StarApparentGcrsIsSpaceMotionThenDeflectionThenAberration` |
+| Eclipses with the real Sun (ISS) | sunlit just outside each eclipse, shadowed just inside | pass / fail | `Eclipse.IssWithRealSun` |
+| Numerical and secular grids | the grid output against propagating to each time directly | numerical at relTol 1e-14: 8.0e-7 m, 8.8e-10 m/s (the Hermite interpolation); secular: 4.2e-14 of a, 2.5e-13 of \|v\| | `NumericalGrid.MatchesStoppingAtEachOutput`, `SecularPropagator.GridMatchesDirectEvaluation` |
+| Gravity gradients, jerk, third-body force | derivatives of the acceleration; the written-out tidal formula | rounding | `Gravity.ZonalGradientIsTheDerivativeOfTheAccelerationAndSymmetric`, `Gravity.ZonalJerkIsDirectionalDerivative`, `ThirdBodyForce.IsTheTidalPullOfTheBodyAtEpochPlusT` |
+| Local orbital frames (RIC, LVLH, NTW, VNC) | matrices of an inclined state worked by hand; a deputy on the same circular orbit | 3.6e-10 m | `OrbitalFrames.MatricesOfAnInclinedStateAreKnownByHand`, `OrbitalFrames.RelativeStateOfADeputyOnTheSameCircularOrbit` |
+
+## Not yet validated against an independent reference
+
+- **Moon rise and set times.** Only checked against the library's own threshold (above); no almanac
+  moonrise or moonset time is compared.
+- **Earth orientation data interpolation.** Not compared with the IERS interpolation software
+  (`interp.f`), only with exact polynomials.
+- **Helmert transformations with rates.** No published 14-parameter example (for instance an ITRF to
+  ITRF transformation) is in the tests; only the 7-parameter EPSG example.
+- **Geodesics against GeographicLib.** The library uses Vincenty's formulae, not Karney's algorithm,
+  and no GeographicLib test data is committed. The integrated geodesic equation above is the
+  independent check.
+- **The numerical propagator with third-body forces**, and the impact predictor, against another
+  propagator. Both are checked against themselves at tighter settings (the studies below), not
+  against an outside program.
+- **Pass prediction and ground tracks against an outside predictor.** Only closed forms and brute
+  force.
 
 ## Numerical propagation
 
@@ -147,8 +298,9 @@ answer is the two-body Phi:
 The step (1e-5 of |r0| and |v0|, fourth-order stencil) balances the truncation error, which grows
 with the number of revolutions and the eccentricity (e = 0.74 over a week), against the rounding
 error of the differences, which grows as the step shrinks: a step ten times smaller gives 2e-10 in
-every cell of this table, and 1.6e-9 for e = 0.74 over a week. The tests also check the linearization against two
-propagations with J2/J4 on, to the expected second-order 3e-4 over a day.
+every cell of this table, and 1.6e-9 for e = 0.74 over a week. The tests also check the linearization against the
+difference of two propagations with J2/J4 on, over a day: within 1e-3 (measured 1.2e-4, the size of the
+second-order term; `SecularStm.IsTheLinearizationOfTheSecularMap`).
 
 Covariances (100 m and 0.1 m/s per axis at the epoch, no process noise): radial / in-track /
 cross-track sigmas of the analytic covariances over those of the numerical J2/J4 covariance:
@@ -214,9 +366,9 @@ a scan of the distance every 0.5 s:
 
 | `stepFraction` | Minima missed | Extra minima | Time per search |
 |---|---|---|---|
-| 0.05 (default) | 0 of 1245 | 0 | 0.21 ms |
+| 0.05 (default) | 0 of 1245 | 0 | 0.20 ms |
 | 0.1 | 0 of 1245 | 0 | 0.11 ms |
-| 0.2 | 2 of 1245 | 0 | 0.07 ms |
+| 0.2 | 2 of 1245 | 0 | 0.06 ms |
 | 0.4 | 3 of 1245 | 0 | 0.04 ms |
 
 The tests also check `closestApproach` against brute force on random pairs, a constructed 100 m
@@ -242,21 +394,22 @@ CARA's cases are compared in CARA's miss-distance convention (see the
 the minor variance as CARA's values imply, agreed with them to 4e-14 at 10 m and 100 m, and was
 wrong by the same 2e-8: agreement with a reference that shares the arithmetic is not accuracy.
 
-Asserted by `tests/orbit/collision_probability_test.cpp`:
+Asserted by `tests/orbit/collision_probability_test.cpp` and, for the end-to-end Monte Carlo,
+`tests/orbit/conjunction_assessment_test.cpp`:
 
-| Reference | Tolerance (relative unless stated) |
-|---|---|
-| closed form 1 - exp(-R^2 / 2 sigma^2) (isotropic, centred) | 1e-11 |
-| Rice distribution (isotropic, offset; [Rice 1945](references.md#conjunctions-and-collision-probability)), by Simpson's rule | 1e-10 |
-| brute-force polar grid: anisotropic, 1000:1 aspect ratio, R >> sigma, correlated, Pc 6e-26 | 1e-8 |
-| a second integral along the other axis: near-singular covariances at the circle's edge | 1e-9 |
-| the same: a rotated 7500:1 covariance with an exactly known determinant | 1e-10 |
-| 3-D Monte Carlo of straight-line encounters (4 million draws) | 4 binomial standard deviations (1.2 % of Pc) |
-| end-to-end Monte Carlo of both initial states (100 000 draws, `assessConjunction`) | 4 binomial standard deviations (2 % of Pc) |
-| CARA Omitron cases | 1e-12 |
-| CARA multiple-radius geometry at 10 m, 100 m, and 1-30 km | 1e-7, 1e-8, 1e-3 (the errors of CARA's values, above) |
-| Alfano's linear Pc | 1e-3 (the tolerance of CARA's own test) |
-| singular covariances (zero width), head-on encounter | 1e-14 and 1e-12 absolute |
+| Reference | Tolerance (relative unless stated) | Largest difference measured |
+|---|---|---|
+| closed form 1 - exp(-R^2 / 2 sigma^2) (isotropic, centred) | 1e-11 | 4.2e-16 |
+| Rice distribution (isotropic, offset; [Rice 1945](references.md#conjunctions-and-collision-probability)), by Simpson's rule | 1e-10 | 1.1e-14 |
+| brute-force polar grid: anisotropic, 1000:1 aspect ratio, R >> sigma, correlated, Pc 6e-26 | 1e-8 | 1.3e-12 |
+| a second integral along the other axis: near-singular covariances at the circle's edge | 1e-9 | 3.5e-13 |
+| the same: a rotated 7500:1 covariance with an exactly known determinant | 1e-10 | 5.7e-14 |
+| 3-D Monte Carlo of straight-line encounters (4 million draws) | 4 binomial standard deviations (1.2 % of Pc) | 0.39 standard deviations |
+| end-to-end Monte Carlo of both initial states (100 000 draws, `assessConjunction`) | 4 binomial standard deviations (2 % of Pc) | 0.34 standard deviations |
+| CARA Omitron cases | 1e-12 | 2.8e-14 |
+| CARA multiple-radius geometry at 10 m, 100 m, and 1-30 km | 1e-7, 1e-8, 1e-3 (the errors of CARA's values, above) | 2.0e-8, 1.9e-9, 2.8e-4 |
+| Alfano's linear Pc | 1e-3 (the tolerance of CARA's own test) | 1.1e-4 |
+| singular covariances (zero width), head-on encounter | 1e-14 and 1e-12 absolute | 0 and 2.2e-19 |
 
 ## Consistency checks
 
@@ -335,9 +488,12 @@ about 1 %:
 | 7 km/s, 15 deg | 1 km, 1 m/s | 11897 / 11940 m | 939 / 944 m | 130.4 / 130.5 deg | 95.2 % |
 
 (The study prints all 12 combinations; the rows not shown agree as closely.) The unit tests also
-check the ellipse against central differences of the impact point, to 1e-4.
+check the ellipse against central differences of the impact point, to 1e-4 (measured 1.4e-8).
 
 ## Reproducing
+
+From the root of the repository (the times are those of the development machine of
+[Performance](performance.md)):
 
 ```sh
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DASTRO_BUILD_STUDIES=ON
@@ -345,10 +501,17 @@ cmake --build build -j
 ctest --test-dir build                       # the validation tests
 build/studies/astro_study_propagation        # < 1 s
 build/studies/astro_study_consistency        # ~1 min; optional argument: samples per row
-build/studies/astro_study_impact 4000        # ~4 s; Monte Carlo samples (default 2000; the table above uses 4000)
+build/studies/astro_study_impact 4000        # ~2 s; Monte Carlo samples (default 2000; the table above uses 4000)
 build/studies/astro_study_conjunctions       # ~45 s; optional argument: orbit pairs
 build/studies/astro_study_lambert            # ~11 s; optional argument: problems per regime
+scripts/fetch_iers_data.sh --de440s -o data   # the full DE440s kernel (32 MB), not in the repository
+build/studies/astro_study_low_precision data/de440s.bsp   # ~2 s; optional arguments: first and last year
 ```
+
+The tests enforce the tolerances but print nothing when they pass. The largest differences in the
+unit-test tables were read by recording the difference of every assertion during one run of
+`build/tests/astro_tests` (many tests also give them in comments); the study numbers are printed
+by the studies.
 
 Regenerating the ERFA and JPL reference data needs Python with `numpy`, `pyerfa`, `sgp4` and
 `jplephem` (`tools/gen_reference.py`, `tools/make_spk_fixture.py`).

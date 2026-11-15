@@ -260,6 +260,27 @@ jobs:
           build/astro_*.deb
           build/astro-*.rpm
 
+  conan:
+    name: Conan package
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install Conan
+      run: |
+        python3 -m pip install --user "conan>=2,<3"
+        conan profile detect
+
+    # conan create builds the package and runs test_package, which builds tests/package/main.cpp
+    # against it through Conan's generated CMake files. Boost comes from ConanCenter (headers only).
+    - name: Static package
+      run: conan create . --build=missing -s compiler.cppstd=20
+
+    - name: Shared package
+      run: conan create . --build=missing -s compiler.cppstd=20 -o "astro/*:shared=True"
+
   format:
     name: clang-format
     runs-on: ubuntu-24.04
