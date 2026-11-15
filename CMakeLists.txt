@@ -38,6 +38,13 @@ option(ASTRO_COVERAGE "Instrument the build for line coverage (GCC; see tools/co
 
 include(GNUInstallDirs)
 
+# Windows finds a DLL next to the program that loads it, not through a run path. So that the tests and
+# examples run against a shared astro (and gtest_discover_tests can list the tests at build time),
+# every program and DLL of the build goes to one directory.
+if(WIN32 AND PROJECT_IS_TOP_LEVEL AND NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+endif()
+
 if(ASTRO_COVERAGE)
     # Counts how often each line runs (gcov). Use an unoptimized build so that lines map to code.
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

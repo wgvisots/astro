@@ -1,4 +1,5 @@
-# Build and test with GCC and Clang (warnings as errors), and as a shared library; under the thread,
+# Build and test with GCC and Clang (warnings as errors), as a shared library, and on Windows with MSVC
+# (static and DLL, and the Conan package); under the thread,
 # address and undefined-behaviour sanitizers; fuzz the parsers; measure line coverage; build the .deb and .rpm
 # packages and use the installed one; check formatting; and
 # build the documentation (Doxygen warnings as errors; code in the docs must match the examples).
@@ -275,6 +276,76 @@ jobs:
 
     # conan create builds the package and runs test_package, which builds tests/package/main.cpp
     # against it through Conan's generated CMake files. Boost comes from ConanCenter (headers only).
+    - name: Static package
+      run: conan create . --build=missing -s compiler.cppstd=20
+
+    - name: Shared package
+      run: conan create . --build=missing -s compiler.cppstd=20 -o "astro/*:shared=True"
+
+  # Windows with MSVC, warnings as errors: the static library and the DLL, each with the tests, the
+  # examples, the studies and the benchmarks, and a program built against the installed library.
+  # Boost.Describe comes from the vcpkg of the runner image. CL=/MP compiles a target's files in
+  # parallel (the Visual Studio generator otherwise builds them one at a time).
+  windows:
+    name: Windows (MSVC, ${{ matrix.library }})
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - library: static
+            shared: "OFF"
+          - library: DLL
+            shared: "ON"
+    env:
+      CL: /MP
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install Boost.Describe
+      run: vcpkg install boost-describe boost-headers --triplet x64-windows
+
+    - name: Configure
+      run: >
+        cmake -B build -DASTRO_WARNINGS_AS_ERRORS=ON -DBUILD_SHARED_LIBS=${{ matrix.shared }}
+        -DASTRO_BUILD_BENCHMARKS=ON -DASTRO_BUILD_STUDIES=ON
+        -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+    - name: Build
+      run: cmake --build build --config Release -j 4
+
+    - name: Test
+      run: ctest --test-dir build -C Release --output-on-failure -j 4
+
+    # The installed DLL is found through PATH, as an application that ships it would find it next to
+    # its program.
+    - name: Install, then build and run a program against the installation
+      run: |
+        cmake --install build --config Release --prefix "$PWD/install"
+        cmake -S tests/package -B build-consumer -DCMAKE_PREFIX_PATH="$PWD/install" `
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+        cmake --build build-consumer --config Release
+        $env:PATH = "$PWD\install\bin;$env:PATH"
+        build-consumer/Release/astro_consumer.exe
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  # The Conan package on Windows, static and DLL: conan create builds it with MSVC and runs
+  # test_package against it, as the Linux job does.
+  conan-windows:
+    name: Conan package (Windows)
+    runs-on: windows-2025
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install Conan
+      run: |
+        python -m pip install "conan>=2,<3"
+        conan profile detect
+
     - name: Static package
       run: conan create . --build=missing -s compiler.cppstd=20
 

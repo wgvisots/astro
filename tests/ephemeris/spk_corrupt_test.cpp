@@ -19,8 +19,6 @@
 // The SPK reader on a kernel whose data are damaged: a state must be finite or refused, never a
 // not-a-number returned as a position. (Found by fuzzing the reader; see fuzz/spk.cpp.)
 
-#include <unistd.h>
-
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -31,6 +29,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -52,9 +51,11 @@ std::vector<char> readAll(const std::string& path) {
 struct TempFile {
     std::string path;
     explicit TempFile(const std::vector<char>& bytes) {
-        static int counter = 0;
-        path               = (std::filesystem::temp_directory_path()
-                / ("astro_spk_corrupt_" + std::to_string(getpid()) + "_" + std::to_string(counter++) + ".bsp"))
+        // A random number for this run (the process id is not portable), and a counter within it.
+        static const unsigned run     = std::random_device{}();
+        static int            counter = 0;
+        path                          = (std::filesystem::temp_directory_path()
+                / ("astro_spk_corrupt_" + std::to_string(run) + "_" + std::to_string(counter++) + ".bsp"))
                    .string();
         std::ofstream(path, std::ios::binary).write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     }
