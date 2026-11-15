@@ -98,7 +98,10 @@ at least one minor release before the major release that removes it.
 | Build | CMake 3.20 or newer | CMake 3.20 or newer |
 | Dependency | Boost 1.77 or newer (headers only, for Boost.Describe) | the same |
 
-Every supported combination is built and tested in CI on every change.
+Every supported combination is built and tested in CI on every change. One difference: with MSVC,
+`long double` is the same as `double`, so four accuracy checks whose reference values are computed
+in `long double` are skipped there (the Stumpff functions, the integrated geodesic, and two
+parabolic-orbit checks). The Linux jobs run them on the same code.
 
 Other platforms and compilers, such as macOS, MinGW on Windows, or other Linux architectures, are
 not tested. The code uses only standard C++20 and Boost, so it may well work. Fixes are welcome when
