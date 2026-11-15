@@ -41,6 +41,7 @@
 /// \file
 /// Numerical orbit propagation with pluggable force models.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// A perturbing (or central) acceleration. `t` is seconds since the propagator epoch;
 /// r, v are in the propagator's inertial frame.
@@ -387,4 +388,5 @@ private:
     Vec3                                           dj0_;
 };
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

@@ -50,6 +50,7 @@
 ///    loop** (today only SGP4). It is named `try...`, is `noexcept`, and returns a struct holding the
 ///    value and a status `enum class` (Sgp4::tryPropagate and Sgp4Result).
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Base exception for all errors raised by the astro library: invalid input,
 /// missing data (e.g. no EOP for the requested epoch) or non-convergence.
@@ -60,4 +61,5 @@ public:
         : std::runtime_error(what) {}
 };
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

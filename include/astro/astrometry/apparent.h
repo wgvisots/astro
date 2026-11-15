@@ -61,14 +61,14 @@ struct ObserverEphemeris {
 /// barycenter (e.g. LowPrecisionEphemeris), heliocentric is used in its place
 /// (~13 m/s error in velocity, ~0.01 arcsec in aberration). Throws
 /// astro::Error if `eph` cannot give the Earth relative to the Sun at `t`.
-[[nodiscard]] ASTRO_EXPORT ObserverEphemeris ASTRO_EXPORT observerEphemeris(const Time&        t,
-                                                                            const Ephemeris&   eph,
-                                                                            const StateVector& geocentricOffset = {});
+[[nodiscard]] ASTRO_EXPORT ObserverEphemeris observerEphemeris(const Time&        t,
+                                                               const Ephemeris&   eph,
+                                                               const StateVector& geocentricOffset = {});
 
 /// Gravitational deflection of direction p by a body of `massSolar` solar masses.
 /// q: unit vector from the body to the source; e: unit vector from the body to the
 /// observer; emAu: body-observer distance (au). (ERFA eraLd.)
-[[nodiscard]] ASTRO_EXPORT Vec3 ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT Vec3
 lightDeflection(const Vec3& p, const Vec3& q, const Vec3& e, double emAu, double massSolar = 1.0) noexcept;
 
 /// Stellar aberration: natural direction p -> proper direction, given observer

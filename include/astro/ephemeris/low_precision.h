@@ -24,6 +24,7 @@
 /// \file
 /// Analytical low-precision Sun and Moon positions; no data files needed.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Geocentric geometric position of the Sun, GCRS axes, meters.
 /// Meeus (1998) ch. 25 series, precessed to the GCRS and corrected for the
@@ -49,4 +50,5 @@ public:
     [[nodiscard]] StateVector state(Body target, Body center, const Time& t) const override;
 };
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

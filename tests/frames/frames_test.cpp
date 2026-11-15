@@ -20,6 +20,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <limits>
 #include <string>
 #include <vector>
@@ -675,12 +676,9 @@ TEST(EopTable, FilesAreReadLikeTheirContents) {
                              "2020   6   1  59001   0.110000   0.410000  -0.2405000   0.0006000   0.000110  -0.000110\n";
     const auto        write = [](const std::string& name, const std::string& text) {
         const std::string path = testing::TempDir() + name;
-        std::FILE*        f    = std::fopen(path.c_str(), "w");
-        EXPECT_NE(f, nullptr) << path;
-        if (f != nullptr) {
-            std::fputs(text.c_str(), f);
-            std::fclose(f);
-        }
+        std::ofstream     out(path);
+        EXPECT_TRUE(out) << path;
+        out << text;
         return path;
     };
     const EopTable fromFile = EopTable::loadFinals2000A(write("astro_finals_test.txt", finals));

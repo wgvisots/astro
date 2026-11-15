@@ -28,6 +28,7 @@
 /// \file
 /// Two-line element sets: parsing, formatting, checksums and Alpha-5 catalogue numbers.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// NORAD two-line element set. Angles in radians; mean motion in revolutions/day
 /// as in the TLE; derivatives as printed (n-dot/2 in rev/day^2, n-ddot/6 in rev/day^3).
@@ -128,4 +129,5 @@ struct ASTRO_EXPORT Tle {
 /// skipping I and O, plus 4 digits) up to 339999. Throws astro::Error below 0 and above 339999.
 [[nodiscard]] ASTRO_EXPORT std::string encodeAlpha5(int satnum);
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

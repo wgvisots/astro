@@ -95,7 +95,7 @@ ASTRO_EXPORT std::ostream& operator<<(std::ostream& os, Twilight value);
 /// Geometric topocentric elevation of a body's center (no refraction). Throws
 /// astro::Error if `eop` has no data at `t` or `t` is before 1960 (see
 /// FrameTransformer), and if `eph` has no data for `body` at `t`.
-[[nodiscard]] ASTRO_EXPORT double ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT double
 bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider& eop, const Ephemeris& eph);
 
 /// Sunrise/sunset (and solar transits) in [start, end] for a horizon elevation.
@@ -120,7 +120,7 @@ bodyElevation(Body body, const Time& t, const Geodetic& site, const EopProvider&
 /// Moonrise/moonset of the upper limb with 34' refraction (topocentric, so parallax is included).
 /// Like sunRiseSet(), it also returns the transits.
 /// Throws astro::Error as sunRiseSet() does.
-[[nodiscard]] ASTRO_EXPORT std::vector<SkyEvent> ASTRO_EXPORT
+[[nodiscard]] ASTRO_EXPORT std::vector<SkyEvent>
 moonRiseSet(const Geodetic& site, const Time& start, const Time& end, const EopProvider& eop, const Ephemeris& eph);
 
 /// Geocentric lunar phase quantities.

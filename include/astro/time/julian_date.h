@@ -26,6 +26,7 @@
 /// \file
 /// Two-part Julian dates and calendar conversions.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Gregorian calendar date and time of day. `second` may reach 60.x on a UTC
 /// leap-second day.
@@ -140,4 +141,5 @@ struct ASTRO_EXPORT JulianDate {
 /// Gregorian date of a Julian Day Number (integer, noon-based), the inverse of julianDayNumber.
 [[nodiscard]] ASTRO_EXPORT YearMonthDay julianDayNumberToDate(long long jdn) noexcept;
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

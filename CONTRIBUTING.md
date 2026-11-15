@@ -89,6 +89,7 @@ The CMake options are listed in [Getting started](docs/guide/getting-started.md)
   - GCC and Clang builds, with warnings as errors;
   - a shared-library build: tests, examples, the export check, and a program built against the
     installed library;
+  - Windows with MSVC, as a static library and as a DLL, and the Conan package on Windows;
   - the tests under the thread, address and undefined-behaviour sanitizers;
   - a minute of fuzzing for each parser;
   - line coverage (it fails below the floor in the workflow);

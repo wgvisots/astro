@@ -28,6 +28,7 @@
 /// \file
 /// Reader for JPL SPK ephemeris kernels (.bsp; DAF segment types 2 and 3).
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Description of one SPK segment.
 struct SpkSegmentInfo {
@@ -96,4 +97,5 @@ private:
 /// converted to TDB: a UTC time before 1960, or a UT1 time (there is no Earth orientation data here).
 [[nodiscard]] ASTRO_EXPORT double ephemerisTime(const Time& t);
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

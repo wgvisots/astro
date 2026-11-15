@@ -33,6 +33,7 @@
 /// The coordinate-frame convention (used by e.g. some EPSG/NGA publications)
 /// has the opposite rotation signs.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Sign convention of the Helmert rotation angles.
 enum class HelmertConvention {
@@ -75,8 +76,9 @@ struct ASTRO_EXPORT HelmertTimeDependent {
 /// (decimal years). The velocity returned is the time derivative of the transformed position, in
 /// m/s like the one given: the rates of `h`, which are per year, are converted with the Julian year
 /// of 365.25 days of 86400 s.
-[[nodiscard]] ASTRO_EXPORT StateVector ASTRO_EXPORT helmertTransform(const StateVector&          x,
-                                                                     const HelmertTimeDependent& h,
-                                                                     double                      decimalYear) noexcept;
+[[nodiscard]] ASTRO_EXPORT StateVector helmertTransform(const StateVector&          x,
+                                                        const HelmertTimeDependent& h,
+                                                        double                      decimalYear) noexcept;
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

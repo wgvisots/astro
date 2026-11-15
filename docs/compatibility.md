@@ -89,16 +89,18 @@ at least one minor release before the major release that removes it.
 
 ## Supported platforms
 
-| | Supported and tested in CI |
-|---|---|
-| Operating system | Linux, x86-64 (Ubuntu 24.04 in CI) |
-| Compilers | GCC 13 and Clang 18, in C++20 mode |
-| Build | CMake 3.20 or newer |
-| Dependency | Boost 1.77 or newer (headers only, for Boost.Describe) |
-| Library types | static and shared |
-| Packages | `.deb` and `.rpm` (CPack), Conan recipe (`conanfile.py`) |
+| | Linux | Windows |
+|---|---|---|
+| Architecture | x86-64 (Ubuntu 24.04 in CI) | x86-64 (Windows Server 2025 in CI) |
+| Compilers | GCC 13 and Clang 18, in C++20 mode | MSVC from Visual Studio 2022 or newer, in C++20 mode |
+| Library types | static and shared | static and DLL |
+| Packages | `.deb` and `.rpm` (CPack), Conan recipe | Conan recipe |
+| Build | CMake 3.20 or newer | CMake 3.20 or newer |
+| Dependency | Boost 1.77 or newer (headers only, for Boost.Describe) | the same |
 
-Other platforms and compilers, such as Windows with MSVC, macOS, or other Linux architectures, are
+Every supported combination is built and tested in CI on every change.
+
+Other platforms and compilers, such as macOS, MinGW on Windows, or other Linux architectures, are
 not tested. The code uses only standard C++20 and Boost, so it may well work. Fixes are welcome when
 they keep the code simple, but there is no promise.
 

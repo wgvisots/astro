@@ -282,21 +282,31 @@ jobs:
     - name: Shared package
       run: conan create . --build=missing -s compiler.cppstd=20 -o "astro/*:shared=True"
 
-  # Windows with MSVC, warnings as errors: the static library and the DLL, each with the tests, the
+  # Windows with MSVC, warnings as errors: the static library and the DLL with the newest Visual
+  # Studio of the runner images, and the static library with Visual Studio 2022; each with the tests, the
   # examples, the studies and the benchmarks, and a program built against the installed library.
   # Boost.Describe comes from the vcpkg of the runner image. CL=/MP compiles a target's files in
   # parallel (the Visual Studio generator otherwise builds them one at a time).
   windows:
-    name: Windows (MSVC, ${{ matrix.library }})
-    runs-on: windows-2025
+    name: Windows (${{ matrix.vs }}, ${{ matrix.library }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - library: static
+          - vs: VS 2026
+            os: windows-2025
+            library: static
             shared: "OFF"
-          - library: DLL
+          - vs: VS 2026
+            os: windows-2025
+            library: DLL
             shared: "ON"
+          # The oldest Visual Studio supported (docs/compatibility.md).
+          - vs: VS 2022
+            os: windows-2022
+            library: static
+            shared: "OFF"
     env:
       CL: /MP
     steps:

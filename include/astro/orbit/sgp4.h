@@ -33,6 +33,7 @@
 /// implementation of Vallado, Crawford, Hujsak & Kelso (2006), "Revisiting Spacetrack Report #3"
 /// (AIAA 2006-6753). Output is in the TEME frame (see astro::Frame::TEME).
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// Earth constants used by SGP4. TLEs are generated with WGS-72.
 enum class Sgp4Gravity {
@@ -168,4 +169,5 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

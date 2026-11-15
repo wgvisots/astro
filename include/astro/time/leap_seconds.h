@@ -29,6 +29,7 @@
 /// \file
 /// The UTC leap-second table: built in, or loaded from IERS / IANA files.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// One step of the TAI-UTC history. From the given UTC date (0h) onward,
 ///   TAI - UTC = offset + (MJD_UTC - mjdRef) * rate   [seconds]
@@ -102,4 +103,5 @@ private:
 /// Replace the global table used by UTC conversions (thread-safe).
 ASTRO_EXPORT void setLeapSecondTable(LeapSecondTable table);
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro

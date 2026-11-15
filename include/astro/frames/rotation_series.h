@@ -29,6 +29,7 @@
 /// \file
 /// GCRS <-> ITRS rotations over a time window, precomputed for fast evaluation at many times.
 namespace astro {
+ASTRO_DLL_WARNINGS_PUSH
 
 /// GCRS <-> ITRS ("ECI <-> ECEF") rotations for any time in a window, at a small fraction of the
 /// cost of a FrameTransformer per time.
@@ -101,4 +102,5 @@ private:
     std::vector<double> rate_;   // ERA rate over each segment (rad/s)
 };
 
+ASTRO_DLL_WARNINGS_POP
 } // namespace astro
