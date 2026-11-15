@@ -2,6 +2,7 @@
 # address and undefined-behaviour sanitizers; fuzz the parsers; measure line coverage; build the .deb and .rpm
 # packages and use the installed one; check formatting; and
 # build the documentation (Doxygen warnings as errors; code in the docs must match the examples).
+# When all of that passes on a tag vX.Y.Z, publish the GitHub release with the packages this run built.
 name: CI
 
 on:
@@ -317,3 +318,59 @@ jobs:
       run: |
         cmake -B build -DASTRO_BUILD_TESTS=OFF -DASTRO_BUILD_EXAMPLES=OFF -DASTRO_DOCS_WARNINGS_AS_ERRORS=ON
         cmake --build build --target docs
+
+  # The GitHub release. Its files are the packages this run built and installed, with their
+  # checksums; its notes are the version's section of CHANGELOG.md (tools/release_notes.py). It
+  # needs every other job, so a release is only published from a tag on which everything passed.
+  # On a tag vX.Y.Z the tag must match project(VERSION) and the CHANGELOG section must be dated.
+  # On every other push and pull request the job assembles the release in the same way and shows
+  # the notes in the job summary, but publishes nothing, so a broken release step is found before
+  # the tag is.
+  release:
+    name: Release
+    needs: [ build-test, shared-library, thread-sanitizer, address-undefined-sanitizer, fuzz, coverage,
+             packages, conan, format, docs ]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # used only by the last step, the one given GH_TOKEN
+    env:
+      TAG: ${{ github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && github.ref_name || '' }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Download the packages
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: packages
+        path: dist
+
+    - name: Notes and checksums
+      run: |
+        python3 tools/release_notes.py ${TAG:+--tag "$TAG"} --repo "$GITHUB_REPOSITORY" \
+          --ref "${TAG:-$GITHUB_SHA}" -o notes.md
+        (cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+        cat >> notes.md <<EOF
+
+        **Packages:** the \`.deb\` and \`.rpm\` below were built by
+        [the CI run for this tag]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID),
+        after all its tests passed; that run also installed the \`.deb\` and built a program against it.
+        Check a download with \`sha256sum -c SHA256SUMS --ignore-missing\`.
+        EOF
+        ls -l dist
+        { echo "## Release notes (${TAG:-not a release tag: nothing is published})"; cat notes.md; } \
+          >> "$GITHUB_STEP_SUMMARY"
+
+    # A re-run of the job replaces the files of the release it already made.
+    - name: Publish the release
+      if: env.TAG != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+        else
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "astro ${TAG#v}" --notes-file notes.md
+        fi
