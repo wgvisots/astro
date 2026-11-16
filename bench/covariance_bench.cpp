@@ -1,7 +1,7 @@
 /**********************************************************************
  * covariance_bench.cpp
  *
- * Copyright 2024 W. Greg Visotski
+ * Copyright 2024-2026 W. Greg Visotski
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
