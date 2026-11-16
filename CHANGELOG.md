@@ -4,7 +4,7 @@ All notable changes to astro. The format follows [Keep a Changelog](https://keep
 and the version numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html): before 1.0, a
 change that breaks existing code raises the minor number.
 
-## [Unreleased]
+## [0.4.0] - 2026-11-15
 
 ### Breaking changes
 
@@ -14,7 +14,8 @@ have no need for became internal now, and the interfaces that 1.0 will freeze we
 
 - **`ForceModel::partials` returns a struct.** `partials(t, r, v)` returns
   `ForcePartials {acceleration, dadr, dadv}`, instead of returning the acceleration and filling two
-  `Mat3&` out-parameters. A force model that overrides it changes its signature:
+  `Mat3&` out-parameters. A force model that overrides it changes its signature (shown below).
+  [#26]
 
 ```cpp
 // 0.3
@@ -24,11 +25,11 @@ ForcePartials partials(double t, const Vec3& r, const Vec3& v) const override;
 ```
 
 - **Removed `eciToEcef` and `ecefToEci`.** Use `gcrsToItrs` and `itrsToGcrs`, which they called.
-  "ECI" does not say which frame is meant.
+  "ECI" does not say which frame is meant. [#26]
 - **`AdaptiveOptions` and `AdaptiveStats` moved to the new header `astro/orbit/integration.h`.**
   `numerical.h`, `impact.h` and `estimate_tracker.h` include it, so code that reaches them through
-  those headers is unaffected.
-- **Now internal**, in headers under `src/`, which are not installed:
+  those headers is unaffected. [#26]
+- **Now internal**, in headers under `src/`, which are not installed [#26]:
 
 | No longer public | Use instead |
 |---|---|
@@ -39,22 +40,22 @@ ForcePartials partials(double t, const Vec3& r, const Vec3& v) const override;
 | `j2Acceleration`, now a reference in the tests | `zonalAcceleration` with a `CentralBody` whose `J` holds J2 only |
 | `chiSquareSurvival3`, `chiSquareSurvival6` | the p-values in `ConsistencyCheck` |
 
-- The shared library exports 492 symbols, 9 fewer.
+- The shared library exports 492 symbols, 9 fewer. [#26]
 
 ### Platforms
 
 - **Windows with MSVC is supported** (docs/compatibility.md): Visual Studio 2022 and newer, static
   library and DLL, and the Conan package. CI builds and tests the static library with Visual Studio
   2022 and 2026 and the DLL with 2026, warnings as errors, and runs `conan create` for both library
-  types. The getting-started guide explains the Windows build.
+  types. The getting-started guide explains the Windows build. [#24]
 - **Fixed:** 25 functions were declared `ASTRO_EXPORT` twice (0.3.0's export change), which MSVC
-  rejects; GCC and Clang accepted it.
+  rejects; GCC and Clang accepted it. [#24]
 - The generated `astro/export.h` also defines `ASTRO_DLL_WARNINGS_PUSH` and `ASTRO_DLL_WARNINGS_POP`,
   which silence MSVC's warnings about exported classes with standard-library members (C4251, C4275)
-  in astro's own headers only.
+  in astro's own headers only. [#24]
 - Tests: references computed in `long double` are skipped where it is no wider than `double`
   (MSVC); the Lambert closure test draws its cases in a way that is the same on every standard
-  library.
+  library. [#24]
 
 ### Build and packaging
 
@@ -62,15 +63,15 @@ ForcePartials partials(double t, const Vec3& r, const Vec3& v) const override;
   job attaches the `.deb` and `.rpm` that run built, with `SHA256SUMS`, and takes the notes from
   the version's CHANGELOG section (`tools/release_notes.py`). It refuses a tag that does not match
   `project(VERSION)` and an undated section. On every other push it shows the notes it would use,
-  without publishing. The steps are in CONTRIBUTING.
+  without publishing. The steps are in CONTRIBUTING. [#23]
 
 ### Documentation
 
 - **[Public API review](docs/design/api-review-1.0.md):** every public header, whether it stays
-  public, and why.
+  public, and why. [#26]
 - **[Orbit determination design](docs/design/orbit-determination.md):** the agreed plan for fitting
   orbits to position and velocity reports and to lines of sight, after 1.0: inputs, force models
-  needed, methods, validation, order of work and open questions.
+  needed, methods, validation, order of work and open questions. [#25]
 
 ## [0.3.0] - 2026-11-14
 
@@ -308,6 +309,7 @@ About 60 defects, each with a regression test that failed first [#6, #8, #10]. A
 The first milestone [#1]: time scales, geodesy, reference frames, ephemerides, astrometry, orbit
 propagation and satellite geometry. Not tagged.
 
+[0.4.0]: https://github.com/wgvisots/astro/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/wgvisots/astro/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/wgvisots/astro/compare/db6a4b2...v0.2.0
 [0.1.0]: https://github.com/wgvisots/astro/pull/1
